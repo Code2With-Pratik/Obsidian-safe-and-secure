@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   Bell,
@@ -16,6 +17,7 @@ import {
   Moon,
   CheckCircle2,
   ChevronRight,
+  ChevronLeft,
   Laptop,
   Tablet
 } from "lucide-react";
@@ -50,15 +52,36 @@ const accents = [
 export default function SettingsPage() {
   const { theme, setTheme } = useTheme();
   const [section, setSection] = React.useState("appearance");
+  const [mobileDetail, setMobileDetail] = React.useState(false);
   const [accent, setAccent] = React.useState("violet");
   const [glass, setGlass] = React.useState([80]);
 
+  const openSection = (id: string) => {
+    setSection(id);
+    setMobileDetail(true);
+  };
+
   return (
     <div className="flex h-[calc(100dvh-4rem)]">
-      <aside className="hidden md:flex w-64 shrink-0 border-r border-border/40 bg-card/30 backdrop-blur-xl flex-col">
-        <div className="p-5">
-          <h2 className="font-display text-xl font-semibold tracking-tight">Settings</h2>
-          <p className="text-xs text-muted-foreground mt-1">
+      <aside
+        className={cn(
+          "shrink-0 flex-col border-r border-border/40 bg-card/30 backdrop-blur-xl",
+          "md:flex md:w-64",
+          mobileDetail ? "hidden" : "flex w-full"
+        )}
+      >
+        <div className="px-5 pt-6 pb-4 md:p-5">
+          <Link
+            href="/profile"
+            className="inline-flex items-center gap-1.5 text-sm md:text-xs text-muted-foreground hover:text-foreground transition mb-3 md:mb-2"
+          >
+            <ChevronLeft className="size-4 md:size-3.5" />
+            Profile
+          </Link>
+          <h2 className="font-display text-3xl md:text-xl font-semibold tracking-tight">
+            Settings
+          </h2>
+          <p className="text-sm md:text-xs text-muted-foreground mt-1">
             Tune Nova to feel like yours.
           </p>
         </div>
@@ -66,24 +89,45 @@ export default function SettingsPage() {
           {sections.map((s) => (
             <button
               key={s.id}
-              onClick={() => setSection(s.id)}
+              onClick={() => openSection(s.id)}
               className={cn(
-                "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm transition",
+                "w-full flex items-center gap-4 md:gap-3 px-4 py-4 md:px-3 md:py-2.5 rounded-2xl md:rounded-xl text-[17px] md:text-sm font-medium md:font-normal transition",
                 section === s.id
-                  ? "bg-foreground/10 text-foreground"
+                  ? "md:bg-foreground/10 md:text-foreground text-foreground hover:bg-foreground/[0.04]"
                   : "text-muted-foreground hover:text-foreground hover:bg-foreground/[0.04]"
               )}
             >
-              <s.icon className="size-4" />
+              <s.icon className="size-[22px] md:size-4 shrink-0" />
               {s.label}
-              {section === s.id && <ChevronRight className="size-3 ml-auto" />}
+              <ChevronRight
+                className={cn(
+                  "ml-auto",
+                  section === s.id
+                    ? "md:inline hidden md:size-3"
+                    : "md:hidden inline size-4 opacity-50"
+                )}
+              />
             </button>
           ))}
         </ScrollArea>
       </aside>
 
-      <ScrollArea className="flex-1">
+      <ScrollArea
+        className={cn(
+          "flex-1",
+          "md:block",
+          mobileDetail ? "block" : "hidden"
+        )}
+      >
         <div className="max-w-3xl mx-auto px-4 md:px-8 py-8 md:py-12">
+          <button
+            onClick={() => setMobileDetail(false)}
+            className="md:hidden mb-5 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition"
+          >
+            <ChevronLeft className="size-4" />
+            All settings
+          </button>
+
           {section === "appearance" && (
             <Section title="Appearance" subtitle="Make Nova feel like home.">
               <Setting label="Theme" sub="Light, dark, or follow system.">

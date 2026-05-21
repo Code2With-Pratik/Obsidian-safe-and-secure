@@ -10,6 +10,7 @@ interface AuthState {
   isAuthed: boolean;
   login: (user?: User) => void;
   logout: () => void;
+  updateUser: (patch: Partial<User>) => void;
 }
 
 export const useAuthStore = create<AuthState>()(
@@ -18,7 +19,9 @@ export const useAuthStore = create<AuthState>()(
       user: null,
       isAuthed: false,
       login: (user) => set({ user: user ?? currentUser, isAuthed: true }),
-      logout: () => set({ user: null, isAuthed: false })
+      logout: () => set({ user: null, isAuthed: false }),
+      updateUser: (patch) =>
+        set((s) => (s.user ? { user: { ...s.user, ...patch } } : s))
     }),
     { name: "nova-auth" }
   )

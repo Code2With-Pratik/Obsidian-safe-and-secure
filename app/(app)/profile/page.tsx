@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   MessageCircle,
@@ -8,7 +9,7 @@ import {
   Video,
   Sparkles,
   Pencil,
-  Camera,
+  Settings,
   Github,
   Globe,
   Twitter,
@@ -27,6 +28,7 @@ import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuthStore } from "@/store/use-auth-store";
 import { initials } from "@/lib/utils";
+import { EditProfileDialog } from "@/features/profile/edit-profile-dialog";
 
 const gallery = [
   "https://images.unsplash.com/photo-1502920917128-1aa500764cbd?w=400&q=80",
@@ -40,12 +42,27 @@ const gallery = [
 export default function ProfilePage() {
   const user = useAuthStore((s) => s.user);
   const name = user?.name ?? "Aria Vance";
+  const [editOpen, setEditOpen] = React.useState(false);
+
+  const banner = user?.banner;
+  const bannerIsUrl = banner?.startsWith("http");
 
   return (
     <ScrollArea className="h-[calc(100dvh-4rem)]">
       <div className="relative">
         <div className="relative h-56 md:h-72 overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-violet-500 via-fuchsia-500 to-cyan-400" />
+          {bannerIsUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={banner}
+              alt=""
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          ) : banner ? (
+            <div className="absolute inset-0" style={{ background: banner }} />
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-violet-500 via-fuchsia-500 to-cyan-400" />
+          )}
           <motion.div
             className="absolute inset-0"
             animate={{
@@ -58,9 +75,13 @@ export default function ProfilePage() {
               backgroundSize: "200% 200%"
             }}
           />
-          <Button variant="glass" size="sm" className="absolute top-4 right-4">
-            <Camera /> Change cover
-          </Button>
+          <Link
+            href="/settings"
+            aria-label="Open settings"
+            className="absolute top-4 right-4 size-10 rounded-full glass border border-white/20 backdrop-blur grid place-items-center text-white hover:bg-white/15 hover:scale-105 active:scale-95 transition shadow-floating"
+          >
+            <Settings className="size-[18px]" />
+          </Link>
         </div>
 
         <div className="max-w-5xl mx-auto px-4 md:px-8 -mt-16 md:-mt-20 relative">
@@ -70,7 +91,11 @@ export default function ProfilePage() {
                 <AvatarImage src={user?.avatar} />
                 <AvatarFallback>{initials(name)}</AvatarFallback>
               </Avatar>
-              <button className="absolute bottom-1 right-1 size-9 rounded-full bg-primary grid place-items-center shadow-glow ring-2 ring-background">
+              <button
+                onClick={() => setEditOpen(true)}
+                aria-label="Edit profile"
+                className="absolute bottom-1 right-1 size-9 rounded-full bg-primary grid place-items-center shadow-glow ring-2 ring-background hover:scale-105 active:scale-95 transition"
+              >
                 <Pencil className="size-4 text-primary-foreground" />
               </button>
             </div>
@@ -81,9 +106,12 @@ export default function ProfilePage() {
                   <Sparkles className="size-3" /> Nova Plus
                 </Badge>
               </div>
-              <p className="text-muted-foreground text-sm">@{user?.username ?? "aria"} · she/her</p>
+              <p className="text-muted-foreground text-sm">
+                @{user?.username ?? "aria"}
+                {user?.pronouns ? ` · ${user.pronouns}` : " · she/her"}
+              </p>
               <p className="mt-2 max-w-xl">
-                Designing the future, one pixel at a time. Currently building Nova ✨
+                {user?.bio ?? "Designing the future, one pixel at a time. Currently building Nova ✨"}
               </p>
               <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                 <span className="inline-flex items-center gap-1.5">
@@ -195,6 +223,7 @@ export default function ProfilePage() {
           <div className="h-16" />
         </div>
       </div>
+      <EditProfileDialog open={editOpen} onOpenChange={setEditOpen} />
     </ScrollArea>
   );
 }

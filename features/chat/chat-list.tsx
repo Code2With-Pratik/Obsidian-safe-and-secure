@@ -36,12 +36,13 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { useChatStore } from "@/store/use-chat-store";
-import { users as allUsers } from "@/lib/mock-data";
+import { users as allUsers, communities as allCommunities } from "@/lib/mock-data";
 import { cn, formatRelative } from "@/lib/utils";
 import { StoriesRail } from "./stories-rail";
 import { NewGroupDialog } from "./new-group-dialog";
 import { EmptyChatList } from "./empty-chat-list";
-import type { Chat, ChatHint } from "@/types";
+import type { Chat, ChatHint, Community } from "@/types";
+import { CheckCircle2, Flame, Sparkles } from "lucide-react";
 
 type Filter = "all" | "unread" | "groups" | "secret" | "favorites";
 
@@ -72,6 +73,7 @@ export function ChatList({
   const markRead = useChatStore((s) => s.markRead);
   const addGroup = useChatStore((s) => s.addGroup);
   const startDM = useChatStore((s) => s.startDM);
+  const joinCommunity = useChatStore((s) => s.joinCommunity);
   const clearAll = useChatStore((s) => s.clearAll);
   const [filter, setFilter] = React.useState<Filter>("all");
   const [q, setQ] = React.useState("");
@@ -113,10 +115,26 @@ export function ChatList({
           u.username.toLowerCase().includes(q.toLowerCase())
     );
 
+  const joinedCommunityNames = new Set(
+    chats.filter((c) => c.type === "channel").map((c) => c.name)
+  );
+  const communityMatches = allCommunities.filter((c) =>
+    q.trim() === ""
+      ? false
+      : c.name.toLowerCase().includes(q.toLowerCase()) ||
+        c.category.toLowerCase().includes(q.toLowerCase())
+  );
+
   const markAllRead = () => chats.forEach((c) => markRead(c.id));
 
   const handleStartDM = (userId: string) => {
     const c = startDM(userId);
+    setSearchOpen(false);
+    router.push(`/chats/${c.id}`);
+  };
+
+  const handleJoinCommunity = (community: Community) => {
+    const c = joinCommunity(community);
     setSearchOpen(false);
     router.push(`/chats/${c.id}`);
   };
@@ -265,6 +283,25 @@ export function ChatList({
                   chat={c}
                   active={c.id === activeId}
                   onSelect={onSelect}
+                />
+              ))}
+            </>
+          )}
+
+          {communityMatches.length > 0 && (
+            <>
+              <SectionLabel>
+                <span className="inline-flex items-center gap-1.5">
+                  <Sparkles className="size-3 text-cyan-300" />
+                  Communities to discover
+                </span>
+              </SectionLabel>
+              {communityMatches.map((c) => (
+                <CommunityRow
+                  key={c.id}
+                  community={c}
+                  joined={joinedCommunityNames.has(c.name)}
+                  onJoin={() => handleJoinCommunity(c)}
                 />
               ))}
             </>
@@ -519,6 +556,53 @@ function HintBadge({ hint, unread }: { hint: ChatHint; unread?: boolean }) {
         </span>
       );
   }
+}
+
+function CommunityRow({
+  community,
+  joined,
+  onJoin
+}: {
+  community: Community;
+  joined: boolean;
+  onJoin: () => void;
+}) {
+  return (
+    <div className="relative flex items-center gap-3.5 px-3 py-3 rounded-2xl hover:bg-foreground/[0.04] transition">
+      <div className="relative size-12 shrink-0 rounded-2xl overflow-hidden">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={community.cover}
+          alt=""
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent" />
+        {community.trending && (
+          <Flame className="absolute bottom-1 right-1 size-3 text-amber-300 drop-shadow" />
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <p className="text-[15px] font-semibold truncate">{community.name}</p>
+          {community.verified && (
+            <CheckCircle2 className="size-3.5 text-cyan-400 fill-cyan-400/20 shrink-0" />
+          )}
+        </div>
+        <p className="text-[11px] text-muted-foreground truncate">
+          {community.category} · {community.members.toLocaleString()} members ·{" "}
+          <span className="text-emerald-400">{community.online.toLocaleString()} online</span>
+        </p>
+      </div>
+      <Button
+        size="sm"
+        variant={joined ? "glass" : "gradient"}
+        onClick={onJoin}
+        className="shrink-0"
+      >
+        {joined ? "Open" : "Join"}
+      </Button>
+    </div>
+  );
 }
 
 function TypingDots() {

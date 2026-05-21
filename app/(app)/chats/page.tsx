@@ -8,7 +8,7 @@ import { Sparkles } from "lucide-react";
 export default function ChatsIndex() {
   return (
     <div className="flex h-[calc(100dvh-4rem)]">
-      <div className="w-full md:w-[360px] shrink-0 md:border-r border-border/40 bg-card/30 backdrop-blur-xl">
+      <div className="w-full md:w-[400px] lg:w-[420px] shrink-0 md:border-r border-border/40 bg-card/30 backdrop-blur-xl">
         <ChatList />
       </div>
       <div className="hidden md:grid place-items-center flex-1 relative overflow-hidden">

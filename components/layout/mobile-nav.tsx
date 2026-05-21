@@ -8,7 +8,7 @@ import {
   MessageCircle,
   Ghost,
   Phone,
-  Globe,
+  Folder,
   User2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -17,7 +17,7 @@ const items = [
   { href: "/chats", label: "Chats", icon: MessageCircle },
   { href: "/ghost-rooms", label: "Ghost", icon: Ghost },
   { href: "/calls", label: "Calls", icon: Phone },
-  { href: "/browser", label: "Web", icon: Globe },
+  { href: "/files", label: "Vault", icon: Folder },
   { href: "/profile", label: "Me", icon: User2 }
 ];
 

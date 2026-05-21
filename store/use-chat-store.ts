@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 import { chats as seedChats, messagesByChat as seedMsgs, users } from "@/lib/mock-data";
-import type { Chat, Message } from "@/types";
+import type { Chat, Community, Message } from "@/types";
 
 interface ChatState {
   chats: Chat[];
@@ -17,6 +17,7 @@ interface ChatState {
     group: Pick<Chat, "name" | "description" | "memberIds" | "banner" | "avatar">
   ) => Chat;
   startDM: (userId: string) => Chat;
+  joinCommunity: (community: Community) => Chat;
   removeChat: (chatId: string) => void;
   clearAll: () => void;
 }
@@ -172,6 +173,47 @@ export const useChatStore = create<ChatState>((set, get) => ({
             authorId: "me",
             kind: "system",
             content: `You connected with ${u.name}`,
+            createdAt: new Date().toISOString()
+          }
+        ]
+      }
+    }));
+    return newChat;
+  },
+
+  joinCommunity: (community) => {
+    const existing = get().chats.find(
+      (c) => c.type === "channel" && c.name === community.name
+    );
+    if (existing) {
+      get().setActiveChat(existing.id);
+      return existing;
+    }
+    const id = `co-${community.id}-${Date.now()}`;
+    const newChat: Chat = {
+      id,
+      type: "channel",
+      name: community.name,
+      avatar: community.cover,
+      banner: community.cover,
+      description: `${community.category} community · ${community.members.toLocaleString()} members`,
+      membersCount: community.members,
+      lastMessage: `You joined ${community.name} ✨`,
+      lastMessageAt: new Date().toISOString(),
+      online: true,
+      pinned: false
+    };
+    set((s) => ({
+      chats: [newChat, ...s.chats],
+      messages: {
+        ...s.messages,
+        [id]: [
+          {
+            id: `m-sys-${Date.now()}`,
+            chatId: id,
+            authorId: "me",
+            kind: "system",
+            content: `Welcome to ${community.name} · ${community.online.toLocaleString()} online now`,
             createdAt: new Date().toISOString()
           }
         ]

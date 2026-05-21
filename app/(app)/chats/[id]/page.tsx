@@ -25,7 +25,7 @@ export default function ChatRoom() {
 
   return (
     <div className="flex h-[calc(100dvh-4rem)]">
-      <aside className="hidden md:flex w-[340px] shrink-0 flex-col border-r border-border/40 bg-card/30 backdrop-blur-xl">
+      <aside className="hidden md:flex w-[380px] lg:w-[400px] shrink-0 flex-col border-r border-border/40 bg-card/30 backdrop-blur-xl">
         <ChatList activeId={id} />
       </aside>
       <div className="flex-1 min-w-0">

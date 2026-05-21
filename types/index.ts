@@ -5,6 +5,7 @@ export interface User {
   name: string;
   username: string;
   avatar: string;
+  banner?: string;
   status: "online" | "away" | "busy" | "offline";
   bio?: string;
   pronouns?: string;
