@@ -24,7 +24,9 @@
       "PowerShell(try { \\(Get-Command gh -ErrorAction Stop\\).Source } catch { \"gh not on PATH\" }; \"---\"; try { Invoke-WebRequest -Uri \"https://api.github.com/repos/Code2With-Pratik/App\" -UseBasicParsing -ErrorAction Stop | Select-Object -ExpandProperty StatusCode } catch { \"GitHub API says: \" + $_.Exception.Message })",
       "Bash(git checkout *)",
       "Bash(git reset *)",
-      "Bash(git commit -q -m ' *)"
+      "Bash(git commit -q -m ' *)",
+      "Bash(git branch *)",
+      "Bash(git commit *)"
     ]
   }
 }
