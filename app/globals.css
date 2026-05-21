@@ -1,0 +1,264 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 30% 98%;
+    --foreground: 240 24% 8%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 24% 8%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 24% 8%;
+    --primary: 262 83% 58%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 240 10% 95%;
+    --secondary-foreground: 240 24% 12%;
+    --muted: 240 10% 94%;
+    --muted-foreground: 240 5% 45%;
+    --accent: 188 91% 53%;
+    --accent-foreground: 240 24% 8%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 240 10% 88%;
+    --input: 240 10% 90%;
+    --ring: 262 83% 58%;
+    --radius: 0.85rem;
+
+    /* Glass tokens */
+    --glass-bg: 0 0% 100% / 0.62;
+    --glass-border: 0 0% 100% / 0.75;
+    --glass-stroke: 240 10% 92% / 0.7;
+
+    --font-sans: "Inter", "Segoe UI", system-ui, sans-serif;
+    --font-display: "Inter", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, monospace;
+  }
+
+  .dark {
+    --background: 240 20% 4%;
+    --foreground: 240 10% 96%;
+    --card: 240 18% 8%;
+    --card-foreground: 240 10% 96%;
+    --popover: 240 18% 8%;
+    --popover-foreground: 240 10% 96%;
+    --primary: 262 90% 68%;
+    --primary-foreground: 240 20% 4%;
+    --secondary: 240 14% 14%;
+    --secondary-foreground: 240 10% 96%;
+    --muted: 240 14% 12%;
+    --muted-foreground: 240 6% 65%;
+    --accent: 188 91% 60%;
+    --accent-foreground: 240 20% 4%;
+    --destructive: 0 84% 65%;
+    --destructive-foreground: 240 10% 96%;
+    --border: 240 14% 16%;
+    --input: 240 14% 16%;
+    --ring: 262 90% 68%;
+
+    --glass-bg: 240 18% 12% / 0.58;
+    --glass-border: 240 18% 30% / 0.55;
+    --glass-stroke: 240 14% 22% / 0.7;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-feature-settings: "rlig" 1, "calt" 1, "ss01" 1;
+    background-image:
+      radial-gradient(at 8% 6%, hsl(var(--primary) / 0.10) 0px, transparent 50%),
+      radial-gradient(at 92% 8%, hsl(var(--accent) / 0.10) 0px, transparent 50%),
+      radial-gradient(at 50% 100%, hsl(var(--primary) / 0.06) 0px, transparent 50%);
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    background: hsl(var(--primary) / 0.35);
+    color: hsl(var(--foreground));
+  }
+
+  /* Hide native scrollbars globally — overflow stays scrollable (wheel, touch, keys),
+     and Radix ScrollArea provides its own elegant scrollbar where needed. */
+  html, body { scrollbar-width: none; -ms-overflow-style: none; }
+  html::-webkit-scrollbar,
+  body::-webkit-scrollbar,
+  *::-webkit-scrollbar { width: 0 !important; height: 0 !important; background: transparent; }
+  *::-webkit-scrollbar-thumb { background: transparent; }
+}
+
+@layer components {
+  /* Glassmorphism surfaces — iOS / VisionOS-inspired vibrancy */
+  .glass {
+    background: hsl(var(--glass-bg));
+    backdrop-filter: blur(28px) saturate(180%) contrast(110%);
+    -webkit-backdrop-filter: blur(28px) saturate(180%) contrast(110%);
+    border: 1px solid hsl(var(--glass-border));
+    box-shadow:
+      0 10px 40px -8px rgba(0, 0, 0, 0.22),
+      0 1px 0 0 rgba(255, 255, 255, 0.04),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.10),
+      inset 0 -1px 0 0 rgba(0, 0, 0, 0.06);
+  }
+
+  .glass-strong {
+    background: hsl(var(--card) / 0.72);
+    backdrop-filter: blur(40px) saturate(190%) contrast(115%);
+    -webkit-backdrop-filter: blur(40px) saturate(190%) contrast(115%);
+    border: 1px solid hsl(var(--glass-stroke));
+    box-shadow:
+      0 24px 60px -16px rgba(0, 0, 0, 0.45),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.12),
+      inset 0 -1px 0 0 rgba(0, 0, 0, 0.08);
+  }
+
+  .glass-subtle {
+    background: hsl(var(--card) / 0.45);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    border: 1px solid hsl(var(--border) / 0.5);
+    box-shadow:
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
+  }
+
+  /* iOS specular highlight — a thin gloss across the top edge of any glass surface */
+  .glass-specular { position: relative; }
+  .glass-specular::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    background:
+      linear-gradient(180deg, rgba(255,255,255,0.18) 0%, rgba(255,255,255,0.04) 18%, transparent 40%);
+    mix-blend-mode: overlay;
+    opacity: 0.85;
+  }
+
+  /* Aurora background canvas */
+  .aurora-bg {
+    position: relative;
+    isolation: isolate;
+  }
+  .aurora-bg::before {
+    content: "";
+    position: absolute;
+    inset: -20%;
+    background:
+      radial-gradient(40% 40% at 20% 30%, hsl(262 90% 68% / 0.35), transparent 60%),
+      radial-gradient(40% 40% at 80% 20%, hsl(188 91% 60% / 0.30), transparent 60%),
+      radial-gradient(50% 50% at 50% 90%, hsl(330 90% 65% / 0.25), transparent 60%);
+    filter: blur(60px);
+    z-index: -1;
+    animation: aurora-pan 18s ease-in-out infinite;
+    background-size: 200% 200%;
+  }
+
+  .neon-text {
+    background: linear-gradient(135deg, hsl(var(--primary)) 0%, hsl(var(--accent)) 50%, hsl(330 90% 65%) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  .ring-glow {
+    box-shadow:
+      0 0 0 1px hsl(var(--primary) / 0.5),
+      0 0 30px -5px hsl(var(--primary) / 0.5);
+  }
+
+  /* Subtle grid backdrop */
+  .grid-fade {
+    background-image:
+      linear-gradient(hsl(var(--border) / 0.4) 1px, transparent 1px),
+      linear-gradient(90deg, hsl(var(--border) / 0.4) 1px, transparent 1px);
+    background-size: 36px 36px;
+    mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+    -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+  }
+
+  .scroll-fade-y {
+    mask-image: linear-gradient(to bottom, transparent, black 24px, black calc(100% - 24px), transparent);
+  }
+
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { scrollbar-width: none; }
+
+  /* Floating dock button */
+  .dock-btn {
+    @apply relative grid place-items-center rounded-2xl transition-all duration-300;
+    @apply hover:scale-110 hover:-translate-y-1;
+  }
+
+  /* Shimmer skeleton */
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--muted)) 0%,
+      hsl(var(--muted-foreground) / 0.15) 50%,
+      hsl(var(--muted)) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.8s linear infinite;
+  }
+
+  /* Chat bubble tails */
+  .bubble-tail-l::before {
+    content: "";
+    position: absolute;
+    left: -6px;
+    bottom: 8px;
+    width: 12px;
+    height: 12px;
+    background: inherit;
+    border-bottom-left-radius: 12px;
+    transform: skew(-20deg);
+    z-index: -1;
+  }
+
+  .bubble-tail-r::before {
+    content: "";
+    position: absolute;
+    right: -6px;
+    bottom: 8px;
+    width: 12px;
+    height: 12px;
+    background: inherit;
+    border-bottom-right-radius: 12px;
+    transform: skew(20deg);
+    z-index: -1;
+  }
+}
+
+@layer utilities {
+  .text-balance { text-wrap: balance; }
+  .text-pretty { text-wrap: pretty; }
+
+  .gradient-border {
+    position: relative;
+  }
+  .gradient-border::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(135deg, hsl(var(--primary) / 0.6), hsl(var(--accent) / 0.6), transparent 70%);
+    -webkit-mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    mask:
+      linear-gradient(#fff 0 0) content-box,
+      linear-gradient(#fff 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+}
