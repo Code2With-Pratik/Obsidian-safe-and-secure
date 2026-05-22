@@ -128,7 +128,13 @@ export const chats: Chat[] = [
   }
 ];
 
-const wf = (n = 28) => Array.from({ length: n }, () => 0.2 + Math.random() * 0.8);
+// Deterministic pseudo-random waveform — SSR and the client must produce the
+// same array, otherwise React reports a hydration mismatch on the voice bars.
+const wf = (n = 28) =>
+  Array.from({ length: n }, (_, i) => {
+    const x = Math.sin(i * 12.9898 + n * 78.233) * 43758.5453;
+    return 0.2 + (x - Math.floor(x)) * 0.8;
+  });
 
 export const messagesByChat: Record<string, Message[]> = {
   c1: [

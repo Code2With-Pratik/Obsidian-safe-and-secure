@@ -27,7 +27,11 @@
       "Bash(git commit -q -m ' *)",
       "Bash(git branch *)",
       "Bash(git commit *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(npm install *)",
+      "PowerShell($src = \"C:\\\\Users\\\\pratik\\\\Desktop\\\\App\\\\node_modules\\\\emoji-datasource-facebook\\\\img\\\\facebook\\\\sheets-256\\\\64.png\"; if \\(Test-Path $src\\) { New-Item -ItemType Directory -Force \"C:\\\\Users\\\\pratik\\\\Desktop\\\\App\\\\public\\\\emoji-mart\" | Out-Null; Copy-Item $src \"C:\\\\Users\\\\pratik\\\\Desktop\\\\App\\\\public\\\\emoji-mart\\\\facebook-64.png\" -Force; \"copied: \" + \\(Get-Item \"C:\\\\Users\\\\pratik\\\\Desktop\\\\App\\\\public\\\\emoji-mart\\\\facebook-64.png\"\\).Length + \" bytes\" } else { \"sprite not found at \" + $src })",
+      "Bash(curl -s -o /dev/null -w \"page=%{http_code} sprite=\" http://localhost:3000/chats/c1)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code} \\(%{size_download} bytes\\)\\\\n\" http://localhost:3000/emoji-mart/facebook-64.png)"
     ]
   }
 }

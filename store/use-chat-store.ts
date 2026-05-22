@@ -12,6 +12,7 @@ interface ChatState {
   sendMessage: (chatId: string, content: string) => void;
   toggleReaction: (chatId: string, messageId: string, emoji: string) => void;
   pinMessage: (chatId: string, messageId: string) => void;
+  removeMessages: (chatId: string, messageIds: string[]) => void;
   markRead: (chatId: string) => void;
   addGroup: (
     group: Pick<Chat, "name" | "description" | "memberIds" | "banner" | "avatar">
@@ -96,6 +97,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
         )
       }
     })),
+
+  removeMessages: (chatId, messageIds) => {
+    if (messageIds.length === 0) return;
+    const idSet = new Set(messageIds);
+    set((s) => ({
+      messages: {
+        ...s.messages,
+        [chatId]: (s.messages[chatId] ?? []).filter((m) => !idSet.has(m.id))
+      }
+    }));
+  },
 
   markRead: (chatId) =>
     set((s) => ({
