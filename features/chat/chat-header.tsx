@@ -24,7 +24,10 @@ import {
   Download,
   Star,
   Users,
-  Sparkles
+  Sparkles,
+  Copy as CopyIcon,
+  Forward as ForwardIcon,
+  X as XIcon
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { AnimatedAvatar } from "@/components/animated-avatar";
@@ -41,6 +44,8 @@ import {
 import { useUIStore } from "@/store/use-ui-store";
 import { useChatStore } from "@/store/use-chat-store";
 import { useChatThemeStore } from "@/store/use-chat-theme-store";
+import { useMessageSelectionStore } from "@/store/use-message-selection-store";
+import { copyText } from "@/lib/utils";
 import { UserProfileSheet } from "./user-profile-sheet";
 import { ChatThemeDialog } from "./chat-theme-dialog";
 import type { Chat } from "@/types";
@@ -56,6 +61,12 @@ export function ChatHeader({ chat }: { chat: Chat }) {
     });
 
   const themeId = useChatThemeStore((s) => s.byChat[chat.id] ?? "default");
+  const selectionCount = useMessageSelectionStore(
+    (s) => s.selected[chat.id]?.length ?? 0
+  );
+  const clearSelection = useMessageSelectionStore((s) => s.clear);
+  const removeMessages = useChatStore((s) => s.removeMessages);
+  const selectionActive = selectionCount > 0;
   const [profileOpen, setProfileOpen] = React.useState(false);
   const [themeOpen, setThemeOpen] = React.useState(false);
 
@@ -63,6 +74,78 @@ export function ChatHeader({ chat }: { chat: Chat }) {
     startCallStore({ chatId: chat.id, name: chat.name, avatar: chat.avatar, video });
     router.push("/calls/active");
   };
+
+  const copySelected = () => {
+    const ids = new Set(useMessageSelectionStore.getState().selected[chat.id] ?? []);
+    const messages = useChatStore.getState().messages[chat.id] ?? [];
+    const text = messages
+      .filter((m) => ids.has(m.id))
+      .map((m) => m.content ?? "")
+      .filter(Boolean)
+      .join("\n");
+    if (text) void copyText(text);
+    clearSelection(chat.id);
+  };
+
+  const deleteSelected = () => {
+    const ids = useMessageSelectionStore.getState().selected[chat.id] ?? [];
+    removeMessages(chat.id, ids);
+    clearSelection(chat.id);
+  };
+
+  if (selectionActive) {
+    return (
+      <div className="relative z-10 flex items-center gap-2 px-3 md:px-5 h-16 border-b border-border/40 backdrop-blur-2xl backdrop-saturate-180 bg-card/70 dark:bg-card/65 glass-specular shadow-[0_8px_24px_-16px_rgba(0,0,0,0.5)]">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => clearSelection(chat.id)}
+          aria-label="Exit selection mode"
+          className="[&_svg]:size-6 dark:text-white dark:hover:text-white"
+        >
+          <XIcon />
+        </Button>
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-[15px] truncate">
+            {selectionCount} selected
+          </p>
+          <p className="text-[11px] text-muted-foreground">Tap messages to add or remove</p>
+        </div>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={copySelected}
+            aria-label="Copy selected"
+            title="Copy"
+            className="[&_svg]:size-[22px] dark:text-white dark:hover:text-white"
+          >
+            <CopyIcon />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            aria-label="Forward selected"
+            title="Forward"
+            onClick={() => clearSelection(chat.id)}
+            className="[&_svg]:size-[22px] dark:text-white dark:hover:text-white"
+          >
+            <ForwardIcon />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={deleteSelected}
+            aria-label="Delete selected"
+            title="Delete"
+            className="[&_svg]:size-[22px] text-rose-400 hover:text-rose-300"
+          >
+            <Trash2 />
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative z-10 flex items-center gap-3 px-3 md:px-5 h-16 border-b border-border/40 backdrop-blur-2xl backdrop-saturate-180 bg-card/70 dark:bg-card/65 glass-specular shadow-[0_8px_24px_-16px_rgba(0,0,0,0.5)]">

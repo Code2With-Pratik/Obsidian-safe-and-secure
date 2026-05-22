@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import { motion } from "framer-motion";
-import { useTheme } from "next-themes";
 import {
   Check,
   CheckCheck,
@@ -12,12 +11,22 @@ import {
   Play,
   Reply,
   Smile,
-  MoreHorizontal
+  MoreHorizontal,
+  CheckSquare,
+  Copy as CopyIcon,
+  Trash2
 } from "lucide-react";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
-import { cn, formatTime, initials } from "@/lib/utils";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
+import { cn, copyText, formatTime, initials } from "@/lib/utils";
 import { ReactionPicker } from "./reaction-picker";
 import { useChatStore } from "@/store/use-chat-store";
+import { useMessageSelectionStore } from "@/store/use-message-selection-store";
 import { users } from "@/lib/mock-data";
 import type { Message } from "@/types";
 
@@ -34,8 +43,30 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
   const author = users.find((u) => u.id === message.authorId);
   const toggleReaction = useChatStore((s) => s.toggleReaction);
   const pinMessage = useChatStore((s) => s.pinMessage);
+  const removeMessages = useChatStore((s) => s.removeMessages);
+  const selectionCount = useMessageSelectionStore(
+    (s) => s.selected[message.chatId]?.length ?? 0
+  );
+  const isSelected = useMessageSelectionStore(
+    (s) => s.selected[message.chatId]?.includes(message.id) ?? false
+  );
+  const startSelectionWith = useMessageSelectionStore((s) => s.startWith);
+  const toggleSelection = useMessageSelectionStore((s) => s.toggle);
+  const selectionActive = selectionCount > 0;
   const [showActions, setShowActions] = React.useState(false);
   const [openReact, setOpenReact] = React.useState(false);
+
+  const handleBubbleClick = () => {
+    if (selectionActive) toggleSelection(message.chatId, message.id);
+  };
+
+  const handleCopy = () => {
+    if (message.content) void copyText(message.content);
+  };
+
+  const handleDelete = () => {
+    removeMessages(message.chatId, [message.id]);
+  };
 
   if (message.kind === "system") {
     return (
@@ -52,7 +83,14 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
       transition={{ duration: 0.25, ease: "easeOut" }}
       onHoverStart={() => setShowActions(true)}
       onHoverEnd={() => setShowActions(false)}
-      className={cn("group relative flex gap-2", me && "flex-row-reverse")}
+      onClick={handleBubbleClick}
+      className={cn(
+        "group relative flex gap-2",
+        me && "flex-row-reverse",
+        selectionActive && "cursor-pointer",
+        selectionActive && "rounded-2xl transition",
+        isSelected && "bg-cyan-400/10 ring-1 ring-cyan-400/40 -mx-2 px-2 py-1"
+      )}
     >
       {!me && (
         <Avatar className="size-8 shrink-0">
@@ -66,19 +104,49 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
           </div>
         )}
 
-        <BubbleBody
-          me={me}
-          message={message}
-          bubbleMe={bubbleMe}
-          bubbleThem={bubbleThem}
-          textOnMe={textOnMe}
-          textOnThem={textOnThem}
-        />
+        <div className="relative">
+          <BubbleBody
+            me={me}
+            message={message}
+            bubbleMe={bubbleMe}
+            bubbleThem={bubbleThem}
+            textOnMe={textOnMe}
+            textOnThem={textOnThem}
+          />
+
+          {message.reactions && message.reactions.length > 0 && (
+            <div
+              className={cn(
+                "absolute -bottom-3 flex gap-1.5 z-10",
+                me ? "right-2 flex-row-reverse" : "left-2"
+              )}
+            >
+              {message.reactions.map((r) => (
+                <motion.button
+                  key={r.emoji}
+                  whileTap={{ scale: 0.85 }}
+                  whileHover={{ scale: 1.15 }}
+                  onClick={() => toggleReaction(message.chatId, message.id, r.emoji)}
+                  className={cn(
+                    "inline-flex items-center gap-0.5 leading-none transition",
+                    r.byMe && "drop-shadow-[0_0_6px_rgba(139,92,246,0.55)]"
+                  )}
+                >
+                  <span className="text-xl leading-none">{r.emoji}</span>
+                  {r.count > 1 && (
+                    <span className="text-[10px] text-muted-foreground">{r.count}</span>
+                  )}
+                </motion.button>
+              ))}
+            </div>
+          )}
+        </div>
 
         <div
           className={cn(
-            "flex items-center gap-1.5 mt-1 text-[10px] text-muted-foreground",
-            me && "flex-row-reverse"
+            "flex items-center gap-1.5 text-[10px] text-muted-foreground",
+            me && "flex-row-reverse",
+            message.reactions && message.reactions.length > 0 ? "mt-3" : "mt-1"
           )}
         >
           {message.pinned && <Pin className="size-2.5" />}
@@ -94,25 +162,6 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
           )}
         </div>
 
-        {message.reactions && message.reactions.length > 0 && (
-          <div className={cn("flex gap-1.5 mt-1", me && "flex-row-reverse")}>
-            {message.reactions.map((r) => (
-              <motion.button
-                key={r.emoji}
-                whileTap={{ scale: 0.85 }}
-                onClick={() => toggleReaction(message.chatId, message.id, r.emoji)}
-                className={cn(
-                  "inline-flex items-center gap-1 leading-none transition hover:scale-110",
-                  r.byMe && "drop-shadow-[0_0_6px_rgba(139,92,246,0.55)]"
-                )}
-              >
-                <span className="text-xl leading-none">{r.emoji}</span>
-                <span className="text-[11px] text-muted-foreground">{r.count}</span>
-              </motion.button>
-            ))}
-          </div>
-        )}
-
         {!!message.threadCount && (
           <button className="mt-1 text-[11px] text-cyan-400 hover:underline self-start">
             ↳ {message.threadCount} replies in thread
@@ -122,11 +171,11 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
 
       <motion.div
         initial={{ opacity: 0, scale: 0.9 }}
-        animate={{ opacity: showActions ? 1 : 0, scale: showActions ? 1 : 0.9 }}
+        animate={{ opacity: showActions && !selectionActive ? 1 : 0, scale: showActions && !selectionActive ? 1 : 0.9 }}
         transition={{ duration: 0.15 }}
         className={cn(
           "self-start mt-2 flex gap-0.5 glass rounded-full px-1 py-0.5 border border-border/60",
-          showActions ? "pointer-events-auto" : "pointer-events-none"
+          showActions && !selectionActive ? "pointer-events-auto" : "pointer-events-none"
         )}
       >
         <ReactionPicker
@@ -150,9 +199,32 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
         >
           <Pin className="size-3.5" />
         </button>
-        <button className="size-6 grid place-items-center rounded-full hover:bg-foreground/10">
-          <MoreHorizontal className="size-3.5" />
-        </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className="size-6 grid place-items-center rounded-full hover:bg-foreground/10"
+              aria-label="More message actions"
+            >
+              <MoreHorizontal className="size-3.5" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align={me ? "end" : "start"} className="!w-40">
+            <DropdownMenuItem
+              onSelect={() => startSelectionWith(message.chatId, message.id)}
+            >
+              <CheckSquare />
+              Select
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={handleCopy} disabled={!message.content}>
+              <CopyIcon />
+              Copy
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={handleDelete} className="!text-red-400 focus:!text-red-300">
+              <Trash2 />
+              Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </motion.div>
     </motion.div>
   );
@@ -162,9 +234,7 @@ function BubbleBody({
   me,
   message,
   bubbleMe,
-  bubbleThem,
-  textOnMe,
-  textOnThem
+  textOnMe
 }: {
   me: boolean;
   message: Message;
@@ -173,21 +243,14 @@ function BubbleBody({
   textOnMe?: string;
   textOnThem?: string;
 }) {
-  const { resolvedTheme } = useTheme();
-  // Default to dark so dark-mode users don't see a flash of light bubble before hydration.
-  const isDark = resolvedTheme !== "light";
-
+  // Incoming bubbles always use the `.glass` class — light glass + dark text in
+  // light mode, dark glass + white text in dark mode — so they stay readable
+  // regardless of which chat theme is active. Outgoing bubbles still use the
+  // theme's bubbleMe/textOnMe.
   const meColor = textOnMe ?? "#ffffff";
   const meStyle: React.CSSProperties = { color: meColor };
   if (bubbleMe) meStyle.background = bubbleMe;
-
-  // In dark mode, them-bubbles use the .glass class (dark glass + white text inherited
-  // from --foreground) regardless of theme — skipping the inline overrides lets the
-  // class win.
-  const themStyle: React.CSSProperties = {};
-  if (bubbleThem && !isDark) themStyle.background = bubbleThem;
-  if (textOnThem && !isDark) themStyle.color = textOnThem;
-  const themStyleProp = Object.keys(themStyle).length ? themStyle : undefined;
+  const themStyleProp = undefined;
 
   if (message.kind === "image" && message.media) {
     return (
@@ -246,7 +309,7 @@ function BubbleBody({
         href={message.link.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="block rounded-2xl glass border border-border/60 overflow-hidden max-w-sm hover:bg-foreground/[0.02] transition"
+        className="block rounded-2xl glass border border-border/60 overflow-hidden max-w-sm transition hover:ring-1 hover:ring-white/20 hover:border-border"
       >
         {message.link.image && (
           // eslint-disable-next-line @next/next/no-img-element

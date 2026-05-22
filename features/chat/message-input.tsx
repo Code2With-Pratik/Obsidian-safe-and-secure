@@ -6,6 +6,7 @@ import { Plus, Smile, Mic, Sparkles, ArrowUp } from "lucide-react";
 import { AttachmentSheet } from "./attachment-sheet";
 import { ExpressionsPicker, type ExpressionPick } from "./expressions-picker";
 import { useUIStore } from "@/store/use-ui-store";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { cn } from "@/lib/utils";
 
 interface Props {
@@ -27,6 +28,8 @@ export function MessageInput({ onSend, themeBubbleMe, themeAccent }: Props) {
   const [exprOpen, setExprOpen] = React.useState(false);
   const [focused, setFocused] = React.useState(false);
   const setAi = useUIStore((s) => s.setAiAssistantOpen);
+  const isDesktop = useMediaQuery("(min-width: 768px)");
+  const liftAbovePicker = exprOpen && !isDesktop;
   const ref = React.useRef<HTMLTextAreaElement>(null);
   const emojiBtnRef = React.useRef<HTMLButtonElement>(null);
 
@@ -63,7 +66,13 @@ export function MessageInput({ onSend, themeBubbleMe, themeAccent }: Props) {
   const hasText = text.trim().length > 0;
 
   return (
-    <div className="relative px-3 md:px-4 pt-3 pb-3 border-t border-border/40 bg-card/70 dark:bg-card/60 backdrop-blur-2xl backdrop-saturate-180 glass-specular shadow-[0_-8px_24px_-16px_rgba(0,0,0,0.4)]">
+    <div
+      className={cn(
+        "relative px-3 md:px-4 pt-2 pb-3",
+        liftAbovePicker &&
+          "fixed inset-x-0 bottom-[52dvh] z-[202] transition-[bottom] duration-200"
+      )}
+    >
       <AnimatePresence>
         {showAi && !hasText && (
           <motion.div
@@ -93,7 +102,7 @@ export function MessageInput({ onSend, themeBubbleMe, themeAccent }: Props) {
       <motion.div
         layout
         className={cn(
-          "relative flex items-center gap-1 pl-1.5 pr-1 py-1 rounded-full",
+          "relative flex items-end gap-1 pl-1.5 pr-1 py-1 rounded-3xl",
           "glass glass-specular border border-white/15 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)]",
           focused && "ring-2 ring-cyan-400/50"
         )}
@@ -132,11 +141,11 @@ export function MessageInput({ onSend, themeBubbleMe, themeAccent }: Props) {
             }}
             rows={1}
             placeholder=" "
-            className="peer w-full bg-transparent text-[15px] outline-none resize-none py-1.5 max-h-40 leading-snug"
+            className="peer block w-full bg-transparent text-[15px] outline-none resize-none py-1.5 max-h-40 leading-snug break-words overflow-y-auto no-scrollbar"
           />
 
           {!hasText && (
-            <div className="pointer-events-none absolute inset-y-0 left-0 right-2 flex items-center text-[14px] text-muted-foreground/60">
+            <div className="pointer-events-none absolute top-0 left-0 right-2 flex items-center h-[34px] text-[14px] text-muted-foreground/60">
               <span className="truncate">Message</span>
             </div>
           )}
@@ -166,16 +175,14 @@ export function MessageInput({ onSend, themeBubbleMe, themeAccent }: Props) {
               onClick={send}
               className={cn(
                 "size-10 rounded-full grid place-items-center text-white shrink-0",
-                !themeBubbleMe &&
+                !themeAccent &&
                   "bg-gradient-to-br from-cyan-400 via-sky-500 to-blue-600 shadow-[0_6px_22px_-4px_rgba(34,211,238,0.7)]"
               )}
               style={
-                themeBubbleMe
+                themeAccent
                   ? {
-                      background: themeBubbleMe,
-                      boxShadow: themeAccent
-                        ? `0 6px 22px -4px ${themeAccent}b3`
-                        : undefined
+                      background: `linear-gradient(135deg, ${themeAccent}, color-mix(in srgb, ${themeAccent} 70%, black))`,
+                      boxShadow: `0 6px 22px -4px ${themeAccent}cc`
                     }
                   : undefined
               }

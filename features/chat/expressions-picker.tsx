@@ -195,7 +195,7 @@ export function ExpressionsPicker({ open, onClose, onPick, anchorRef }: Props) {
               "z-[201] glass-strong glass-specular border border-white/15 shadow-floating overflow-hidden flex flex-col fixed",
               useDesktopFloat
                 ? "rounded-3xl h-[460px]"
-                : "inset-x-0 bottom-0 w-full h-[78dvh] rounded-t-3xl pb-[max(0.5rem,env(safe-area-inset-bottom))]"
+                : "inset-x-0 bottom-0 w-full h-[52dvh] rounded-t-3xl pb-[max(0.5rem,env(safe-area-inset-bottom))]"
             )}
           >
             {/* mobile grab handle */}

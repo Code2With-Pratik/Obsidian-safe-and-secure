@@ -61,3 +61,35 @@ export function gradientFromString(seed: string) {
 export function sleep(ms: number) {
   return new Promise((r) => setTimeout(r, ms));
 }
+
+/**
+ * Copy text to the clipboard. Tries the async Clipboard API first and falls
+ * back to a hidden textarea + execCommand when it's blocked by a
+ * Permissions-Policy (common in sandboxed iframes / preview environments).
+ */
+export async function copyText(text: string): Promise<boolean> {
+  if (!text || typeof window === "undefined") return false;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+  } catch {
+    // fall through to execCommand fallback
+  }
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.position = "fixed";
+    ta.style.top = "-9999px";
+    ta.style.opacity = "0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    document.body.removeChild(ta);
+    return ok;
+  } catch {
+    return false;
+  }
+}
