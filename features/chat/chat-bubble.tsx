@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { motion } from "framer-motion";
+import { useTheme } from "next-themes";
 import {
   Check,
   CheckCheck,
@@ -24,9 +25,11 @@ interface BubbleProps {
   message: Message;
   bubbleMe?: string;
   bubbleThem?: string;
+  textOnMe?: string;
+  textOnThem?: string;
 }
 
-export function ChatBubble({ message, bubbleMe, bubbleThem }: BubbleProps) {
+export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem }: BubbleProps) {
   const me = message.authorId === "me";
   const author = users.find((u) => u.id === message.authorId);
   const toggleReaction = useChatStore((s) => s.toggleReaction);
@@ -63,7 +66,14 @@ export function ChatBubble({ message, bubbleMe, bubbleThem }: BubbleProps) {
           </div>
         )}
 
-        <BubbleBody me={me} message={message} bubbleMe={bubbleMe} bubbleThem={bubbleThem} />
+        <BubbleBody
+          me={me}
+          message={message}
+          bubbleMe={bubbleMe}
+          bubbleThem={bubbleThem}
+          textOnMe={textOnMe}
+          textOnThem={textOnThem}
+        />
 
         <div
           className={cn(
@@ -85,19 +95,19 @@ export function ChatBubble({ message, bubbleMe, bubbleThem }: BubbleProps) {
         </div>
 
         {message.reactions && message.reactions.length > 0 && (
-          <div className={cn("flex gap-1 mt-1", me && "flex-row-reverse")}>
+          <div className={cn("flex gap-1.5 mt-1", me && "flex-row-reverse")}>
             {message.reactions.map((r) => (
               <motion.button
                 key={r.emoji}
                 whileTap={{ scale: 0.85 }}
                 onClick={() => toggleReaction(message.chatId, message.id, r.emoji)}
                 className={cn(
-                  "px-1.5 py-0.5 rounded-full text-xs glass-subtle border border-border/60",
-                  r.byMe && "ring-1 ring-primary"
+                  "inline-flex items-center gap-1 leading-none transition hover:scale-110",
+                  r.byMe && "drop-shadow-[0_0_6px_rgba(139,92,246,0.55)]"
                 )}
               >
-                <span>{r.emoji}</span>
-                <span className="ml-1 text-[10px] text-muted-foreground">{r.count}</span>
+                <span className="text-xl leading-none">{r.emoji}</span>
+                <span className="text-[11px] text-muted-foreground">{r.count}</span>
               </motion.button>
             ))}
           </div>
@@ -152,15 +162,32 @@ function BubbleBody({
   me,
   message,
   bubbleMe,
-  bubbleThem
+  bubbleThem,
+  textOnMe,
+  textOnThem
 }: {
   me: boolean;
   message: Message;
   bubbleMe?: string;
   bubbleThem?: string;
+  textOnMe?: string;
+  textOnThem?: string;
 }) {
-  const meStyle = bubbleMe ? { background: bubbleMe } : undefined;
-  const themStyle = bubbleThem ? { background: bubbleThem } : undefined;
+  const { resolvedTheme } = useTheme();
+  // Default to dark so dark-mode users don't see a flash of light bubble before hydration.
+  const isDark = resolvedTheme !== "light";
+
+  const meColor = textOnMe ?? "#ffffff";
+  const meStyle: React.CSSProperties = { color: meColor };
+  if (bubbleMe) meStyle.background = bubbleMe;
+
+  // In dark mode, them-bubbles use the .glass class (dark glass + white text inherited
+  // from --foreground) regardless of theme — skipping the inline overrides lets the
+  // class win.
+  const themStyle: React.CSSProperties = {};
+  if (bubbleThem && !isDark) themStyle.background = bubbleThem;
+  if (textOnThem && !isDark) themStyle.color = textOnThem;
+  const themStyleProp = Object.keys(themStyle).length ? themStyle : undefined;
 
   if (message.kind === "image" && message.media) {
     return (
@@ -179,15 +206,18 @@ function BubbleBody({
   if (message.kind === "voice" && message.voice) {
     return (
       <div
-        style={me ? meStyle : undefined}
+        style={me ? meStyle : themStyleProp}
         className={cn(
           "flex items-center gap-3 rounded-xl px-3 py-2.5 max-w-xs",
           me
-            ? "rounded-br-none text-white" + (bubbleMe ? "" : " bg-gradient-to-br from-violet-500 to-fuchsia-500")
+            ? "rounded-br-none" + (bubbleMe ? "" : " bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white")
             : "rounded-bl-none glass border border-border/60"
         )}
       >
-        <button className={cn("size-9 rounded-full grid place-items-center", me ? "bg-white/20" : "bg-foreground/10")}>
+        <button
+          className="size-9 rounded-full grid place-items-center"
+          style={{ backgroundColor: "color-mix(in srgb, currentColor 18%, transparent)" }}
+        >
           <Play className="size-4" />
         </button>
         <div className="flex items-end gap-0.5 h-8 flex-1">
@@ -197,8 +227,11 @@ function BubbleBody({
               initial={{ scaleY: 0.4 }}
               animate={{ scaleY: [0.4, h, 0.4] }}
               transition={{ duration: 1.4, repeat: Infinity, delay: i * 0.02 }}
-              style={{ height: `${h * 100}%` }}
-              className={cn("w-0.5 rounded-full", me ? "bg-white/80" : "bg-foreground/60")}
+              style={{
+                height: `${h * 100}%`,
+                backgroundColor: "color-mix(in srgb, currentColor 70%, transparent)"
+              }}
+              className="w-0.5 rounded-full"
             />
           ))}
         </div>
@@ -237,11 +270,11 @@ function BubbleBody({
 
   return (
     <div
-      style={me ? meStyle : undefined}
+      style={me ? meStyle : themStyleProp}
       className={cn(
         "px-3.5 py-2 rounded-xl text-sm leading-relaxed shadow-sm",
         me
-          ? "rounded-br-none text-white " + (bubbleMe ? "" : "bg-gradient-to-br from-violet-500 to-fuchsia-500")
+          ? "rounded-br-none " + (bubbleMe ? "" : "bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white")
           : "glass border border-border/60 rounded-bl-none"
       )}
     >

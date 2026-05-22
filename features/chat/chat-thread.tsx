@@ -5,8 +5,13 @@ import { ChatBubble } from "./chat-bubble";
 import { MessageInput } from "./message-input";
 import { ChatHeader, PinnedBar } from "./chat-header";
 import { useChatStore } from "@/store/use-chat-store";
-import { useChatThemeStore } from "@/store/use-chat-theme-store";
-import { useEffect, useRef } from "react";
+import {
+  CHAT_THEMES,
+  CUSTOM_THEME_ID,
+  useChatThemeStore,
+  type ChatTheme
+} from "@/store/use-chat-theme-store";
+import { useEffect, useMemo, useRef } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Chat, Message } from "@/types";
 import { motion } from "framer-motion";
@@ -14,10 +19,29 @@ import { motion } from "framer-motion";
 export function ChatThread({ chat }: { chat: Chat }) {
   const messages = useChatStore((s) => s.messages[chat.id] ?? []);
   const send = useChatStore((s) => s.sendMessage);
-  const theme = useChatThemeStore((s) =>
-    (s.byChat[chat.id] ?? "default")
-  );
-  const themeObj = useChatThemeStore((s) => s.themeFor(chat.id));
+  const overrideThemeId = useChatThemeStore((s) => s.byChat[chat.id]);
+  const overrideCustomBg = useChatThemeStore((s) => s.customBgByChat[chat.id]);
+  const globalThemeId = useChatThemeStore((s) => s.globalTheme);
+  const globalCustomBg = useChatThemeStore((s) => s.globalCustomBg);
+  const theme = overrideThemeId ?? globalThemeId;
+  const themeObj = useMemo<ChatTheme>(() => {
+    const id = overrideThemeId ?? globalThemeId;
+    if (id === CUSTOM_THEME_ID) {
+      const img = overrideThemeId ? overrideCustomBg : globalCustomBg;
+      return {
+        id: CUSTOM_THEME_ID,
+        name: "Custom",
+        bubbleMe: "linear-gradient(135deg,#8B5CF6,#EC4899)",
+        bubbleThem: "rgba(0,0,0,0.32)",
+        accent: "#8B5CF6",
+        bg: img
+          ? `linear-gradient(rgba(0,0,0,0.35), rgba(0,0,0,0.35)), url("${img}") center/cover no-repeat`
+          : "",
+        category: "gradient"
+      };
+    }
+    return CHAT_THEMES.find((t) => t.id === id) ?? CHAT_THEMES[0];
+  }, [overrideThemeId, overrideCustomBg, globalThemeId, globalCustomBg]);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -63,6 +87,8 @@ export function ChatThread({ chat }: { chat: Chat }) {
                     message={m}
                     bubbleMe={themeObj.bubbleMe}
                     bubbleThem={themeObj.bubbleThem}
+                    textOnMe={themeObj.textOnMe}
+                    textOnThem={themeObj.textOnThem}
                   />
                 ))}
               </div>
@@ -72,7 +98,11 @@ export function ChatThread({ chat }: { chat: Chat }) {
           </div>
         </ScrollArea>
 
-        <MessageInput onSend={(text) => send(chat.id, text)} />
+        <MessageInput
+          onSend={(text) => send(chat.id, text)}
+          themeBubbleMe={themeObj.bubbleMe}
+          themeAccent={themeObj.accent}
+        />
       </div>
     </div>
   );

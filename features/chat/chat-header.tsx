@@ -65,9 +65,9 @@ export function ChatHeader({ chat }: { chat: Chat }) {
   };
 
   return (
-    <div className="relative z-10 flex items-center gap-3 px-3 md:px-5 h-16 border-b border-border/40 backdrop-blur-xl backdrop-saturate-150 bg-background/40 glass-specular">
+    <div className="relative z-10 flex items-center gap-3 px-3 md:px-5 h-16 border-b border-border/40 backdrop-blur-2xl backdrop-saturate-180 bg-card/70 dark:bg-card/65 glass-specular shadow-[0_8px_24px_-16px_rgba(0,0,0,0.5)]">
       <Link href="/chats" className="md:hidden">
-        <Button variant="ghost" size="icon-sm">
+        <Button variant="ghost" size="icon" className="[&_svg]:size-7 dark:text-white dark:hover:text-white">
           <ChevronLeft />
         </Button>
       </Link>
@@ -107,19 +107,40 @@ export function ChatHeader({ chat }: { chat: Chat }) {
       </button>
 
       <div className="flex items-center gap-1">
-        <Button variant="ghost" size="icon" onClick={() => startCall(false)} title="Voice call">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => startCall(false)}
+          title="Voice call"
+          className="[&_svg]:size-[22px] dark:text-white dark:hover:text-white"
+        >
           <Phone />
         </Button>
-        <Button variant="ghost" size="icon" onClick={() => startCall(true)} title="Video call">
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={() => startCall(true)}
+          title="Video call"
+          className="[&_svg]:size-[22px] dark:text-white dark:hover:text-white"
+        >
           <Video />
         </Button>
-        <Button variant="ghost" size="icon" className="hidden md:inline-flex">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="hidden md:inline-flex [&_svg]:size-[22px] dark:text-white dark:hover:text-white"
+        >
           <Search />
         </Button>
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button variant="ghost" size="icon" aria-label="More options">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="More options"
+              className="[&_svg]:size-[22px] dark:text-white dark:hover:text-white"
+            >
               <MoreVertical />
             </Button>
           </DropdownMenuTrigger>
@@ -207,7 +228,7 @@ export function ChatHeader({ chat }: { chat: Chat }) {
 export function PinnedBar({ pinned }: { pinned?: string }) {
   if (!pinned) return null;
   return (
-    <div className="flex items-center gap-2 px-4 py-2 border-b border-border/40 bg-background/30 backdrop-blur-md text-xs">
+    <div className="flex items-center gap-2 px-4 py-2 border-b border-border/40 bg-card/60 dark:bg-card/55 backdrop-blur-xl backdrop-saturate-180 text-xs">
       <PinIcon className="size-3.5 text-amber-400" />
       <span className="text-muted-foreground line-clamp-1 flex-1">Pinned: {pinned}</span>
       <button className="text-cyan-400 hover:underline text-[11px]">view all</button>

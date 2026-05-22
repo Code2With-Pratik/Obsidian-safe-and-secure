@@ -10,6 +10,8 @@ import { cn } from "@/lib/utils";
 
 interface Props {
   onSend: (text: string) => void;
+  themeBubbleMe?: string;
+  themeAccent?: string;
 }
 
 const SUGGESTIONS = [
@@ -18,7 +20,7 @@ const SUGGESTIONS = [
   "Could we do that tomorrow morning?"
 ];
 
-export function MessageInput({ onSend }: Props) {
+export function MessageInput({ onSend, themeBubbleMe, themeAccent }: Props) {
   const [text, setText] = React.useState("");
   const [showAi, setShowAi] = React.useState(false);
   const [attachOpen, setAttachOpen] = React.useState(false);
@@ -61,7 +63,7 @@ export function MessageInput({ onSend }: Props) {
   const hasText = text.trim().length > 0;
 
   return (
-    <div className="px-3 md:px-4 pt-2 pb-3">
+    <div className="relative px-3 md:px-4 pt-3 pb-3 border-t border-border/40 bg-card/70 dark:bg-card/60 backdrop-blur-2xl backdrop-saturate-180 glass-specular shadow-[0_-8px_24px_-16px_rgba(0,0,0,0.4)]">
       <AnimatePresence>
         {showAi && !hasText && (
           <motion.div
@@ -100,13 +102,13 @@ export function MessageInput({ onSend }: Props) {
           whileTap={{ scale: 0.9, rotate: 45 }}
           onClick={() => setAttachOpen(true)}
           className={cn(
-            "size-9 rounded-full grid place-items-center transition shrink-0",
-            "hover:bg-foreground/5 text-foreground/80",
-            attachOpen && "bg-foreground/10 rotate-45 text-foreground"
+            "size-10 rounded-full grid place-items-center transition shrink-0",
+            "hover:bg-foreground/10 text-foreground dark:text-white",
+            attachOpen && "bg-foreground/10 rotate-45"
           )}
           aria-label="Attach"
         >
-          <Plus className="size-[18px]" />
+          <Plus className="size-[22px]" />
         </motion.button>
 
         <div className="relative flex-1 min-w-0">
@@ -144,12 +146,12 @@ export function MessageInput({ onSend }: Props) {
           ref={emojiBtnRef}
           onClick={() => setExprOpen((v) => !v)}
           className={cn(
-            "size-9 rounded-full grid place-items-center hover:bg-foreground/5 text-foreground/80 transition shrink-0",
-            exprOpen && "bg-foreground/10 text-foreground"
+            "size-10 rounded-full grid place-items-center hover:bg-foreground/10 text-foreground dark:text-white transition shrink-0",
+            exprOpen && "bg-foreground/10"
           )}
           aria-label="Emoji, GIFs, stickers, memes"
         >
-          <Smile className="size-[18px]" />
+          <Smile className="size-[22px]" />
         </button>
 
         <AnimatePresence initial={false} mode="popLayout">
@@ -162,10 +164,24 @@ export function MessageInput({ onSend }: Props) {
               exit={{ scale: 0.6, opacity: 0, rotate: 30 }}
               transition={{ type: "spring", stiffness: 360, damping: 22 }}
               onClick={send}
-              className="size-9 rounded-full grid place-items-center text-white shrink-0 bg-gradient-to-br from-cyan-400 via-sky-500 to-blue-600 shadow-[0_6px_22px_-4px_rgba(34,211,238,0.7)]"
+              className={cn(
+                "size-10 rounded-full grid place-items-center text-white shrink-0",
+                !themeBubbleMe &&
+                  "bg-gradient-to-br from-cyan-400 via-sky-500 to-blue-600 shadow-[0_6px_22px_-4px_rgba(34,211,238,0.7)]"
+              )}
+              style={
+                themeBubbleMe
+                  ? {
+                      background: themeBubbleMe,
+                      boxShadow: themeAccent
+                        ? `0 6px 22px -4px ${themeAccent}b3`
+                        : undefined
+                    }
+                  : undefined
+              }
               aria-label="Send"
             >
-              <ArrowUp className="size-[18px]" strokeWidth={2.5} />
+              <ArrowUp className="size-[22px]" strokeWidth={2.5} />
             </motion.button>
           ) : (
             <motion.button
@@ -177,13 +193,13 @@ export function MessageInput({ onSend }: Props) {
               transition={{ type: "spring", stiffness: 360, damping: 22 }}
               onClick={() => setShowAi((v) => !v)}
               className={cn(
-                "size-9 rounded-full grid place-items-center transition shrink-0",
-                "hover:bg-foreground/5 text-foreground/80",
-                showAi && "bg-foreground/10 text-foreground"
+                "size-10 rounded-full grid place-items-center transition shrink-0",
+                "hover:bg-foreground/10 text-foreground dark:text-white",
+                showAi && "bg-foreground/10"
               )}
               aria-label="Voice / AI suggestions"
             >
-              <Mic className="size-[18px]" />
+              <Mic className="size-[22px]" />
             </motion.button>
           )}
         </AnimatePresence>

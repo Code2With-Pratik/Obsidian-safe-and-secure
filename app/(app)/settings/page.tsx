@@ -28,6 +28,12 @@ import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { ChatThemeDialog } from "@/features/chat/chat-theme-dialog";
+import {
+  CHAT_THEMES,
+  CUSTOM_THEME_ID,
+  useChatThemeStore
+} from "@/store/use-chat-theme-store";
 import { cn } from "@/lib/utils";
 
 const sections = [
@@ -55,6 +61,20 @@ export default function SettingsPage() {
   const [mobileDetail, setMobileDetail] = React.useState(false);
   const [accent, setAccent] = React.useState("violet");
   const [glass, setGlass] = React.useState([80]);
+  const [chatThemeOpen, setChatThemeOpen] = React.useState(false);
+  const globalTheme = useChatThemeStore((s) => s.globalTheme);
+  const globalCustomBg = useChatThemeStore((s) => s.globalCustomBg);
+  const globalThemePreset = CHAT_THEMES.find((t) => t.id === globalTheme);
+  const globalThemeName =
+    globalTheme === CUSTOM_THEME_ID
+      ? "Custom photo"
+      : globalThemePreset?.name ?? "Default";
+  const globalThemeSwatch =
+    globalTheme === CUSTOM_THEME_ID && globalCustomBg
+      ? `url("${globalCustomBg}") center/cover no-repeat`
+      : globalThemePreset?.category === "photo" || globalThemePreset?.category === "pattern"
+        ? globalThemePreset.bg
+        : globalThemePreset?.bubbleMe ?? CHAT_THEMES[0].bubbleMe;
 
   const openSection = (id: string) => {
     setSection(id);
@@ -175,6 +195,23 @@ export default function SettingsPage() {
               <Setting label="Reduce motion" sub="Disable parallax and float animations.">
                 <Switch />
               </Setting>
+
+              <Setting
+                label="Default chat theme"
+                sub="Applied to every conversation. Individual chats can still override it."
+              >
+                <button
+                  onClick={() => setChatThemeOpen(true)}
+                  className="flex items-center gap-2.5 rounded-xl glass-subtle pl-1.5 pr-3 py-1.5 hover:bg-foreground/[0.06] transition"
+                >
+                  <span
+                    className="size-7 rounded-lg ring-1 ring-white/10 shrink-0"
+                    style={{ background: globalThemeSwatch }}
+                  />
+                  <span className="text-xs font-medium">{globalThemeName}</span>
+                  <ChevronRight className="size-3.5 text-muted-foreground" />
+                </button>
+              </Setting>
             </Section>
           )}
 
@@ -288,6 +325,12 @@ export default function SettingsPage() {
           )}
         </div>
       </ScrollArea>
+
+      <ChatThemeDialog
+        open={chatThemeOpen}
+        onOpenChange={setChatThemeOpen}
+        global
+      />
     </div>
   );
 }
