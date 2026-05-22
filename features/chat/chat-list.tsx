@@ -144,7 +144,7 @@ export function ChatList({
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="relative flex items-center justify-between gap-2 px-4 pt-5 pb-2 h-[68px]">
+      <div className="relative flex items-center justify-between gap-2 px-4 pt-4 pb-3 h-[76px]">
         <AnimatePresence mode="wait" initial={false}>
           {searchOpen ? (
             <motion.div
@@ -154,7 +154,7 @@ export function ChatList({
               exit={{ opacity: 0, scaleX: 0.6, x: 60 }}
               transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
               style={{ originX: 1 }}
-              className="absolute left-4 right-4 top-1/2 -translate-y-1/2"
+              className="absolute left-4 right-4 top-1/2 -translate-y-1/2 z-10"
             >
               <div className="relative flex items-center h-11 rounded-full glass border border-border/60 shadow-[0_4px_18px_-6px_rgba(0,0,0,0.4)] focus-within:ring-2 focus-within:ring-cyan-400/60 transition">
                 <span className="grid place-items-center size-11 shrink-0">
@@ -243,7 +243,7 @@ export function ChatList({
 
       {/* Filter chips — hidden in empty mode */}
       {!isEmpty && (
-        <div className="flex gap-1.5 px-4 mt-1 overflow-x-auto no-scrollbar">
+        <div className="flex gap-1.5 px-4 mt-2 overflow-x-auto no-scrollbar">
           {(
             [
               { id: "all", label: "All" },
@@ -468,7 +468,10 @@ function ChatRow({
             {chat.favorite && (
               <Star className="size-3 text-amber-400 fill-amber-400/70" />
             )}
-            <span className="ml-auto text-[11px] text-muted-foreground shrink-0">
+            <span
+              className="ml-auto text-[11px] text-muted-foreground shrink-0"
+              suppressHydrationWarning
+            >
               {chat.lastMessageAt && formatRelative(chat.lastMessageAt)}
             </span>
           </div>

@@ -318,7 +318,7 @@ function NotifCard({
       <div className="flex-1 min-w-0">
         <div className="flex items-center justify-between gap-2">
           <p className="text-sm font-semibold truncate">{n.title}</p>
-          <span className="text-[10px] text-muted-foreground shrink-0">
+          <span className="text-[10px] text-muted-foreground shrink-0" suppressHydrationWarning>
             {formatRelative(n.time)}
           </span>
         </div>

@@ -3,8 +3,8 @@
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Plus, Smile, Mic, Sparkles, ArrowUp } from "lucide-react";
-import { ReactionPicker } from "./reaction-picker";
 import { AttachmentSheet } from "./attachment-sheet";
+import { ExpressionsPicker, type ExpressionPick } from "./expressions-picker";
 import { useUIStore } from "@/store/use-ui-store";
 import { cn } from "@/lib/utils";
 
@@ -22,9 +22,27 @@ export function MessageInput({ onSend }: Props) {
   const [text, setText] = React.useState("");
   const [showAi, setShowAi] = React.useState(false);
   const [attachOpen, setAttachOpen] = React.useState(false);
+  const [exprOpen, setExprOpen] = React.useState(false);
   const [focused, setFocused] = React.useState(false);
   const setAi = useUIStore((s) => s.setAiAssistantOpen);
   const ref = React.useRef<HTMLTextAreaElement>(null);
+  const emojiBtnRef = React.useRef<HTMLButtonElement>(null);
+
+  const handleExpression = (pick: ExpressionPick) => {
+    if (pick.kind === "emoji") {
+      setText((t) => t + pick.value);
+      ref.current?.focus();
+      return;
+    }
+    if (pick.kind === "gif") {
+      onSend(`🎞 GIF · ${pick.gif.alt}`);
+    } else if (pick.kind === "sticker") {
+      onSend(`${pick.sticker.emoji}`);
+    } else if (pick.kind === "meme") {
+      onSend(`🖼 ${pick.meme.caption}`);
+    }
+    setExprOpen(false);
+  };
 
   const send = () => {
     const t = text.trim();
@@ -122,11 +140,17 @@ export function MessageInput({ onSend }: Props) {
           )}
         </div>
 
-        <ReactionPicker onPick={(e) => setText((t) => t + e)}>
-          <button className="size-9 rounded-full grid place-items-center hover:bg-foreground/5 text-foreground/80 transition shrink-0">
-            <Smile className="size-[18px]" />
-          </button>
-        </ReactionPicker>
+        <button
+          ref={emojiBtnRef}
+          onClick={() => setExprOpen((v) => !v)}
+          className={cn(
+            "size-9 rounded-full grid place-items-center hover:bg-foreground/5 text-foreground/80 transition shrink-0",
+            exprOpen && "bg-foreground/10 text-foreground"
+          )}
+          aria-label="Emoji, GIFs, stickers, memes"
+        >
+          <Smile className="size-[18px]" />
+        </button>
 
         <AnimatePresence initial={false} mode="popLayout">
           {hasText ? (
@@ -168,6 +192,13 @@ export function MessageInput({ onSend }: Props) {
       <AttachmentSheet
         open={attachOpen}
         onClose={() => setAttachOpen(false)}
+      />
+
+      <ExpressionsPicker
+        open={exprOpen}
+        onClose={() => setExprOpen(false)}
+        onPick={handleExpression}
+        anchorRef={emojiBtnRef}
       />
     </div>
   );

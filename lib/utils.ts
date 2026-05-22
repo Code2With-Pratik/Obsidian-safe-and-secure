@@ -5,11 +5,25 @@ export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
 }
 
+/**
+ * Deterministic 12h time formatter — no `toLocaleTimeString` so server and
+ * client agree on "10:38 AM" instead of "10:38 am" vs "10:38 AM" between Node
+ * (ICU) and the browser.
+ */
 export function formatTime(date: Date | string) {
   const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const h24 = d.getHours();
+  const m = d.getMinutes();
+  const period = h24 >= 12 ? "PM" : "AM";
+  let h = h24 % 12;
+  if (h === 0) h = 12;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")} ${period}`;
 }
 
+/**
+ * Relative time like "4m" / "2h" / "3d". Beyond 7 days we fall back to a
+ * locale-independent YYYY-MM-DD format so hydration stays stable.
+ */
 export function formatRelative(date: Date | string) {
   const d = typeof date === "string" ? new Date(date) : date;
   const diff = Date.now() - d.getTime();
@@ -21,7 +35,10 @@ export function formatRelative(date: Date | string) {
   if (hr < 24) return `${hr}h`;
   const day = Math.floor(hr / 24);
   if (day < 7) return `${day}d`;
-  return d.toLocaleDateString();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
 }
 
 export function initials(name: string) {

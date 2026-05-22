@@ -72,7 +72,7 @@ export function ChatBubble({ message, bubbleMe, bubbleThem }: BubbleProps) {
           )}
         >
           {message.pinned && <Pin className="size-2.5" />}
-          <span>{formatTime(message.createdAt)}</span>
+          <span suppressHydrationWarning>{formatTime(message.createdAt)}</span>
           {message.edited && <span className="opacity-70">edited</span>}
           {me && message.status && (
             <span className="ml-1">
@@ -181,10 +181,10 @@ function BubbleBody({
       <div
         style={me ? meStyle : undefined}
         className={cn(
-          "flex items-center gap-3 rounded-2xl px-3 py-2.5 max-w-xs",
+          "flex items-center gap-3 rounded-xl px-3 py-2.5 max-w-xs",
           me
-            ? "text-white" + (bubbleMe ? "" : " bg-gradient-to-br from-violet-500 to-fuchsia-500")
-            : "glass border border-border/60"
+            ? "rounded-br-none text-white" + (bubbleMe ? "" : " bg-gradient-to-br from-violet-500 to-fuchsia-500")
+            : "rounded-bl-none glass border border-border/60"
         )}
       >
         <button className={cn("size-9 rounded-full grid place-items-center", me ? "bg-white/20" : "bg-foreground/10")}>
@@ -239,10 +239,10 @@ function BubbleBody({
     <div
       style={me ? meStyle : undefined}
       className={cn(
-        "px-3.5 py-2 rounded-2xl text-sm leading-relaxed shadow-sm",
+        "px-3.5 py-2 rounded-xl text-sm leading-relaxed shadow-sm",
         me
-          ? "text-white rounded-br-md " + (bubbleMe ? "" : "bg-gradient-to-br from-violet-500 to-fuchsia-500")
-          : "glass border border-border/60 rounded-bl-md"
+          ? "rounded-br-none text-white " + (bubbleMe ? "" : "bg-gradient-to-br from-violet-500 to-fuchsia-500")
+          : "glass border border-border/60 rounded-bl-none"
       )}
     >
       {message.content}
