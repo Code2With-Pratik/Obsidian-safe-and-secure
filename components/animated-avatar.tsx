@@ -43,7 +43,10 @@ export function AnimatedAvatar({
 
   return (
     <motion.div
-      className={cn("relative inline-grid place-items-center shrink-0", className)}
+      className={cn(
+        "relative inline-grid place-items-center shrink-0 rounded-full",
+        className
+      )}
       style={{ width: ringSize, height: ringSize }}
       whileHover={hoverLift ? { y: -1.5, scale: 1.04 } : undefined}
       transition={{ type: "spring", stiffness: 300, damping: 20 }}
@@ -75,12 +78,15 @@ export function AnimatedAvatar({
       <motion.div
         animate={shouldBreathe ? { scale: [1, 1.025, 1] } : undefined}
         transition={shouldBreathe ? { duration: 3.4, repeat: Infinity, ease: "easeInOut" } : undefined}
-        className="relative rounded-full bg-background p-[2px]"
+        className="relative rounded-full bg-background p-[2px] overflow-hidden"
         style={{ width: size + 4, height: size + 4 }}
       >
-        <Avatar style={{ width: size, height: size }} className="overflow-hidden">
-          <AvatarImage src={src} alt={alt ?? name} />
-          <AvatarFallback>{initials(name)}</AvatarFallback>
+        <Avatar
+          style={{ width: size, height: size }}
+          className="!rounded-full overflow-hidden"
+        >
+          <AvatarImage src={src} alt={alt ?? name} className="rounded-full" />
+          <AvatarFallback className="rounded-full">{initials(name)}</AvatarFallback>
         </Avatar>
       </motion.div>
 

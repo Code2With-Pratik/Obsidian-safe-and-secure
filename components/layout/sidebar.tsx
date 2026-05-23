@@ -13,13 +13,11 @@ import {
   PencilRuler,
   Folder,
   Settings,
-  Plus,
   Bell
 } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/use-auth-store";
 import { NovaLogo } from "@/components/brand/nova-logo";
 import { cn, initials } from "@/lib/utils";
@@ -84,32 +82,7 @@ export function Sidebar() {
           </Link>
         </div>
 
-        <div className="px-3">
-          <Button
-            variant="gradient"
-            className={cn(
-              "w-full overflow-hidden",
-              !expanded && "!px-0 !size-10 !rounded-xl mx-auto"
-            )}
-          >
-            <Plus className="shrink-0" />
-            <AnimatePresence initial={false}>
-              {expanded && (
-                <motion.span
-                  initial={{ opacity: 0, width: 0 }}
-                  animate={{ opacity: 1, width: "auto" }}
-                  exit={{ opacity: 0, width: 0 }}
-                  transition={{ duration: 0.18 }}
-                  className="whitespace-nowrap"
-                >
-                  New conversation
-                </motion.span>
-              )}
-            </AnimatePresence>
-          </Button>
-        </div>
-
-        <nav className="px-2 mt-5 space-y-0.5 flex-1 overflow-y-auto no-scrollbar">
+        <nav className="px-2 mt-2 space-y-0.5 flex-1 overflow-y-auto no-scrollbar">
           {navItems.map((item) => {
             const active = pathname?.startsWith(item.href);
             const link = (

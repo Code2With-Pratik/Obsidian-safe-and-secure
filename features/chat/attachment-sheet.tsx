@@ -76,7 +76,7 @@ export function AttachmentSheet({ open, onClose, onPick }: Props) {
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
             onClick={onClose}
-            className="fixed inset-0 z-[95] bg-black/40 backdrop-blur-md"
+            className="fixed inset-0 z-[95] bg-black/20"
           />
           <motion.div
             initial={{ y: "100%", opacity: 0 }}

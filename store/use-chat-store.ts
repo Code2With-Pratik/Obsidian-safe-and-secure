@@ -10,6 +10,7 @@ interface ChatState {
   activeChatId: string | null;
   setActiveChat: (id: string | null) => void;
   sendMessage: (chatId: string, content: string) => void;
+  sendVoice: (chatId: string, durationSec: number, waveform: number[]) => void;
   toggleReaction: (chatId: string, messageId: string, emoji: string) => void;
   pinMessage: (chatId: string, messageId: string) => void;
   removeMessages: (chatId: string, messageIds: string[]) => void;
@@ -58,6 +59,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
           ...s.messages,
           [chatId]: (s.messages[chatId] ?? []).map((x) =>
             x.id === m.id ? { ...x, status: "delivered" } : x
+          )
+        }
+      }));
+    }, 700);
+  },
+
+  sendVoice: (chatId, durationSec, waveform) => {
+    const id = `m-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const m: Message = {
+      id,
+      chatId,
+      authorId: "me",
+      kind: "voice",
+      content: "",
+      createdAt: new Date().toISOString(),
+      status: "sending",
+      voice: { durationSec, waveform }
+    };
+    const preview = `🎤 Voice message · ${durationSec}s`;
+    set((s) => ({
+      messages: {
+        ...s.messages,
+        [chatId]: [...(s.messages[chatId] ?? []), m]
+      },
+      chats: s.chats.map((c) =>
+        c.id === chatId ? { ...c, lastMessage: preview, lastMessageAt: m.createdAt } : c
+      )
+    }));
+    setTimeout(() => {
+      set((s) => ({
+        messages: {
+          ...s.messages,
+          [chatId]: (s.messages[chatId] ?? []).map((x) =>
+            x.id === id ? { ...x, status: "delivered" } : x
           )
         }
       }));

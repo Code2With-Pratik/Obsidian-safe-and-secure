@@ -9,6 +9,7 @@ import {
   ExternalLink,
   Pin,
   Play,
+  Pause,
   Reply,
   Smile,
   MoreHorizontal,
@@ -65,7 +66,8 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
   };
 
   const handleDelete = () => {
-    removeMessages(message.chatId, [message.id]);
+    const fn = removeMessages ?? useChatStore.getState().removeMessages;
+    fn?.(message.chatId, [message.id]);
   };
 
   if (message.kind === "system") {
@@ -85,19 +87,35 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
       onHoverEnd={() => setShowActions(false)}
       onClick={handleBubbleClick}
       className={cn(
-        "group relative flex gap-2",
+        "group relative flex gap-2 rounded-2xl transition-colors",
         me && "flex-row-reverse",
-        selectionActive && "cursor-pointer",
-        selectionActive && "rounded-2xl transition",
-        isSelected && "bg-cyan-400/10 ring-1 ring-cyan-400/40 -mx-2 px-2 py-1"
+        selectionActive && "cursor-pointer pl-9 py-1",
+        isSelected && "bg-cyan-400/20 ring-1 ring-cyan-400/60 shadow-[0_0_0_2px_rgba(34,211,238,0.08)]"
       )}
     >
+      {/* Selection tick — always anchored on the left edge of the row,
+          regardless of whether the message is sent or received. */}
+      {selectionActive && (
+        <div className="absolute left-1 top-1/2 -translate-y-1/2 z-10 shrink-0">
+          <div
+            className={cn(
+              "size-5 rounded-full grid place-items-center transition-colors",
+              isSelected
+                ? "bg-cyan-400 text-black"
+                : "bg-foreground/10 text-transparent ring-1 ring-border/60"
+            )}
+            aria-hidden
+          >
+            <Check className="size-3" strokeWidth={3} />
+          </div>
+        </div>
+      )}
       {!me && (
         <Avatar className="size-8 shrink-0">
           <AvatarImage src={author?.avatar} />
         </Avatar>
       )}
-      <div className={cn("max-w-[78%] md:max-w-[68%] flex flex-col", me && "items-end")}>
+      <div className={cn("max-w-[78%] md:max-w-[68%] min-w-0 flex flex-col", me && "items-end")}>
         {!me && (
           <div className="text-[11px] font-medium text-muted-foreground mb-1 ml-1">
             {author?.name ?? "User"}
@@ -268,38 +286,13 @@ function BubbleBody({
 
   if (message.kind === "voice" && message.voice) {
     return (
-      <div
-        style={me ? meStyle : themStyleProp}
-        className={cn(
-          "flex items-center gap-3 rounded-xl px-3 py-2.5 max-w-xs",
-          me
-            ? "rounded-br-none" + (bubbleMe ? "" : " bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white")
-            : "rounded-bl-none glass border border-border/60"
-        )}
-      >
-        <button
-          className="size-9 rounded-full grid place-items-center"
-          style={{ backgroundColor: "color-mix(in srgb, currentColor 18%, transparent)" }}
-        >
-          <Play className="size-4" />
-        </button>
-        <div className="flex items-end gap-0.5 h-8 flex-1">
-          {message.voice.waveform.map((h, i) => (
-            <motion.span
-              key={i}
-              initial={{ scaleY: 0.4 }}
-              animate={{ scaleY: [0.4, h, 0.4] }}
-              transition={{ duration: 1.4, repeat: Infinity, delay: i * 0.02 }}
-              style={{
-                height: `${h * 100}%`,
-                backgroundColor: "color-mix(in srgb, currentColor 70%, transparent)"
-              }}
-              className="w-0.5 rounded-full"
-            />
-          ))}
-        </div>
-        <span className="text-[11px] opacity-80">{message.voice.durationSec}s</span>
-      </div>
+      <VoiceBubble
+        me={me}
+        meStyle={meStyle}
+        bubbleMe={bubbleMe}
+        durationSec={message.voice.durationSec}
+        waveform={message.voice.waveform}
+      />
     );
   }
 
@@ -335,13 +328,126 @@ function BubbleBody({
     <div
       style={me ? meStyle : themStyleProp}
       className={cn(
-        "px-3.5 py-2 rounded-xl text-sm leading-relaxed shadow-sm",
+        "px-3.5 py-2 rounded-xl text-sm leading-relaxed shadow-sm max-w-full break-words whitespace-pre-wrap",
         me
           ? "rounded-br-none " + (bubbleMe ? "" : "bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white")
           : "glass border border-border/60 rounded-bl-none"
       )}
     >
       {message.content}
+    </div>
+  );
+}
+
+/** Compact, animated voice bubble. Tapping play scrubs across the waveform;
+ *  bars idle with a gentle staggered equaliser pulse when not playing. */
+function VoiceBubble({
+  me,
+  meStyle,
+  bubbleMe,
+  durationSec,
+  waveform
+}: {
+  me: boolean;
+  meStyle: React.CSSProperties;
+  bubbleMe?: string;
+  durationSec: number;
+  waveform: number[];
+}) {
+  const [playing, setPlaying] = React.useState(false);
+  const [progress, setProgress] = React.useState(0); // 0..1
+  const rafRef = React.useRef<number | null>(null);
+  const startedAtRef = React.useRef<number>(0);
+  const offsetRef = React.useRef<number>(0); // resume position 0..1
+
+  const stop = React.useCallback(() => {
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    setPlaying(false);
+  }, []);
+
+  React.useEffect(() => () => stop(), [stop]);
+
+  const toggle = () => {
+    if (playing) {
+      offsetRef.current = progress;
+      stop();
+      return;
+    }
+    if (progress >= 1) {
+      offsetRef.current = 0;
+      setProgress(0);
+    }
+    startedAtRef.current = performance.now();
+    setPlaying(true);
+    const total = durationSec * 1000;
+    const tick = () => {
+      const elapsed = performance.now() - startedAtRef.current;
+      const p = Math.min(1, offsetRef.current + elapsed / total);
+      setProgress(p);
+      if (p >= 1) {
+        stop();
+        offsetRef.current = 0;
+        return;
+      }
+      rafRef.current = requestAnimationFrame(tick);
+    };
+    rafRef.current = requestAnimationFrame(tick);
+  };
+
+  const remaining = Math.max(0, Math.ceil(durationSec * (1 - progress)));
+  const playedIndex = Math.floor(progress * waveform.length);
+
+  return (
+    <div
+      style={me ? meStyle : undefined}
+      className={cn(
+        "flex items-center gap-2 rounded-2xl px-2.5 py-1.5 max-w-[14rem]",
+        me
+          ? "rounded-br-none" +
+              (bubbleMe ? "" : " bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white")
+          : "rounded-bl-none glass border border-border/60"
+      )}
+    >
+      <button
+        onClick={toggle}
+        className="size-7 rounded-full grid place-items-center shrink-0 transition active:scale-95"
+        style={{ backgroundColor: "color-mix(in srgb, currentColor 18%, transparent)" }}
+        aria-label={playing ? "Pause" : "Play"}
+      >
+        {playing ? <Pause className="size-3" /> : <Play className="size-3 ml-0.5" />}
+      </button>
+      <div className="flex items-center gap-[2px] h-5 flex-1 min-w-0">
+        {waveform.map((h, i) => {
+          const isPlayed = i < playedIndex;
+          const heightPct = Math.max(20, Math.min(100, h * 100));
+          return (
+            <motion.span
+              key={i}
+              animate={
+                playing
+                  ? { scaleY: [0.7, 1, 0.7] }
+                  : { scaleY: [0.85, 1, 0.85] }
+              }
+              transition={{
+                duration: playing ? 0.9 : 2.4,
+                repeat: Infinity,
+                delay: (i * 0.04) % 1.2,
+                ease: "easeInOut"
+              }}
+              style={{
+                height: `${heightPct}%`,
+                opacity: isPlayed ? 1 : 0.55,
+                backgroundColor: "currentColor"
+              }}
+              className="w-[2px] rounded-full"
+            />
+          );
+        })}
+      </div>
+      <span className="text-[10px] tabular-nums opacity-80 shrink-0">{remaining}s</span>
     </div>
   );
 }

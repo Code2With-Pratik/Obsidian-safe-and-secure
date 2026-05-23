@@ -19,6 +19,7 @@ import { motion } from "framer-motion";
 export function ChatThread({ chat }: { chat: Chat }) {
   const messages = useChatStore((s) => s.messages[chat.id] ?? []);
   const send = useChatStore((s) => s.sendMessage);
+  const sendVoice = useChatStore((s) => s.sendVoice);
   const overrideThemeId = useChatThemeStore((s) => s.byChat[chat.id]);
   const overrideCustomBg = useChatThemeStore((s) => s.customBgByChat[chat.id]);
   const globalThemeId = useChatThemeStore((s) => s.globalTheme);
@@ -71,7 +72,7 @@ export function ChatThread({ chat }: { chat: Chat }) {
         <PinnedBar pinned={pinned?.content} />
 
         <ScrollArea className="flex-1 px-3 md:px-6 py-4 scroll-fade-y" key={theme}>
-          <div className="max-w-3xl mx-auto space-y-4">
+          <div className="mx-auto w-full max-w-[min(100%,1200px)] space-y-4">
             {grouped.map((group) => (
               <div key={group.day} className="space-y-3">
                 <div className="flex items-center gap-3 my-3">
@@ -100,6 +101,7 @@ export function ChatThread({ chat }: { chat: Chat }) {
 
         <MessageInput
           onSend={(text) => send(chat.id, text)}
+          onSendVoice={(durationSec, waveform) => sendVoice(chat.id, durationSec, waveform)}
           themeBubbleMe={themeObj.bubbleMe}
           themeAccent={themeObj.accent}
         />

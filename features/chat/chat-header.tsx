@@ -89,7 +89,8 @@ export function ChatHeader({ chat }: { chat: Chat }) {
 
   const deleteSelected = () => {
     const ids = useMessageSelectionStore.getState().selected[chat.id] ?? [];
-    removeMessages(chat.id, ids);
+    const fn = removeMessages ?? useChatStore.getState().removeMessages;
+    fn?.(chat.id, ids);
     clearSelection(chat.id);
   };
 

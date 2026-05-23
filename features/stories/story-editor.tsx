@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, Reorder, useMotionValue, useDragControls } from "framer-motion";
 import {
   ArrowLeft,
   Image as ImageIcon,
@@ -25,7 +25,8 @@ import {
   Camera,
   Folder,
   Search,
-  Play
+  Play,
+  Pause
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
@@ -144,14 +145,114 @@ const TEXT_BGS: { label: string; value: string; fg: string }[] = [
 
 const TEXT_COLORS = ["#ffffff", "#000000", "#8B5CF6", "#22D3EE", "#EC4899", "#FBBF24", "#A3E635", "#FB923C"];
 
+// Each track carries a root frequency (Hz) + waveform so the preview synth
+// generates a recognisable, distinct ambient pad per track.
 const MUSIC_TRACKS = [
-  { id: "m1", title: "Glass Cathedrals", artist: "Nova FM", duration: "3:24" },
-  { id: "m2", title: "Aurora Drift", artist: "Synth Citizens", duration: "2:51" },
-  { id: "m3", title: "Midnight Lounge", artist: "Kai Nakamura", duration: "4:08" },
-  { id: "m4", title: "Neon Pulse", artist: "Lyra Chen", duration: "3:12" },
-  { id: "m5", title: "Vapor Skies", artist: "Iris Park", duration: "3:48" },
-  { id: "m6", title: "Helios", artist: "Atlas Vega", duration: "2:34" }
+  { id: "m1", title: "Glass Cathedrals", artist: "Nova FM",       duration: "3:24", root: 220.00, wave: "sine"     as OscillatorType },
+  { id: "m2", title: "Aurora Drift",     artist: "Synth Citizens", duration: "2:51", root: 261.63, wave: "triangle" as OscillatorType },
+  { id: "m3", title: "Midnight Lounge",  artist: "Kai Nakamura",  duration: "4:08", root: 174.61, wave: "sine"     as OscillatorType },
+  { id: "m4", title: "Neon Pulse",       artist: "Lyra Chen",     duration: "3:12", root: 329.63, wave: "sawtooth" as OscillatorType },
+  { id: "m5", title: "Vapor Skies",      artist: "Iris Park",     duration: "3:48", root: 246.94, wave: "triangle" as OscillatorType },
+  { id: "m6", title: "Helios",           artist: "Atlas Vega",    duration: "2:34", root: 293.66, wave: "sine"     as OscillatorType }
 ];
+
+type Track = (typeof MUSIC_TRACKS)[number];
+
+/** Collision-free id generator: many calls inside one ms (e.g. batch-add)
+ *  still get distinct ids. */
+const uid = (prefix: string) =>
+  `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
+/** Web Audio preview — synthesises a 30-second ambient pad per track. */
+function useAudioPreview() {
+  const [playingId, setPlayingId] = React.useState<string | null>(null);
+  const ctxRef = React.useRef<AudioContext | null>(null);
+  const activeRef = React.useRef<{ stop: () => void } | null>(null);
+  const timerRef = React.useRef<number | null>(null);
+
+  const stop = React.useCallback(() => {
+    activeRef.current?.stop();
+    activeRef.current = null;
+    if (timerRef.current !== null) {
+      window.clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    setPlayingId(null);
+  }, []);
+
+  const play = React.useCallback(
+    (track: Track) => {
+      // tapping the same track again toggles off
+      if (activeRef.current && playingId === track.id) {
+        stop();
+        return;
+      }
+      activeRef.current?.stop();
+
+      const Ctor =
+        typeof window !== "undefined"
+          ? window.AudioContext ||
+            (window as typeof window & { webkitAudioContext?: typeof AudioContext })
+              .webkitAudioContext
+          : undefined;
+      if (!Ctor) return;
+      const ctx = ctxRef.current ?? (ctxRef.current = new Ctor());
+      if (ctx.state === "suspended") ctx.resume();
+
+      const now = ctx.currentTime;
+      const master = ctx.createGain();
+      master.gain.setValueAtTime(0, now);
+      master.gain.linearRampToValueAtTime(0.14, now + 1.2);
+
+      // Soft low-pass to take the edge off saw/triangle harmonics
+      const filter = ctx.createBiquadFilter();
+      filter.type = "lowpass";
+      filter.frequency.value = 1600;
+      filter.Q.value = 0.5;
+      master.connect(filter).connect(ctx.destination);
+
+      // Root + perfect fifth + octave triad — sounds pleasant for any root
+      const ratios = [1, 1.5, 2];
+      const oscs = ratios.map((r, i) => {
+        const o = ctx.createOscillator();
+        o.type = track.wave;
+        o.frequency.value = track.root * r;
+        const g = ctx.createGain();
+        g.gain.value = i === 0 ? 0.5 : 0.3;
+        o.connect(g).connect(master);
+        o.start(now);
+        return o;
+      });
+
+      // Slow LFO drifting the root pitch for movement
+      const lfo = ctx.createOscillator();
+      lfo.frequency.value = 0.12;
+      const lfoGain = ctx.createGain();
+      lfoGain.gain.value = 2.5;
+      lfo.connect(lfoGain).connect(oscs[0].frequency);
+      lfo.start(now);
+
+      activeRef.current = {
+        stop: () => {
+          const t = ctx.currentTime;
+          master.gain.cancelScheduledValues(t);
+          master.gain.setValueAtTime(master.gain.value, t);
+          master.gain.linearRampToValueAtTime(0, t + 0.35);
+          oscs.forEach((o) => o.stop(t + 0.4));
+          lfo.stop(t + 0.4);
+        }
+      };
+
+      timerRef.current = window.setTimeout(() => stop(), 30_000);
+      setPlayingId(track.id);
+    },
+    [playingId, stop]
+  );
+
+  React.useEffect(() => () => stop(), [stop]);
+
+  return { playingId, play, stop };
+}
 
 /* ----------------------------- export helpers ----------------------------- */
 
@@ -231,13 +332,24 @@ export function StoryEditor() {
   const cameraInputRef = React.useRef<HTMLInputElement>(null);
   const [showLayers, setShowLayers] = React.useState(false);
 
+  // Lock body scroll while editor is mounted so the underlying page's
+  // scrollbar can't appear/disappear (which would resize the viewport and
+  // shift the centered canvas slightly each time the sidebar tab changes).
+  React.useEffect(() => {
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, []);
+
   const selected = layers.find((l) => l.id === selectedId);
   const filterCss = FILTERS.find((f) => f.id === filter)?.filter ?? "none";
 
   /* ----- layer ops ----- */
   const addText = (initial?: Partial<TextLayer>) => {
     const l: TextLayer = {
-      id: `t-${Date.now()}`,
+      id: uid("t"),
       type: "text",
       text: "Type something",
       color: "#ffffff",
@@ -258,7 +370,7 @@ export function StoryEditor() {
 
   const addImage = (src: string) => {
     const l: ImageLayer = {
-      id: `i-${Date.now()}`,
+      id: uid("i"),
       type: "image",
       src,
       width: 200,
@@ -275,7 +387,7 @@ export function StoryEditor() {
 
   const addSticker = (emoji: string) => {
     const l: StickerLayer = {
-      id: `s-${Date.now()}`,
+      id: uid("s"),
       type: "sticker",
       emoji,
       size: 64,
@@ -292,7 +404,7 @@ export function StoryEditor() {
     // Replace any existing music layer (only one allowed)
     const filtered = layers.filter((l) => l.type !== "music");
     const l: MusicLayer = {
-      id: `m-${Date.now()}`,
+      id: uid("m"),
       type: "music",
       title: track.title,
       artist: track.artist,
@@ -356,19 +468,6 @@ export function StoryEditor() {
     else if (s === "stickers") setTool("stickers");
     else if (s === "draw") setTool("draw");
     else if (s === "music") setTool("music");
-  };
-
-  /* ----- layer z-order ----- */
-  const moveLayer = (id: string, dir: -1 | 1) => {
-    setLayers((cur) => {
-      const idx = cur.findIndex((l) => l.id === id);
-      if (idx < 0) return cur;
-      const target = idx + dir;
-      if (target < 0 || target >= cur.length) return cur;
-      const next = cur.slice();
-      [next[idx], next[target]] = [next[target], next[idx]];
-      return next;
-    });
   };
 
   const removeLayer = (id: string) => {
@@ -592,12 +691,12 @@ export function StoryEditor() {
 
   /* ----- render ----- */
   return (
-    <div className="fixed inset-0 z-[120] grid lg:grid-cols-[300px_1fr_320px] grid-cols-1 bg-black/80 backdrop-blur-xl">
+    <div className="fixed inset-0 z-[120] grid lg:grid-cols-[300px_1fr_320px] grid-cols-1 bg-black/80 backdrop-blur-xl overflow-hidden">
       <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={onFile} />
       <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" hidden onChange={onFile} />
 
       {/* ───── Left rail (desktop only) ───── */}
-      <aside className="hidden lg:flex flex-col glass-strong glass-specular border-r border-white/10">
+      <aside className="hidden lg:flex flex-col glass-strong glass-specular border-r border-white/10 h-full overflow-hidden">
         <div className="p-4 flex items-center justify-between">
           <Button variant="ghost" size="icon-sm" onClick={() => router.back()}>
             <ArrowLeft />
@@ -626,6 +725,7 @@ export function StoryEditor() {
             <DesktopMediaPanel
               onPickStock={(src) => setBg({ kind: "image", value: src })}
               onPickGradient={(g) => setBg({ kind: "gradient", value: g })}
+              onPickOverlay={(src) => addImage(src)}
               onUpload={() => fileInputRef.current?.click()}
             />
           )}
@@ -654,7 +754,7 @@ export function StoryEditor() {
       </aside>
 
       {/* ───── Canvas ───── */}
-      <main className="relative grid place-items-center p-4 md:p-8 overflow-hidden">
+      <main className="relative grid place-items-center p-4 md:p-8 overflow-hidden h-full min-w-0">
         <div className="absolute top-4 left-4 lg:hidden flex gap-2 z-10">
           <Button variant="glass" size="icon" onClick={() => router.back()}>
             <ArrowLeft />
@@ -784,11 +884,11 @@ export function StoryEditor() {
             exit={{ y: 30, opacity: 0 }}
             className="lg:hidden absolute bottom-20 inset-x-3 z-10"
           >
-            <div className="glass-strong rounded-2xl border border-white/15 p-2">
-              <p className="text-[10px] uppercase tracking-wider text-white/60 px-2 mb-1.5">
+            <div className="glass-strong rounded-2xl border border-border/40 p-2">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 mb-1.5">
                 {selectedImageLayer ? "Filter overlay" : "Filter background"}
               </p>
-              <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1">
+              <div className="flex gap-2 overflow-x-auto no-scrollbar py-1.5 -mx-1 px-1">
                 {FILTERS.map((f) => {
                   const previewSrc =
                     selectedImageLayer?.src ??
@@ -802,7 +902,7 @@ export function StoryEditor() {
                         "relative shrink-0 w-14 rounded-xl overflow-hidden transition",
                         isActive
                           ? "ring-2 ring-cyan-400 ring-offset-2 ring-offset-transparent"
-                          : "ring-1 ring-white/15"
+                          : "ring-1 ring-border/50"
                       )}
                     >
                       <div className="relative aspect-square">
@@ -815,10 +915,10 @@ export function StoryEditor() {
                             style={{ filter: f.filter }}
                           />
                         ) : (
-                          <div className="absolute inset-0 bg-white/10" />
+                          <div className="absolute inset-0 bg-foreground/10" />
                         )}
                       </div>
-                      <span className="block text-[9px] font-semibold text-white py-1 bg-black/40">
+                      <span className="block text-[9px] font-semibold text-white py-1 bg-black/55">
                         {f.label}
                       </span>
                     </button>
@@ -831,7 +931,7 @@ export function StoryEditor() {
       </main>
 
       {/* ───── Right rail (desktop only) ───── */}
-      <aside className="hidden lg:flex flex-col glass-strong glass-specular border-l border-white/10">
+      <aside className="hidden lg:flex flex-col glass-strong glass-specular border-l border-white/10 h-full overflow-hidden">
         <div className="p-4 flex items-center justify-between">
           <h3 className="text-sm font-semibold">Inspector</h3>
           <span className="text-[10px] text-muted-foreground">{layers.length} layers</span>
@@ -853,34 +953,25 @@ export function StoryEditor() {
 
           <div className="mt-6">
             <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Layers</h4>
-            <div className="space-y-1">
-              {layers.length === 0 ? (
-                <p className="text-xs text-muted-foreground">No layers yet.</p>
-              ) : (
-                layers
-                  .slice()
-                  .reverse()
-                  .map((l) => (
-                    <button
-                      key={l.id}
-                      onClick={() => setSelectedId(l.id)}
-                      className={cn(
-                        "w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-left transition",
-                        selectedId === l.id
-                          ? "bg-foreground/10"
-                          : "hover:bg-foreground/5"
-                      )}
-                    >
-                      <span className="size-7 rounded-lg glass-subtle grid place-items-center text-sm">
-                        {l.type === "text" ? "T" : l.type === "sticker" ? (l as StickerLayer).emoji : "♪"}
-                      </span>
-                      <span className="text-xs truncate flex-1">
-                        {l.type === "text" ? (l as TextLayer).text : l.type === "music" ? (l as MusicLayer).title : "Sticker"}
-                      </span>
-                    </button>
-                  ))
-              )}
-            </div>
+            {layers.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No layers yet.</p>
+            ) : (
+              <Reorder.Group
+                axis="y"
+                values={layers.slice().reverse()}
+                onReorder={(next) => setLayers(next.slice().reverse())}
+                className="space-y-1"
+              >
+                {layers.slice().reverse().map((l) => (
+                  <DesktopLayerRow
+                    key={l.id}
+                    layer={l}
+                    isActive={selectedId === l.id}
+                    onSelect={() => setSelectedId(l.id)}
+                  />
+                ))}
+              </Reorder.Group>
+            )}
           </div>
         </div>
       </aside>
@@ -901,9 +992,10 @@ export function StoryEditor() {
       />
 
       {/* ───── Mobile sheets ───── */}
-      <AnimatePresence>
+      <AnimatePresence mode="wait">
         {sheet === "media" && (
           <MobileMediaSheet
+            key="media"
             onClose={() => setSheet(null)}
             onPickStock={(src) => {
               setBg({ kind: "image", value: src });
@@ -929,16 +1021,18 @@ export function StoryEditor() {
         )}
         {sheet === "layers" && (
           <MobileLayersSheet
+            key="layers"
             onClose={() => setSheet(null)}
             layers={layers}
             selectedId={selectedId}
             onSelect={(id) => setSelectedId(id)}
             onDelete={removeLayer}
-            onMove={moveLayer}
+            onReorder={setLayers}
           />
         )}
         {sheet === "text" && (
           <MobileTextSheet
+            key="text"
             onClose={() => setSheet(null)}
             selected={selected?.type === "text" ? (selected as TextLayer) : null}
             update={(p) => updateSelected(p)}
@@ -947,6 +1041,7 @@ export function StoryEditor() {
         )}
         {sheet === "stickers" && (
           <MobileStickersSheet
+            key="stickers"
             onClose={() => setSheet(null)}
             onPick={(s) => {
               addSticker(s);
@@ -956,6 +1051,7 @@ export function StoryEditor() {
         )}
         {sheet === "draw" && (
           <MobileDrawSheet
+            key="draw"
             onClose={() => setSheet(null)}
             color={drawColor}
             setColor={setDrawColor}
@@ -966,6 +1062,7 @@ export function StoryEditor() {
         )}
         {sheet === "music" && (
           <MobileMusicSheet
+            key="music"
             onClose={() => setSheet(null)}
             tracks={MUSIC_TRACKS}
             onPick={(t) => {
@@ -1007,7 +1104,7 @@ function MobileSheetWrapper({
         exit={{ opacity: 0 }}
       />
       <motion.div
-        className="absolute bottom-0 inset-x-0 rounded-t-3xl glass-strong glass-specular border-t border-white/15 flex flex-col overflow-hidden"
+        className="absolute bottom-0 inset-x-0 rounded-t-3xl glass glass-specular border-t border-border/40 flex flex-col overflow-hidden"
         style={{ height }}
         initial={{ y: "100%" }}
         animate={{ y: 0 }}
@@ -1021,21 +1118,21 @@ function MobileSheetWrapper({
         }}
       >
         <div className="pt-3 pb-2 flex flex-col items-center cursor-grab active:cursor-grabbing shrink-0">
-          <div className="w-10 h-1 rounded-full bg-white/25 mb-3" />
+          <div className="w-10 h-1 rounded-full bg-foreground/25 mb-3" />
           <div className="w-full px-5 flex items-center justify-between">
-            <h2 className="font-display text-lg font-semibold tracking-tight text-white">
+            <h2 className="font-display text-lg font-semibold tracking-tight text-foreground">
               {title}
             </h2>
             <button
               onClick={onClose}
-              className="size-8 rounded-full grid place-items-center hover:bg-white/10 transition text-white"
+              className="size-8 rounded-full grid place-items-center hover:bg-foreground/10 transition text-foreground"
               aria-label="Close"
             >
               <X className="size-4" />
             </button>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto px-5 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div className="flex-1 overflow-y-auto px-5 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
           {children}
         </div>
       </motion.div>
@@ -1073,7 +1170,7 @@ function MobileMediaSheet({
             onClick={() => setTab(t)}
             className={cn(
               "flex-1 py-2 rounded-full text-sm font-medium capitalize transition",
-              tab === t ? "bg-white text-black" : "text-white/70"
+              tab === t ? "bg-foreground text-background" : "text-muted-foreground"
             )}
           >
             {t}
@@ -1097,7 +1194,7 @@ function MobileMediaSheet({
                 "flex-1 py-1.5 rounded-full text-xs font-semibold transition",
                 mode === m.id
                   ? "bg-foreground text-background"
-                  : "glass-subtle text-white/70"
+                  : "glass-subtle text-muted-foreground"
               )}
             >
               {m.label}
@@ -1106,14 +1203,14 @@ function MobileMediaSheet({
         </div>
       )}
 
-      <AnimatePresence mode="wait">
+      <AnimatePresence mode="popLayout" initial={false}>
         {tab === "images" ? (
           <motion.div
             key="images"
-            initial={{ opacity: 0, x: -20 }}
+            initial={{ opacity: 0, x: -40 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 20 }}
-            transition={{ duration: 0.2 }}
+            exit={{ opacity: 0, x: -40 }}
+            transition={{ type: "spring", stiffness: 320, damping: 32, mass: 0.7 }}
             className="grid grid-cols-2 gap-3"
           >
             {/* Camera tile */}
@@ -1133,13 +1230,13 @@ function MobileMediaSheet({
             {/* Browse tile */}
             <button
               onClick={onBrowse}
-              className="relative aspect-square rounded-2xl overflow-hidden bg-white/[0.04] border border-white/10 grid place-items-center group"
+              className="relative aspect-square rounded-2xl overflow-hidden bg-foreground/[0.04] border border-border/40 grid place-items-center group"
             >
               <div className="flex flex-col items-center gap-1.5">
-                <div className="size-12 rounded-full bg-white/10 grid place-items-center">
-                  <Folder className="size-5 text-white" />
+                <div className="size-12 rounded-full bg-foreground/10 grid place-items-center">
+                  <Folder className="size-5 text-foreground" />
                 </div>
-                <span className="text-xs font-semibold text-white">Browse</span>
+                <span className="text-xs font-semibold text-foreground">Browse</span>
               </div>
             </button>
 
@@ -1167,17 +1264,17 @@ function MobileMediaSheet({
         ) : (
           <motion.div
             key="gradients"
-            initial={{ opacity: 0, x: 20 }}
+            initial={{ opacity: 0, x: 40 }}
             animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.2 }}
+            exit={{ opacity: 0, x: 40 }}
+            transition={{ type: "spring", stiffness: 320, damping: 32, mass: 0.7 }}
             className="grid grid-cols-2 gap-3"
           >
             {GRADIENTS.map((g) => (
               <button
                 key={g}
                 onClick={() => onPickGradient(g)}
-                className="relative aspect-square rounded-2xl ring-1 ring-white/15 transition active:scale-95"
+                className="relative aspect-square rounded-2xl ring-1 ring-border/40 transition active:scale-95"
                 style={{ background: g }}
               />
             ))}
@@ -1188,114 +1285,195 @@ function MobileMediaSheet({
   );
 }
 
+function DesktopLayerRow({
+  layer,
+  isActive,
+  onSelect
+}: {
+  layer: Layer;
+  isActive: boolean;
+  onSelect: () => void;
+}) {
+  const controls = useDragControls();
+  return (
+    <Reorder.Item
+      value={layer}
+      dragListener={false}
+      dragControls={controls}
+      layout="position"
+      className={cn(
+        "flex items-center gap-2 px-2 py-2 rounded-xl text-left transition-colors select-none",
+        isActive ? "bg-foreground/10" : "hover:bg-foreground/5"
+      )}
+      whileDrag={{ scale: 1.02, zIndex: 10, boxShadow: "0 12px 30px -8px rgba(0,0,0,0.4)" }}
+      transition={{ type: "spring", stiffness: 600, damping: 40, mass: 0.6 }}
+    >
+      <div
+        onPointerDown={(e) => controls.start(e)}
+        style={{ touchAction: "none" }}
+        className="grid place-items-center text-muted-foreground shrink-0 px-1 py-1 cursor-grab active:cursor-grabbing"
+        aria-label="Drag to reorder"
+        role="button"
+      >
+        <svg width="12" height="12" viewBox="0 0 14 14" fill="currentColor">
+          <circle cx="4" cy="3" r="1.2" />
+          <circle cx="10" cy="3" r="1.2" />
+          <circle cx="4" cy="7" r="1.2" />
+          <circle cx="10" cy="7" r="1.2" />
+          <circle cx="4" cy="11" r="1.2" />
+          <circle cx="10" cy="11" r="1.2" />
+        </svg>
+      </div>
+      <button
+        onClick={onSelect}
+        className="flex items-center gap-2 flex-1 min-w-0 text-left"
+      >
+        <span className="size-7 rounded-lg glass-subtle grid place-items-center text-sm shrink-0">
+          {layer.type === "text" ? "T" : layer.type === "sticker" ? (layer as StickerLayer).emoji : "♪"}
+        </span>
+        <span className="text-xs truncate flex-1">
+          {layer.type === "text" ? (layer as TextLayer).text : layer.type === "music" ? (layer as MusicLayer).title : "Sticker"}
+        </span>
+      </button>
+    </Reorder.Item>
+  );
+}
+
+function MobileLayerRow({
+  layer,
+  isActive,
+  onSelect,
+  onDelete
+}: {
+  layer: Layer;
+  isActive: boolean;
+  onSelect: () => void;
+  onDelete: () => void;
+}) {
+  return (
+    <Reorder.Item
+      value={layer}
+      layout="position"
+      style={{ touchAction: "none" }}
+      className={cn(
+        "flex items-center gap-3 p-2.5 rounded-2xl transition-colors select-none cursor-grab active:cursor-grabbing",
+        isActive
+          ? "bg-foreground/10 ring-1 ring-cyan-400/60"
+          : "glass-subtle"
+      )}
+      whileDrag={{ scale: 1.02, zIndex: 10, boxShadow: "0 12px 30px -8px rgba(0,0,0,0.4)" }}
+      transition={{ type: "spring", stiffness: 600, damping: 40, mass: 0.6 }}
+      onClick={onSelect}
+    >
+      <div
+        className="grid place-items-center text-muted-foreground shrink-0 px-1 pointer-events-none"
+        aria-hidden
+      >
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="currentColor">
+          <circle cx="4" cy="3" r="1.2" />
+          <circle cx="10" cy="3" r="1.2" />
+          <circle cx="4" cy="7" r="1.2" />
+          <circle cx="10" cy="7" r="1.2" />
+          <circle cx="4" cy="11" r="1.2" />
+          <circle cx="10" cy="11" r="1.2" />
+        </svg>
+      </div>
+
+      <div className="size-11 rounded-xl glass-strong grid place-items-center overflow-hidden shrink-0 pointer-events-none">
+        {layer.type === "text" ? (
+          <span className="text-base font-semibold text-foreground">T</span>
+        ) : layer.type === "sticker" ? (
+          <span className="text-2xl">{(layer as StickerLayer).emoji}</span>
+        ) : layer.type === "image" ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={(layer as ImageLayer).src}
+            alt=""
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <Music className="size-4 text-foreground" />
+        )}
+      </div>
+      <div className="min-w-0 flex-1 pointer-events-none">
+        <p className="text-sm font-medium text-foreground truncate">
+          {layer.type === "text"
+            ? (layer as TextLayer).text || "Text layer"
+            : layer.type === "sticker"
+              ? `Sticker · ${(layer as StickerLayer).emoji}`
+              : layer.type === "image"
+                ? "Image overlay"
+                : `Music · ${(layer as MusicLayer).title}`}
+        </p>
+        <p className="text-[11px] text-muted-foreground">
+          {Math.round(layer.scale * 100)}% · {layer.rotate}°
+        </p>
+      </div>
+
+      <button
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete();
+        }}
+        className="size-8 rounded-lg grid place-items-center text-rose-400 hover:bg-rose-400/15 shrink-0"
+        aria-label="Delete layer"
+      >
+        <Trash2 className="size-3.5" />
+      </button>
+    </Reorder.Item>
+  );
+}
+
 function MobileLayersSheet({
   onClose,
   layers,
   selectedId,
   onSelect,
   onDelete,
-  onMove
+  onReorder
 }: {
   onClose: () => void;
   layers: Layer[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
-  onMove: (id: string, dir: -1 | 1) => void;
+  onReorder: (next: Layer[]) => void;
 }) {
+  // Top of the visual list = front-most. Internal layers[] order: last item = front-most.
+  // Reorder operates on the *reversed* array so dragging up = bring forward.
+  const reversed = layers.slice().reverse();
+
   return (
-    <MobileSheetWrapper title="Layers" onClose={onClose} height="60vh">
+    <MobileSheetWrapper title="Layers" onClose={onClose} height="62vh">
       {layers.length === 0 ? (
         <div className="text-center py-12">
-          <Layers className="size-10 mx-auto text-white/40 mb-3" />
-          <p className="text-sm text-white/70">No layers yet.</p>
-          <p className="text-xs text-white/40 mt-1">
+          <Layers className="size-10 mx-auto text-muted-foreground/60 mb-3" />
+          <p className="text-sm text-muted-foreground">No layers yet.</p>
+          <p className="text-xs text-muted-foreground/70 mt-1">
             Add text, stickers, images, or music to your story.
           </p>
         </div>
       ) : (
-        <div className="space-y-2">
-          {layers
-            .slice()
-            .reverse()
-            .map((l, idx) => {
-              const reverseIdx = layers.length - 1 - idx;
-              const isActive = l.id === selectedId;
-              return (
-                <div
-                  key={l.id}
-                  className={cn(
-                    "flex items-center gap-3 p-2.5 rounded-2xl transition",
-                    isActive ? "bg-white/15 ring-1 ring-cyan-400/60" : "glass-subtle"
-                  )}
-                >
-                  <button
-                    onClick={() => {
-                      onSelect(l.id);
-                      onClose();
-                    }}
-                    className="flex items-center gap-3 flex-1 min-w-0 text-left"
-                  >
-                    <div className="size-11 rounded-xl glass-strong grid place-items-center overflow-hidden shrink-0">
-                      {l.type === "text" ? (
-                        <span className="text-base font-semibold text-white">T</span>
-                      ) : l.type === "sticker" ? (
-                        <span className="text-2xl">{(l as StickerLayer).emoji}</span>
-                      ) : l.type === "image" ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={(l as ImageLayer).src}
-                          alt=""
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <Music className="size-4 text-white" />
-                      )}
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-white truncate">
-                        {l.type === "text"
-                          ? (l as TextLayer).text || "Text layer"
-                          : l.type === "sticker"
-                            ? `Sticker · ${(l as StickerLayer).emoji}`
-                            : l.type === "image"
-                              ? "Image overlay"
-                              : `Music · ${(l as MusicLayer).title}`}
-                      </p>
-                      <p className="text-[11px] text-white/50">
-                        {Math.round(l.scale * 100)}% · {l.rotate}°
-                      </p>
-                    </div>
-                  </button>
-                  <div className="flex items-center gap-0.5 shrink-0">
-                    <button
-                      onClick={() => onMove(l.id, -1)}
-                      disabled={reverseIdx === 0}
-                      className="size-8 rounded-lg grid place-items-center text-white/70 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed"
-                      aria-label="Send backward"
-                    >
-                      ↓
-                    </button>
-                    <button
-                      onClick={() => onMove(l.id, 1)}
-                      disabled={reverseIdx === layers.length - 1}
-                      className="size-8 rounded-lg grid place-items-center text-white/70 hover:text-white hover:bg-white/10 disabled:opacity-30 disabled:cursor-not-allowed"
-                      aria-label="Bring forward"
-                    >
-                      ↑
-                    </button>
-                    <button
-                      onClick={() => onDelete(l.id)}
-                      className="size-8 rounded-lg grid place-items-center text-rose-400 hover:bg-rose-400/15"
-                      aria-label="Delete layer"
-                    >
-                      <Trash2 className="size-3.5" />
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
-        </div>
+        <Reorder.Group
+          axis="y"
+          values={reversed}
+          onReorder={(next) => onReorder(next.slice().reverse())}
+          className="space-y-2"
+        >
+          {reversed.map((l) => (
+            <MobileLayerRow
+              key={l.id}
+              layer={l}
+              isActive={l.id === selectedId}
+              onSelect={() => {
+                onSelect(l.id);
+                onClose();
+              }}
+              onDelete={() => onDelete(l.id)}
+            />
+          ))}
+        </Reorder.Group>
       )}
     </MobileSheetWrapper>
   );
@@ -1316,8 +1494,8 @@ function MobileTextSheet({
     <MobileSheetWrapper title="Text" onClose={onClose} height="68vh">
       {!selected ? (
         <div className="text-center py-12">
-          <TypeIcon className="size-10 mx-auto text-white/40 mb-3" />
-          <p className="text-sm text-white/70 mb-4">No text layer selected.</p>
+          <TypeIcon className="size-10 mx-auto text-muted-foreground mb-3" />
+          <p className="text-sm text-muted-foreground mb-4">No text layer selected.</p>
           <Button onClick={onAdd} variant="gradient">
             <TypeIcon /> Add text
           </Button>
@@ -1329,13 +1507,13 @@ function MobileTextSheet({
             onChange={(e) => update({ text: e.target.value })}
             rows={3}
             autoFocus
-            className="w-full rounded-2xl glass-subtle px-4 py-3 text-base text-white outline-none resize-none focus:ring-2 focus:ring-cyan-400/60"
+            className="block w-full min-h-[7rem] rounded-2xl glass-subtle px-4 py-3.5 text-base leading-relaxed text-foreground placeholder:text-muted-foreground outline-none resize-none focus:ring-2 focus:ring-cyan-400/60"
             placeholder="Type your story…"
             style={{ fontFamily: FONT_FAMILIES[selected.font] }}
           />
 
           <div>
-            <h4 className="text-[10px] uppercase tracking-wider text-white/50 mb-2">Alignment</h4>
+            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Alignment</h4>
             <div className="flex gap-2">
               {(
                 [
@@ -1348,8 +1526,10 @@ function MobileTextSheet({
                   key={a.id}
                   onClick={() => update({ align: a.id })}
                   className={cn(
-                    "flex-1 h-11 rounded-xl grid place-items-center transition text-white",
-                    selected.align === a.id ? "bg-white text-black" : "glass-subtle"
+                    "flex-1 h-11 rounded-xl grid place-items-center transition-colors",
+                    selected.align === a.id
+                      ? "bg-foreground text-background"
+                      : "glass-subtle text-foreground"
                   )}
                 >
                   {a.icon}
@@ -1358,8 +1538,10 @@ function MobileTextSheet({
               <button
                 onClick={() => update({ bold: !selected.bold })}
                 className={cn(
-                  "flex-1 h-11 rounded-xl grid place-items-center transition text-white",
-                  selected.bold ? "bg-white text-black" : "glass-subtle"
+                  "flex-1 h-11 rounded-xl grid place-items-center transition-colors",
+                  selected.bold
+                    ? "bg-foreground text-background"
+                    : "glass-subtle text-foreground"
                 )}
               >
                 <Bold className="size-4" />
@@ -1368,15 +1550,17 @@ function MobileTextSheet({
           </div>
 
           <div>
-            <h4 className="text-[10px] uppercase tracking-wider text-white/50 mb-2">Font</h4>
+            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Font</h4>
             <div className="grid grid-cols-4 gap-2">
               {(["sans", "display", "serif", "mono"] as const).map((f) => (
                 <button
                   key={f}
                   onClick={() => update({ font: f })}
                   className={cn(
-                    "h-12 rounded-xl text-base transition text-white",
-                    selected.font === f ? "bg-white text-black" : "glass-subtle"
+                    "h-12 rounded-xl text-base transition-colors",
+                    selected.font === f
+                      ? "bg-foreground text-background"
+                      : "glass-subtle text-foreground"
                   )}
                   style={{ fontFamily: FONT_FAMILIES[f] }}
                 >
@@ -1387,7 +1571,7 @@ function MobileTextSheet({
           </div>
 
           <div>
-            <h4 className="text-[10px] uppercase tracking-wider text-white/50 mb-2">Color</h4>
+            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Color</h4>
             <div className="flex flex-wrap gap-2">
               {TEXT_COLORS.map((c) => (
                 <button
@@ -1395,7 +1579,7 @@ function MobileTextSheet({
                   onClick={() => update({ color: c })}
                   className={cn(
                     "size-9 rounded-full ring-2 ring-offset-2 ring-offset-transparent transition",
-                    selected.color === c ? "ring-white" : "ring-transparent"
+                    selected.color === c ? "ring-foreground" : "ring-transparent"
                   )}
                   style={{ background: c }}
                 />
@@ -1404,24 +1588,31 @@ function MobileTextSheet({
           </div>
 
           <div>
-            <h4 className="text-[10px] uppercase tracking-wider text-white/50 mb-2">Background</h4>
+            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Background</h4>
             <div className="grid grid-cols-5 gap-2">
-              {TEXT_BGS.map((b) => (
-                <button
-                  key={b.label}
-                  onClick={() => update({ bg: b.value, color: b.fg })}
-                  className={cn(
-                    "h-11 rounded-xl text-xs grid place-items-center transition border border-white/10",
-                    selected.bg === b.value ? "ring-2 ring-white" : ""
-                  )}
-                  style={{
-                    background: b.value === "transparent" ? "rgba(255,255,255,0.06)" : b.value,
-                    color: b.fg
-                  }}
-                >
-                  {b.label}
-                </button>
-              ))}
+              {TEXT_BGS.map((b) => {
+                const isTransparent = b.value === "transparent";
+                return (
+                  <button
+                    key={b.label}
+                    onClick={() => update({ bg: b.value, color: b.fg })}
+                    className={cn(
+                      "h-11 rounded-xl text-xs grid place-items-center transition border",
+                      isTransparent ? "glass-subtle border-border/40" : "border-white/10",
+                      selected.bg === b.value ? "ring-2 ring-foreground" : ""
+                    )}
+                    style={
+                      isTransparent
+                        ? undefined
+                        : { background: b.value, color: b.fg }
+                    }
+                  >
+                    <span className={isTransparent ? "text-foreground" : undefined}>
+                      {b.label}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -1446,19 +1637,19 @@ function MobileStickersSheet({
   return (
     <MobileSheetWrapper title="Stickers" onClose={onClose} height="72vh">
       <div className="relative mb-4">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-white/50" />
+        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search stickers"
-          className="pl-10 h-11 bg-white/[0.06] text-white placeholder:text-white/40 border-white/10"
+          className="pl-10 h-11 glass-subtle text-foreground placeholder:text-muted-foreground border-border/40"
         />
       </div>
 
       {filtered ? (
         <div className="grid grid-cols-6 gap-2">
           {filtered.length === 0 ? (
-            <p className="col-span-6 text-center text-sm text-white/50 py-8">
+            <p className="col-span-6 text-center text-sm text-muted-foreground py-8">
               No matches for &quot;{q}&quot;.
             </p>
           ) : (
@@ -1478,7 +1669,7 @@ function MobileStickersSheet({
         <div className="space-y-5">
           {STICKER_PACKS.map((pack) => (
             <div key={pack.name}>
-              <h4 className="text-[11px] uppercase tracking-wider text-white/50 mb-2 px-1">
+              <h4 className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 px-1">
                 {pack.name}
               </h4>
               <div className="grid grid-cols-6 gap-2">
@@ -1520,9 +1711,9 @@ function MobileDrawSheet({
     <MobileSheetWrapper title="Draw" onClose={onClose} height="58vh">
       <div className="space-y-6">
         <div>
-          <div className="flex justify-between text-sm mb-3 text-white">
+          <div className="flex justify-between text-sm mb-3 text-foreground">
             <span>Brush size</span>
-            <span className="text-white/60">{size[0]}px</span>
+            <span className="text-muted-foreground">{size[0]}px</span>
           </div>
           <div className="flex items-center gap-4">
             <div className="grid place-items-center" style={{ width: 36, height: 36 }}>
@@ -1540,7 +1731,7 @@ function MobileDrawSheet({
         </div>
 
         <div>
-          <h4 className="text-[11px] uppercase tracking-wider text-white/50 mb-3">Color</h4>
+          <h4 className="text-[11px] uppercase tracking-wider text-muted-foreground mb-3">Color</h4>
           <div className="grid grid-cols-8 gap-2">
             {TEXT_COLORS.map((c) => (
               <button
@@ -1548,7 +1739,7 @@ function MobileDrawSheet({
                 onClick={() => setColor(c)}
                 className={cn(
                   "aspect-square rounded-full ring-2 ring-offset-2 ring-offset-transparent transition",
-                  color === c ? "ring-white" : "ring-transparent"
+                  color === c ? "ring-foreground" : "ring-transparent"
                 )}
                 style={{ background: c }}
               />
@@ -1565,7 +1756,7 @@ function MobileDrawSheet({
           </Button>
         </div>
 
-        <p className="text-[12px] text-white/50 text-center">
+        <p className="text-[12px] text-muted-foreground text-center">
           Close the sheet and drag on the canvas to draw.
         </p>
       </div>
@@ -1580,58 +1771,82 @@ function MobileMusicSheet({
 }: {
   onClose: () => void;
   tracks: typeof MUSIC_TRACKS;
-  onPick: (t: (typeof MUSIC_TRACKS)[number]) => void;
+  onPick: (t: Track) => void;
 }) {
   const [q, setQ] = React.useState("");
+  const { playingId, play, stop } = useAudioPreview();
   const filtered = tracks.filter(
     (t) =>
       t.title.toLowerCase().includes(q.toLowerCase()) ||
       t.artist.toLowerCase().includes(q.toLowerCase())
   );
 
+  // stop audio when sheet unmounts
+  React.useEffect(() => () => stop(), [stop]);
+
   return (
     <MobileSheetWrapper title="Music" onClose={onClose} height="72vh">
       <div className="relative mb-4">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-white/50" />
+        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
           placeholder="Search artists, tracks"
-          className="pl-10 h-11 bg-white/[0.06] text-white placeholder:text-white/40 border-white/10"
+          className="pl-10 h-11 glass-subtle text-foreground placeholder:text-muted-foreground border-border/40"
         />
       </div>
 
       <div className="space-y-2">
         {filtered.length === 0 ? (
-          <p className="text-center text-sm text-white/50 py-8">
+          <p className="text-center text-sm text-muted-foreground py-8">
             No tracks match &quot;{q}&quot;.
           </p>
         ) : (
-          filtered.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => onPick(t)}
-              className="w-full flex items-center gap-3 p-3 rounded-2xl glass-subtle hover:bg-white/[0.08] transition text-left"
-            >
-              <div className="size-12 rounded-xl bg-gradient-to-br from-violet-500 via-fuchsia-500 to-cyan-400 grid place-items-center text-white shadow-glow shrink-0">
-                <Music className="size-5" />
+          filtered.map((t) => {
+            const isPlaying = playingId === t.id;
+            return (
+              <div
+                key={t.id}
+                onClick={() => {
+                  stop();
+                  onPick(t);
+                }}
+                role="button"
+                tabIndex={0}
+                className="w-full flex items-center gap-3 p-3 rounded-2xl glass-subtle hover:bg-foreground/5 transition-colors text-left cursor-pointer"
+              >
+                <div className="size-12 rounded-xl bg-gradient-to-br from-violet-500 via-fuchsia-500 to-cyan-400 grid place-items-center text-white shadow-glow shrink-0">
+                  <Music className="size-5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-foreground truncate">{t.title}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {t.artist} · {t.duration}
+                  </p>
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    play(t);
+                  }}
+                  className={cn(
+                    "size-9 rounded-full grid place-items-center transition-colors",
+                    isPlaying
+                      ? "bg-foreground text-background"
+                      : "bg-foreground/10 text-foreground hover:bg-foreground/20"
+                  )}
+                  aria-label={isPlaying ? "Stop preview" : "Play 30s preview"}
+                >
+                  {isPlaying ? <Pause className="size-3.5" /> : <Play className="size-3.5 ml-0.5" />}
+                </button>
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-white truncate">{t.title}</p>
-                <p className="text-xs text-white/60 truncate">
-                  {t.artist} · {t.duration}
-                </p>
-              </div>
-              <div className="size-9 rounded-full bg-white/10 grid place-items-center text-white">
-                <Play className="size-3.5 ml-0.5" />
-              </div>
-            </button>
-          ))
+            );
+          })
         )}
       </div>
 
-      <p className="text-[11px] text-white/50 text-center mt-4 pb-4">
-        Tap a track to add it to your story. Drag the chip on the canvas to position it.
+      <p className="text-[11px] text-muted-foreground text-center mt-4 pb-4">
+        Tap a track to add it to your story. Tap play for a 30-second preview.
       </p>
     </MobileSheetWrapper>
   );
@@ -1642,58 +1857,176 @@ function MobileMusicSheet({
 function DesktopMediaPanel({
   onPickStock,
   onPickGradient,
+  onPickOverlay,
   onUpload
 }: {
   onPickStock: (src: string) => void;
   onPickGradient: (g: string) => void;
+  onPickOverlay: (src: string) => void;
   onUpload: () => void;
 }) {
+  const [tab, setTab] = React.useState<"images" | "gradients">("images");
+  const [mode, setMode] = React.useState<"background" | "overlay">("background");
+  const [selected, setSelected] = React.useState<Set<string>>(new Set());
+
+  // Reset multi-select when switching tab or mode (background can't be multi)
+  React.useEffect(() => {
+    setSelected(new Set());
+  }, [tab, mode]);
+
+  const toggle = (src: string) => {
+    setSelected((cur) => {
+      const next = new Set(cur);
+      if (next.has(src)) next.delete(src);
+      else next.add(src);
+      return next;
+    });
+  };
+
+  const addSelected = () => {
+    selected.forEach((src) => onPickOverlay(src));
+    setSelected(new Set());
+  };
+
   return (
-    <div className="space-y-5">
-      <div>
-        <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Upload</h4>
-        <button
-          onClick={onUpload}
-          className="w-full aspect-[5/3] rounded-2xl border-2 border-dashed border-white/15 grid place-items-center hover:border-white/30 transition group"
-        >
-          <div className="text-center">
-            <div className="size-10 mx-auto rounded-xl bg-gradient-to-br from-violet-500 to-cyan-400 grid place-items-center shadow-glow group-hover:scale-110 transition">
-              <ImageIcon className="size-5 text-white" />
+    <div className="space-y-4">
+      {/* Tabs: Images / Gradients */}
+      <div className="flex p-1 rounded-full glass-subtle">
+        {(["images", "gradients"] as const).map((t) => (
+          <button
+            key={t}
+            onClick={() => setTab(t)}
+            className={cn(
+              "flex-1 py-1.5 rounded-full text-xs font-semibold capitalize transition-colors",
+              tab === t ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {t}
+          </button>
+        ))}
+      </div>
+
+      <AnimatePresence mode="popLayout" initial={false}>
+        {tab === "images" ? (
+          <motion.div
+            key="images"
+            initial={{ opacity: 0, x: -30 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -30 }}
+            transition={{ type: "spring", stiffness: 320, damping: 32, mass: 0.7 }}
+            className="space-y-4"
+          >
+            {/* Mode toggle: Background / Overlay */}
+            <div className="flex gap-1.5">
+              {(
+                [
+                  { id: "background", label: "Background" },
+                  { id: "overlay", label: "Overlay" }
+                ] as const
+              ).map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => setMode(m.id)}
+                  className={cn(
+                    "flex-1 py-1.5 rounded-full text-[11px] font-semibold transition-colors",
+                    mode === m.id
+                      ? "bg-foreground text-background"
+                      : "glass-subtle text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {m.label}
+                </button>
+              ))}
             </div>
-            <p className="text-xs mt-2 text-muted-foreground">Tap to upload</p>
-          </div>
-        </button>
-      </div>
 
-      <div>
-        <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Stock</h4>
-        <div className="grid grid-cols-3 gap-1.5">
-          {STOCK_IMAGES.map((src) => (
-            <button
-              key={src}
-              onClick={() => onPickStock(src)}
-              className="relative aspect-square rounded-xl overflow-hidden group"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={src} alt="" className="absolute inset-0 w-full h-full object-cover transition group-hover:scale-110" />
-            </button>
-          ))}
-        </div>
-      </div>
+            {/* Stock grid — first tile is upload, rest are stock thumbnails.
+                Multi-select toggles in overlay mode. */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground">Library</h4>
+                {mode === "overlay" && (
+                  <span className="text-[10px] text-muted-foreground">
+                    {selected.size > 0 ? `${selected.size} selected` : "Tap to multi-select"}
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-3 gap-1.5">
+                {/* Upload tile — sits inline with the stock thumbnails */}
+                <button
+                  onClick={onUpload}
+                  className="relative aspect-square rounded-xl border-2 border-dashed border-border/60 grid place-items-center hover:border-foreground/40 transition-colors group"
+                  aria-label="Upload an image"
+                >
+                  <div className="text-center px-1">
+                    <div className="size-8 mx-auto rounded-lg bg-gradient-to-br from-violet-500 to-cyan-400 grid place-items-center shadow-glow group-hover:scale-110 transition-transform">
+                      <ImageIcon className="size-4 text-white" />
+                    </div>
+                    <p className="text-[10px] mt-1 text-muted-foreground leading-tight">Upload</p>
+                  </div>
+                </button>
 
-      <div>
-        <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Gradients</h4>
-        <div className="grid grid-cols-4 gap-1.5">
-          {GRADIENTS.map((g) => (
-            <button
-              key={g}
-              onClick={() => onPickGradient(g)}
-              className="aspect-square rounded-xl ring-1 ring-white/10 hover:ring-white/30 transition"
-              style={{ background: g }}
-            />
-          ))}
-        </div>
-      </div>
+                {STOCK_IMAGES.map((src) => {
+                  const isSelected = selected.has(src);
+                  return (
+                    <button
+                      key={src}
+                      onClick={() => (mode === "overlay" ? toggle(src) : onPickStock(src))}
+                      className={cn(
+                        "relative aspect-square rounded-xl overflow-hidden group transition",
+                        isSelected && "ring-2 ring-cyan-400"
+                      )}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={src}
+                        alt=""
+                        className="absolute inset-0 w-full h-full object-cover transition group-hover:scale-110"
+                      />
+                      {mode === "overlay" && (
+                        <span
+                          className={cn(
+                            "absolute top-1.5 right-1.5 size-5 rounded-full grid place-items-center text-[10px] font-bold transition",
+                            isSelected
+                              ? "bg-cyan-400 text-black"
+                              : "bg-black/55 text-white opacity-0 group-hover:opacity-100"
+                          )}
+                        >
+                          {isSelected ? "✓" : <Layers className="size-2.5" />}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {mode === "overlay" && selected.size > 0 && (
+                <Button onClick={addSelected} variant="gradient" className="w-full mt-3">
+                  Add {selected.size} {selected.size === 1 ? "image" : "images"}
+                </Button>
+              )}
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="gradients"
+            initial={{ opacity: 0, x: 30 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: 30 }}
+            transition={{ type: "spring", stiffness: 320, damping: 32, mass: 0.7 }}
+          >
+            <div className="grid grid-cols-3 gap-1.5">
+              {GRADIENTS.map((g) => (
+                <button
+                  key={g}
+                  onClick={() => onPickGradient(g)}
+                  className="aspect-square rounded-xl ring-1 ring-border/40 hover:ring-foreground/40 transition"
+                  style={{ background: g }}
+                />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
@@ -1933,27 +2266,53 @@ function MusicPanel({
   onPick
 }: {
   tracks: typeof MUSIC_TRACKS;
-  onPick: (t: (typeof MUSIC_TRACKS)[number]) => void;
+  onPick: (t: Track) => void;
 }) {
+  const { playingId, play, stop } = useAudioPreview();
+  React.useEffect(() => () => stop(), [stop]);
+
   return (
     <div className="space-y-2">
-      {tracks.map((t) => (
-        <button
-          key={t.id}
-          onClick={() => onPick(t)}
-          className="w-full flex items-center gap-3 p-2.5 rounded-xl glass-subtle hover:bg-foreground/5 transition"
-        >
-          <div className="size-10 rounded-lg bg-gradient-to-br from-violet-500 to-cyan-400 grid place-items-center text-white shadow-glow shrink-0">
-            <Music className="size-4" />
+      {tracks.map((t) => {
+        const isPlaying = playingId === t.id;
+        return (
+          <div
+            key={t.id}
+            onClick={() => {
+              stop();
+              onPick(t);
+            }}
+            role="button"
+            tabIndex={0}
+            className="w-full flex items-center gap-3 p-2.5 rounded-xl glass-subtle hover:bg-foreground/5 transition-colors cursor-pointer"
+          >
+            <div className="size-10 rounded-lg bg-gradient-to-br from-violet-500 to-cyan-400 grid place-items-center text-white shadow-glow shrink-0">
+              <Music className="size-4" />
+            </div>
+            <div className="flex-1 min-w-0 text-left">
+              <p className="text-sm font-medium truncate">{t.title}</p>
+              <p className="text-[10px] text-muted-foreground truncate">
+                {t.artist} · {t.duration}
+              </p>
+            </div>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                play(t);
+              }}
+              className={cn(
+                "size-8 rounded-full grid place-items-center transition-colors shrink-0",
+                isPlaying
+                  ? "bg-foreground text-background"
+                  : "bg-foreground/10 text-foreground hover:bg-foreground/20"
+              )}
+              aria-label={isPlaying ? "Stop preview" : "Play 30s preview"}
+            >
+              {isPlaying ? <Pause className="size-3" /> : <Play className="size-3 ml-0.5" />}
+            </button>
           </div>
-          <div className="flex-1 min-w-0 text-left">
-            <p className="text-sm font-medium truncate">{t.title}</p>
-            <p className="text-[10px] text-muted-foreground truncate">
-              {t.artist} · {t.duration}
-            </p>
-          </div>
-        </button>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -2017,6 +2376,10 @@ function LayerView({
   onUpdate: (p: Partial<Layer>) => void;
   container: React.RefObject<HTMLDivElement | null>;
 }) {
+  // Drag offset motion values — reset to 0 after each drag so style.left/top is the only source of truth
+  const dragX = useMotionValue(0);
+  const dragY = useMotionValue(0);
+
   return (
     <motion.div
       drag
@@ -2032,10 +2395,15 @@ function LayerView({
         const cx = layer.x + (info.offset.x / r.width) * 100;
         const cy = layer.y + (info.offset.y / r.height) * 100;
         onUpdate({ x: Math.max(0, Math.min(100, cx)), y: Math.max(0, Math.min(100, cy)) });
+        // Reset the drag transform; the new position is now in style.left/top
+        dragX.set(0);
+        dragY.set(0);
       }}
       style={{
         left: `${layer.x}%`,
-        top: `${layer.y}%`
+        top: `${layer.y}%`,
+        x: dragX,
+        y: dragY
       }}
       animate={{ rotate: layer.rotate, scale: layer.scale, opacity: 1 }}
       initial={{ scale: 0.6, opacity: 0 }}
@@ -2116,14 +2484,16 @@ function MobileToolbar({
     { id: "music", icon: <Music className="size-[18px]" />, label: "Music" }
   ];
   return (
-    <div className="lg:hidden fixed bottom-3 inset-x-3 z-10 glass-strong glass-specular rounded-2xl px-2 py-2 border border-white/15 flex justify-between gap-1">
+    <div className="lg:hidden fixed bottom-3 inset-x-3 z-10 glass-strong glass-specular rounded-2xl px-2 py-2 border border-border/40 flex justify-between gap-1">
       {sheets.map((it) => (
         <button
           key={it.id}
           onClick={() => onSelect(it.id)}
           className={cn(
             "flex-1 grid place-items-center gap-0.5 py-1.5 rounded-xl text-[10px] font-medium transition",
-            active === it.id ? "bg-white/15 text-white" : "text-white/65 hover:text-white"
+            active === it.id
+              ? "bg-foreground/10 text-foreground"
+              : "text-muted-foreground hover:text-foreground"
           )}
         >
           {it.icon}
@@ -2136,8 +2506,8 @@ function MobileToolbar({
         className={cn(
           "flex-1 grid place-items-center gap-0.5 py-1.5 rounded-xl text-[10px] font-medium transition",
           filtersOpen
-            ? "bg-cyan-400/20 text-cyan-200 ring-1 ring-cyan-400/40"
-            : "text-white/65 hover:text-white"
+            ? "bg-cyan-400/20 text-cyan-700 dark:text-cyan-200 ring-1 ring-cyan-400/40"
+            : "text-muted-foreground hover:text-foreground"
         )}
       >
         <Palette className="size-[18px]" />
