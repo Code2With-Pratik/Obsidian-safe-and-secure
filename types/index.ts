@@ -47,17 +47,30 @@ export interface Chat {
 export type MessageKind =
   | "text"
   | "image"
+  | "video"
+  | "audio"
   | "voice"
   | "file"
   | "link"
   | "system"
   | "call"
-  | "sticker";
+  | "sticker"
+  | "gif"
+  | "poll"
+  | "contact"
+  | "location"
+  | "schedule";
 
 export interface Reaction {
   emoji: string;
   count: number;
   byMe?: boolean;
+}
+
+export interface PollOption {
+  id: string;
+  text: string;
+  voters: ID[]; // user ids who voted for this option
 }
 
 export interface Message {
@@ -72,8 +85,20 @@ export interface Message {
   threadCount?: number;
   pinned?: boolean;
   edited?: boolean;
-  media?: { url: string; w?: number; h?: number; alt?: string }[];
+  media?: { url: string; w?: number; h?: number; alt?: string; mime?: string }[];
   voice?: { durationSec: number; waveform: number[] };
+  audio?: { url?: string; name: string; size?: number; durationSec?: number };
+  file?: { url?: string; name: string; size?: number; mime?: string };
+  sticker?: { src: string; alt?: string };
+  gif?: { src: string; alt?: string };
+  poll?: {
+    question: string;
+    options: PollOption[];
+    multi?: boolean;
+  };
+  contacts?: { name: string; username?: string; avatar?: string }[];
+  location?: { lat: number; lng: number; live?: boolean };
+  schedule?: { whenIso: string; message: string };
   link?: { url: string; title: string; description?: string; image?: string };
   status?: "sending" | "sent" | "delivered" | "read";
 }

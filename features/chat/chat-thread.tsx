@@ -13,6 +13,8 @@ import {
 } from "@/store/use-chat-theme-store";
 import { useEffect, useMemo, useRef } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { useMediaQuery } from "@/hooks/use-media-query";
+import { ImageLightboxProvider } from "./image-lightbox";
 import type { Chat, Message } from "@/types";
 import { motion } from "framer-motion";
 
@@ -20,6 +22,7 @@ export function ChatThread({ chat }: { chat: Chat }) {
   const messages = useChatStore((s) => s.messages[chat.id] ?? []);
   const send = useChatStore((s) => s.sendMessage);
   const sendVoice = useChatStore((s) => s.sendVoice);
+  const sendAttachment = useChatStore((s) => s.sendAttachment);
   const overrideThemeId = useChatThemeStore((s) => s.byChat[chat.id]);
   const overrideCustomBg = useChatThemeStore((s) => s.customBgByChat[chat.id]);
   const globalThemeId = useChatThemeStore((s) => s.globalTheme);
@@ -44,6 +47,12 @@ export function ChatThread({ chat }: { chat: Chat }) {
     return CHAT_THEMES.find((t) => t.id === id) ?? CHAT_THEMES[0];
   }, [overrideThemeId, overrideCustomBg, globalThemeId, globalCustomBg]);
   const endRef = useRef<HTMLDivElement>(null);
+  const [pickerOpen, setPickerOpen] = React.useState(false);
+  const isDesktop = useMediaQuery("(min-width: 768px)");
+  // Lift the last message above the picker only on mobile (the picker is a
+  // bottom sheet there). On desktop the picker is a small floating popover
+  // anchored to the smile button so the chat doesn't need to move.
+  const liftForPicker = pickerOpen && !isDesktop;
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -53,6 +62,7 @@ export function ChatThread({ chat }: { chat: Chat }) {
   const pinned = messages.find((m) => m.pinned);
 
   return (
+    <ImageLightboxProvider>
     <div
       className="relative flex h-full flex-col"
       style={
@@ -95,18 +105,41 @@ export function ChatThread({ chat }: { chat: Chat }) {
               </div>
             ))}
             {messages.length === 0 && <EmptyState />}
-            <div ref={endRef} />
+            {/* When the picker is open it covers ~52dvh; the composer floats
+                another ~3.5rem above it. Make the scroll sentinel that tall
+                so scrollIntoView({block:"end"}) leaves the last bubble
+                visible just above the composer. */}
+            <div
+              ref={endRef}
+              aria-hidden
+              className="transition-[height] duration-200"
+              style={{
+                height: pickerOpen ? "calc(52dvh + 3.5rem)" : 0
+              }}
+            />
           </div>
         </ScrollArea>
 
         <MessageInput
           onSend={(text) => send(chat.id, text)}
           onSendVoice={(durationSec, waveform) => sendVoice(chat.id, durationSec, waveform)}
+          onSendAttachment={(payload) => sendAttachment(chat.id, payload)}
+          onPickerToggle={(picking) => {
+            setPickerOpen(picking);
+            if (!picking) return;
+            // Picker just opened — wait for the padding-bottom transition to
+            // expand the scroll area, then scroll the latest bubble to the
+            // new visible bottom (just above the picker).
+            window.setTimeout(() => {
+              endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+            }, 50);
+          }}
           themeBubbleMe={themeObj.bubbleMe}
           themeAccent={themeObj.accent}
         />
       </div>
     </div>
+    </ImageLightboxProvider>
   );
 }
 

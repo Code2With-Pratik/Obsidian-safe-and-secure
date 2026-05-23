@@ -15,9 +15,15 @@ import {
   MoreHorizontal,
   CheckSquare,
   Copy as CopyIcon,
-  Trash2
+  Trash2,
+  FileText,
+  Download,
+  MapPin,
+  Navigation,
+  CalendarClock,
+  Music as MusicIcon
 } from "lucide-react";
-import { Avatar, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +32,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn, copyText, formatTime, initials } from "@/lib/utils";
 import { ReactionPicker } from "./reaction-picker";
+import { useImageLightbox } from "./image-lightbox";
 import { useChatStore } from "@/store/use-chat-store";
 import { useMessageSelectionStore } from "@/store/use-message-selection-store";
 import { users } from "@/lib/mock-data";
@@ -270,18 +277,60 @@ function BubbleBody({
   if (bubbleMe) meStyle.background = bubbleMe;
   const themStyleProp = undefined;
 
-  if (message.kind === "image" && message.media) {
+  if (message.kind === "image" && message.media && message.media.length > 0) {
+    return <ImageGridBubble message={message} />;
+  }
+
+  if (message.kind === "video" && message.media) {
     return (
-      <div className="rounded-2xl overflow-hidden glass border border-border/60 max-w-sm">
-        {message.media.map((m, i) => (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img key={i} src={m.url} alt={m.alt ?? ""} className="w-full max-h-80 object-cover" />
-        ))}
-        {message.content && (
-          <div className="px-3 py-2 text-sm">{message.content}</div>
-        )}
+      <VideoBubble me={me} bubbleMe={bubbleMe} meStyle={meStyle} message={message} />
+    );
+  }
+
+  if (message.kind === "audio" && message.audio) {
+    return <AudioBubble me={me} bubbleMe={bubbleMe} meStyle={meStyle} message={message} />;
+  }
+
+  if (message.kind === "file" && message.file) {
+    return <FileBubble me={me} bubbleMe={bubbleMe} meStyle={meStyle} message={message} />;
+  }
+
+  if (message.kind === "gif" && message.gif) {
+    return (
+      <div className="rounded-2xl overflow-hidden ring-1 ring-border/40 max-w-[min(280px,100%)]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={message.gif.src} alt={message.gif.alt ?? "GIF"} className="block w-full" />
       </div>
     );
+  }
+
+  if (message.kind === "sticker" && message.sticker) {
+    return (
+      <div className="bg-transparent">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={message.sticker.src}
+          alt={message.sticker.alt ?? "Sticker"}
+          className="w-32 h-32 object-contain drop-shadow-[0_4px_12px_rgba(0,0,0,0.25)]"
+        />
+      </div>
+    );
+  }
+
+  if (message.kind === "poll" && message.poll) {
+    return <PollBubble me={me} bubbleMe={bubbleMe} meStyle={meStyle} message={message} />;
+  }
+
+  if (message.kind === "contact" && message.contacts) {
+    return <ContactsBubble me={me} bubbleMe={bubbleMe} meStyle={meStyle} message={message} />;
+  }
+
+  if (message.kind === "location" && message.location) {
+    return <LocationBubble me={me} bubbleMe={bubbleMe} meStyle={meStyle} message={message} />;
+  }
+
+  if (message.kind === "schedule" && message.schedule) {
+    return <ScheduleBubble me={me} bubbleMe={bubbleMe} meStyle={meStyle} message={message} />;
   }
 
   if (message.kind === "voice" && message.voice) {
@@ -302,7 +351,7 @@ function BubbleBody({
         href={message.link.url}
         target="_blank"
         rel="noopener noreferrer"
-        className="block rounded-2xl glass border border-border/60 overflow-hidden max-w-sm transition hover:ring-1 hover:ring-white/20 hover:border-border"
+        className="block rounded-2xl glass border border-border/60 overflow-hidden max-w-[min(24rem,100%)] transition hover:ring-1 hover:ring-white/20 hover:border-border"
       >
         {message.link.image && (
           // eslint-disable-next-line @next/next/no-img-element
@@ -324,18 +373,220 @@ function BubbleBody({
     );
   }
 
+  // Default text bubble — auto-linkify any URLs and pull an OG preview card
+  // for the first URL. If the message is JUST that URL we drop the redundant
+  // text bubble and let the card BE the message (WhatsApp-style).
+  const urls = extractUrls(message.content);
+  const firstUrl = urls[0];
+  const trimmed = message.content?.trim() ?? "";
+  const isJustUrl = !!firstUrl && trimmed === firstUrl;
+
+  if (isJustUrl) {
+    return <LinkPreview url={firstUrl} me={me} bubbleMe={bubbleMe} meStyle={meStyle} standalone />;
+  }
+
   return (
-    <div
-      style={me ? meStyle : themStyleProp}
+    <div className="flex flex-col gap-1.5 max-w-full">
+      <div
+        style={me ? meStyle : themStyleProp}
+        className={cn(
+          "px-3.5 py-2 rounded-xl text-sm leading-relaxed shadow-sm max-w-full break-words whitespace-pre-wrap",
+          me
+            ? "rounded-br-none " + (bubbleMe ? "" : "bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white")
+            : "glass border border-border/60 rounded-bl-none"
+        )}
+      >
+        <LinkifiedText text={message.content} me={me} />
+      </div>
+      {firstUrl && <LinkPreview url={firstUrl} />}
+    </div>
+  );
+}
+
+/** Pull http(s) URLs out of a string. Stops at whitespace/closing brackets. */
+function extractUrls(text: string): string[] {
+  if (!text) return [];
+  const re = /(https?:\/\/[^\s<>"')\]]+)/gi;
+  return text.match(re) ?? [];
+}
+
+/** Render text with URLs converted to <a> tags inline. */
+function LinkifiedText({ text, me }: { text: string; me: boolean }) {
+  if (!text) return null;
+  const re = /(https?:\/\/[^\s<>"')\]]+)/gi;
+  const parts: React.ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let key = 0;
+  while ((match = re.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      parts.push(text.slice(lastIndex, match.index));
+    }
+    const url = match[0];
+    parts.push(
+      <a
+        key={`u-${key++}`}
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        className={cn(
+          "underline underline-offset-2 break-all",
+          me ? "decoration-white/60 hover:decoration-white" : "decoration-cyan-400/70 hover:decoration-cyan-400"
+        )}
+      >
+        {url}
+      </a>
+    );
+    lastIndex = re.lastIndex;
+  }
+  if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+  return <>{parts}</>;
+}
+
+interface OgPayload {
+  url: string;
+  host: string;
+  title?: string;
+  description?: string;
+  image?: string;
+  siteName?: string;
+}
+
+const OG_CACHE = new Map<string, OgPayload | null>();
+
+/** Compact OG-card preview fetched lazily on mount. Result is memo-cached
+ *  in-memory so the same URL doesn't re-fetch every render.
+ *  When `standalone` is true the card adopts the message-bubble styling
+ *  (tail-corner radius + theme colours) so a URL-only message reads as a
+ *  single bubble instead of a separate card below text. */
+function LinkPreview({
+  url,
+  standalone,
+  me,
+  bubbleMe,
+  meStyle
+}: {
+  url: string;
+  standalone?: boolean;
+  me?: boolean;
+  bubbleMe?: string;
+  meStyle?: React.CSSProperties;
+}) {
+  const [data, setData] = React.useState<OgPayload | null>(() =>
+    OG_CACHE.has(url) ? (OG_CACHE.get(url) as OgPayload | null) : null
+  );
+  const [loaded, setLoaded] = React.useState<boolean>(OG_CACHE.has(url));
+
+  React.useEffect(() => {
+    if (OG_CACHE.has(url)) return;
+    let cancelled = false;
+    fetch(`/api/og?url=${encodeURIComponent(url)}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d: OgPayload | null) => {
+        if (cancelled) return;
+        OG_CACHE.set(url, d ?? null);
+        setData(d ?? null);
+        setLoaded(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        OG_CACHE.set(url, null);
+        setLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [url]);
+
+  if (!loaded) return null;
+
+  // No OG data — fall through to a minimal host card so the link still
+  // looks intentional (rather than disappearing entirely).
+  if (!data || (!data.title && !data.description && !data.image)) {
+    let host = "";
+    try {
+      host = new URL(url).host;
+    } catch {
+      host = url;
+    }
+    return (
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        onClick={(e) => e.stopPropagation()}
+        className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full glass border border-border/60 max-w-[min(20rem,100%)] text-[11px] text-cyan-400 hover:bg-foreground/5"
+      >
+        <ExternalLink className="size-3 shrink-0" />
+        <span className="truncate">{host}</span>
+      </a>
+    );
+  }
+
+  return (
+    <a
+      href={data.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      onClick={(e) => e.stopPropagation()}
+      style={standalone && me ? meStyle : undefined}
       className={cn(
-        "px-3.5 py-2 rounded-xl text-sm leading-relaxed shadow-sm max-w-full break-words whitespace-pre-wrap",
-        me
-          ? "rounded-br-none " + (bubbleMe ? "" : "bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white")
-          : "glass border border-border/60 rounded-bl-none"
+        "block rounded-2xl overflow-hidden max-w-[min(20rem,100%)] transition hover:ring-1 hover:ring-cyan-400/40",
+        standalone
+          ? me
+            ? "rounded-br-none " +
+              (bubbleMe ? "" : "bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white")
+            : "rounded-bl-none glass border border-border/60"
+          : "glass border border-border/60"
       )}
     >
-      {message.content}
-    </div>
+      {data.image && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={data.image}
+          alt={data.title ?? ""}
+          loading="lazy"
+          className="block w-full h-40 object-cover bg-foreground/5"
+        />
+      )}
+      <div className="px-3 py-2">
+        {data.siteName && (
+          <p
+            className={cn(
+              "text-[10px] uppercase tracking-wider truncate",
+              standalone && me ? "opacity-70" : "text-muted-foreground"
+            )}
+          >
+            {data.siteName}
+          </p>
+        )}
+        {data.title && (
+          <p className="text-sm font-medium leading-tight line-clamp-2 mt-0.5">
+            {data.title}
+          </p>
+        )}
+        {data.description && (
+          <p
+            className={cn(
+              "text-[11px] line-clamp-2 mt-1",
+              standalone && me ? "opacity-75" : "text-muted-foreground"
+            )}
+          >
+            {data.description}
+          </p>
+        )}
+        <div
+          className={cn(
+            "text-[10px] mt-1.5 flex items-center gap-1",
+            standalone && me ? "opacity-80" : "text-cyan-400"
+          )}
+        >
+          <ExternalLink className="size-3" />
+          {data.host}
+        </div>
+      </div>
+    </a>
   );
 }
 
@@ -404,7 +655,7 @@ function VoiceBubble({
     <div
       style={me ? meStyle : undefined}
       className={cn(
-        "flex items-center gap-2 rounded-2xl px-2.5 py-1.5 max-w-[14rem]",
+        "flex items-center gap-2 rounded-2xl px-2.5 py-1.5 max-w-[min(14rem,100%)]",
         me
           ? "rounded-br-none" +
               (bubbleMe ? "" : " bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white")
@@ -419,30 +670,23 @@ function VoiceBubble({
       >
         {playing ? <Pause className="size-3" /> : <Play className="size-3 ml-0.5" />}
       </button>
-      <div className="flex items-center gap-[2px] h-5 flex-1 min-w-0">
+      <div className={cn("flex items-center gap-[2px] h-5 flex-1 min-w-0", playing && "voice-bars-playing")}>
         {waveform.map((h, i) => {
           const isPlayed = i < playedIndex;
-          const heightPct = Math.max(20, Math.min(100, h * 100));
+          // Round to 2 decimals so server-rendered HTML and client-rendered
+          // JSX produce the *same* string (avoids React hydration mismatch
+          // when the number serializer differs at full precision).
+          const heightPct = Math.max(20, Math.min(100, h * 100)).toFixed(2);
           return (
-            <motion.span
+            <span
               key={i}
-              animate={
-                playing
-                  ? { scaleY: [0.7, 1, 0.7] }
-                  : { scaleY: [0.85, 1, 0.85] }
-              }
-              transition={{
-                duration: playing ? 0.9 : 2.4,
-                repeat: Infinity,
-                delay: (i * 0.04) % 1.2,
-                ease: "easeInOut"
-              }}
               style={{
                 height: `${heightPct}%`,
                 opacity: isPlayed ? 1 : 0.55,
-                backgroundColor: "currentColor"
+                backgroundColor: "currentColor",
+                animationDelay: `${((i * 40) % 1200)}ms`
               }}
-              className="w-[2px] rounded-full"
+              className="w-[2px] rounded-full voice-bar"
             />
           );
         })}
@@ -450,4 +694,476 @@ function VoiceBubble({
       <span className="text-[10px] tabular-nums opacity-80 shrink-0">{remaining}s</span>
     </div>
   );
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Rich-attachment bubble subcomponents
+ * ───────────────────────────────────────────────────────────────────── */
+
+type SubProps = {
+  me: boolean;
+  bubbleMe?: string;
+  meStyle: React.CSSProperties;
+  message: Message;
+};
+
+/** Video preview — native <video> with controls. */
+function VideoBubble({ message }: SubProps) {
+  const src = message.media?.[0]?.url;
+  if (!src) return null;
+  return (
+    <div className="rounded-2xl overflow-hidden ring-1 ring-border/60 w-full max-w-[22rem] bg-black/40">
+      <video
+        src={src}
+        controls
+        playsInline
+        preload="metadata"
+        className="block w-full max-h-80 bg-black"
+      />
+      {message.content && <div className="px-3 py-2 text-sm">{message.content}</div>}
+    </div>
+  );
+}
+
+/** Audio file (music) — play button + filename + native <audio>. */
+function AudioBubble({ me, bubbleMe, meStyle, message }: SubProps) {
+  const [playing, setPlaying] = React.useState(false);
+  const ref = React.useRef<HTMLAudioElement>(null);
+  const audio = message.audio!;
+  const toggle = () => {
+    const el = ref.current;
+    if (!el) return;
+    if (playing) el.pause();
+    else void el.play().catch(() => {});
+  };
+  React.useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const onPlay = () => setPlaying(true);
+    const onPause = () => setPlaying(false);
+    el.addEventListener("play", onPlay);
+    el.addEventListener("pause", onPause);
+    el.addEventListener("ended", onPause);
+    return () => {
+      el.removeEventListener("play", onPlay);
+      el.removeEventListener("pause", onPause);
+      el.removeEventListener("ended", onPause);
+    };
+  }, []);
+  const sizeLabel = audio.size ? formatBytes(audio.size) : "";
+  return (
+    <div
+      style={me ? meStyle : undefined}
+      className={cn(
+        "flex items-center gap-3 rounded-2xl px-3 py-2.5 max-w-[min(20rem,100%)]",
+        me
+          ? "rounded-br-none" + (bubbleMe ? "" : " bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white")
+          : "rounded-bl-none glass border border-border/60"
+      )}
+    >
+      <button
+        onClick={toggle}
+        className="size-10 rounded-full grid place-items-center shrink-0 active:scale-95"
+        style={{ backgroundColor: "color-mix(in srgb, currentColor 18%, transparent)" }}
+        aria-label={playing ? "Pause" : "Play"}
+      >
+        {playing ? <Pause className="size-4" /> : <Play className="size-4 ml-0.5" />}
+      </button>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5 text-sm font-medium truncate">
+          <MusicIcon className="size-3.5 shrink-0 opacity-80" />
+          <span className="truncate">{audio.name}</span>
+        </div>
+        {sizeLabel && (
+          <p className="text-[11px] opacity-70">{sizeLabel}</p>
+        )}
+      </div>
+      {audio.url && (
+        // eslint-disable-next-line jsx-a11y/media-has-caption
+        <audio ref={ref} src={audio.url} preload="metadata" className="hidden" />
+      )}
+    </div>
+  );
+}
+
+/** Generic file (PDFs, docs, etc.). PDFs get a preview thumbnail above the
+ *  filename row (rendered via the browser's built-in PDF viewer in an
+ *  <object>). Other files use a clean icon card. */
+function FileBubble({ me, bubbleMe, meStyle, message }: SubProps) {
+  const file = message.file!;
+  const sizeLabel = file.size ? formatBytes(file.size) : "";
+  const isPdf =
+    file.mime === "application/pdf" ||
+    file.name.toLowerCase().endsWith(".pdf");
+
+  if (isPdf && file.url) {
+    return (
+      <div
+        style={me ? meStyle : undefined}
+        className={cn(
+          "rounded-2xl overflow-hidden max-w-[min(20rem,100%)]",
+          me
+            ? "rounded-br-none" + (bubbleMe ? "" : " bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white")
+            : "rounded-bl-none glass border border-border/60"
+        )}
+      >
+        {/* PDF preview — browser-native viewer in a fixed-height frame.
+            #toolbar=0 hides the controls so it reads as a clean thumbnail. */}
+        <a
+          href={file.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block relative h-44 bg-white overflow-hidden"
+        >
+          <object
+            data={`${file.url}#toolbar=0&navpanes=0&scrollbar=0&view=FitH`}
+            type="application/pdf"
+            className="absolute inset-0 w-full h-full pointer-events-none"
+          >
+            <div className="absolute inset-0 grid place-items-center text-rose-500">
+              <FileText className="size-12" />
+            </div>
+          </object>
+          <span className="absolute top-2 left-2 text-[10px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-rose-500 text-white">
+            PDF
+          </span>
+        </a>
+        <a
+          href={file.url}
+          download={file.name}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-3 px-3 py-2.5 hover:opacity-95"
+        >
+          <span
+            className="size-9 rounded-lg grid place-items-center shrink-0"
+            style={{ backgroundColor: "color-mix(in srgb, currentColor 18%, transparent)" }}
+          >
+            <FileText className="size-4" />
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate">{file.name}</p>
+            <p className="text-[11px] opacity-70 truncate">
+              {sizeLabel} {file.mime ? `· PDF` : ""}
+            </p>
+          </div>
+          <Download className="size-4 opacity-75 shrink-0" />
+        </a>
+      </div>
+    );
+  }
+
+  return (
+    <a
+      href={file.url}
+      download={file.name}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={me ? meStyle : undefined}
+      className={cn(
+        "flex items-center gap-3 rounded-2xl px-3 py-2.5 max-w-[min(20rem,100%)] transition active:scale-[0.98]",
+        me
+          ? "rounded-br-none" + (bubbleMe ? "" : " bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white")
+          : "rounded-bl-none glass border border-border/60"
+      )}
+    >
+      <span
+        className="size-10 rounded-xl grid place-items-center shrink-0"
+        style={{ backgroundColor: "color-mix(in srgb, currentColor 18%, transparent)" }}
+      >
+        <FileText className="size-5" />
+      </span>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium truncate">{file.name}</p>
+        <p className="text-[11px] opacity-70 flex items-center gap-1">
+          {sizeLabel && <span>{sizeLabel}</span>}
+          {file.mime && <span className="truncate opacity-60">· {file.mime}</span>}
+        </p>
+      </div>
+      {file.url && <Download className="size-4 opacity-75 shrink-0" />}
+    </a>
+  );
+}
+
+/** Interactive poll — WhatsApp-style with progress bars + tap-to-vote. */
+function PollBubble({ me, bubbleMe, meStyle, message }: SubProps) {
+  const vote = useChatStore((s) => s.votePoll);
+  const poll = message.poll!;
+  const total = poll.options.reduce((acc, o) => acc + o.voters.length, 0);
+  return (
+    <div
+      style={me ? meStyle : undefined}
+      className={cn(
+        "rounded-2xl px-3.5 py-3 max-w-[min(20rem,100%)] min-w-[15rem] space-y-2.5",
+        me
+          ? "rounded-br-none" + (bubbleMe ? "" : " bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white")
+          : "rounded-bl-none glass border border-border/60"
+      )}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className="size-7 rounded-lg grid place-items-center shrink-0"
+          style={{ backgroundColor: "color-mix(in srgb, currentColor 18%, transparent)" }}
+        >
+          📊
+        </span>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold leading-tight">{poll.question}</p>
+          <p className="text-[11px] opacity-70">
+            Poll · {poll.multi ? "Select one or more" : "Select one"}
+          </p>
+        </div>
+      </div>
+      <div className="space-y-1.5">
+        {poll.options.map((opt) => {
+          const count = opt.voters.length;
+          const pct = total === 0 ? 0 : Math.round((count / total) * 100);
+          const mine = opt.voters.includes("me");
+          return (
+            <button
+              key={opt.id}
+              onClick={() => vote(message.chatId, message.id, opt.id)}
+              className={cn(
+                "relative w-full text-left px-3 py-2 rounded-xl overflow-hidden transition",
+                "ring-1",
+                mine
+                  ? "ring-current/60"
+                  : "ring-white/20"
+              )}
+              style={{
+                backgroundColor: mine
+                  ? "color-mix(in srgb, currentColor 18%, transparent)"
+                  : "color-mix(in srgb, currentColor 8%, transparent)"
+              }}
+            >
+              {/* progress fill */}
+              <span
+                className="absolute inset-y-0 left-0 transition-[width] duration-300"
+                style={{
+                  width: `${pct}%`,
+                  backgroundColor: "color-mix(in srgb, currentColor 14%, transparent)"
+                }}
+              />
+              <span className="relative flex items-center gap-2">
+                <span
+                  className={cn(
+                    "size-4 rounded-full grid place-items-center text-[8px] font-bold shrink-0",
+                    mine ? "bg-current text-background" : "ring-1 ring-current/40"
+                  )}
+                >
+                  {mine && <Check className="size-2.5" strokeWidth={4} />}
+                </span>
+                <span className="flex-1 text-sm">{opt.text}</span>
+                <span className="text-[11px] tabular-nums opacity-80">{pct}%</span>
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <p className="text-[11px] opacity-60 text-right">
+        {total} {total === 1 ? "vote" : "votes"}
+      </p>
+    </div>
+  );
+}
+
+/** Shared contact card(s). */
+function ContactsBubble({ me, bubbleMe, meStyle, message }: SubProps) {
+  return (
+    <div
+      style={me ? meStyle : undefined}
+      className={cn(
+        "rounded-2xl px-3 py-2.5 max-w-[min(20rem,100%)] space-y-1.5",
+        me
+          ? "rounded-br-none" + (bubbleMe ? "" : " bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white")
+          : "rounded-bl-none glass border border-border/60"
+      )}
+    >
+      {(message.contacts ?? []).map((c, i) => (
+        <div key={`${c.username ?? c.name}-${i}`} className="flex items-center gap-3">
+          <Avatar className="size-10 shrink-0">
+            <AvatarImage src={c.avatar} />
+            <AvatarFallback>{initials(c.name)}</AvatarFallback>
+          </Avatar>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate">{c.name}</p>
+            {c.username && (
+              <p className="text-[11px] opacity-75 truncate">@{c.username}</p>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** Location card — static map thumbnail + open-in-Maps link. */
+function LocationBubble({ me, bubbleMe, meStyle, message }: SubProps) {
+  const loc = message.location!;
+  const href = `https://www.google.com/maps?q=${loc.lat},${loc.lng}`;
+  const embed = `https://maps.google.com/maps?q=${loc.lat},${loc.lng}&z=15&output=embed`;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      style={me ? meStyle : undefined}
+      className={cn(
+        "block rounded-2xl overflow-hidden max-w-[min(18rem,100%)] ring-1",
+        me
+          ? "rounded-br-none ring-white/15" + (bubbleMe ? "" : " bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white")
+          : "rounded-bl-none glass border-border/60 ring-border/60"
+      )}
+    >
+      <div className="aspect-[5/3] bg-black/40 relative">
+        <iframe
+          title="map"
+          src={embed}
+          loading="lazy"
+          className="absolute inset-0 w-full h-full border-0 pointer-events-none"
+        />
+      </div>
+      <div className="px-3 py-2 flex items-center gap-2">
+        {loc.live ? (
+          <Navigation className="size-3.5 shrink-0" />
+        ) : (
+          <MapPin className="size-3.5 shrink-0" />
+        )}
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium">
+            {loc.live ? "Live location" : "Location"}
+          </p>
+          <p className="text-[11px] opacity-75 truncate">
+            {loc.lat.toFixed(5)}, {loc.lng.toFixed(5)}
+          </p>
+        </div>
+      </div>
+    </a>
+  );
+}
+
+/** Scheduled message receipt. */
+function ScheduleBubble({ me, bubbleMe, meStyle, message }: SubProps) {
+  const sch = message.schedule!;
+  const when = new Date(sch.whenIso);
+  return (
+    <div
+      style={me ? meStyle : undefined}
+      className={cn(
+        "rounded-2xl px-3.5 py-2.5 max-w-[min(20rem,100%)] space-y-2",
+        me
+          ? "rounded-br-none" + (bubbleMe ? "" : " bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white")
+          : "rounded-bl-none glass border border-border/60"
+      )}
+    >
+      <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider opacity-80">
+        <CalendarClock className="size-3.5" />
+        Scheduled for{" "}
+        {when.toLocaleString(undefined, {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit"
+        })}
+      </div>
+      <p className="text-sm whitespace-pre-wrap break-words">{sch.message}</p>
+    </div>
+  );
+}
+
+/** WhatsApp-style image grid (1, 2, 3, 4, 4+N tiles). Tapping any tile opens
+ *  the lightbox; the lightbox is given the full ordered list of images in
+ *  this single message so swipe-prev/next stays grouped. */
+function ImageGridBubble({ message }: { message: Message }) {
+  const lb = useImageLightbox();
+  const media = (message.media ?? []).filter((m) => m.url);
+  const n = media.length;
+  const items = media.map((m) => ({ src: m.url, alt: m.alt ?? "" }));
+
+  const open = (i: number) => lb.open(items, i);
+
+  // Layout per count (WhatsApp-like)
+  let grid: React.ReactNode;
+  if (n === 1) {
+    grid = (
+      <button
+        type="button"
+        onClick={() => open(0)}
+        className="block w-full max-h-80 overflow-hidden"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={media[0].url} alt={media[0].alt ?? ""} className="w-full max-h-80 object-cover" />
+      </button>
+    );
+  } else if (n === 2) {
+    grid = (
+      <div className="grid grid-cols-2 gap-[2px]">
+        {media.map((m, i) => (
+          <button key={i} type="button" onClick={() => open(i)} className="aspect-square overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={m.url} alt={m.alt ?? ""} className="w-full h-full object-cover" />
+          </button>
+        ))}
+      </div>
+    );
+  } else if (n === 3) {
+    // Big left tile + two stacked right tiles
+    grid = (
+      <div className="grid grid-cols-2 gap-[2px] aspect-[4/3]">
+        <button type="button" onClick={() => open(0)} className="row-span-2 overflow-hidden">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={media[0].url} alt={media[0].alt ?? ""} className="w-full h-full object-cover" />
+        </button>
+        {[1, 2].map((i) => (
+          <button key={i} type="button" onClick={() => open(i)} className="overflow-hidden">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={media[i].url} alt={media[i].alt ?? ""} className="w-full h-full object-cover" />
+          </button>
+        ))}
+      </div>
+    );
+  } else {
+    // 4 or more: 2x2 grid; if more than 4, overlay "+N" on the 4th tile.
+    const shown = media.slice(0, 4);
+    const overflow = n - 4;
+    grid = (
+      <div className="grid grid-cols-2 gap-[2px]">
+        {shown.map((m, i) => {
+          const isLastSpot = i === 3 && overflow > 0;
+          return (
+            <button
+              key={i}
+              type="button"
+              onClick={() => open(i)}
+              className="relative aspect-square overflow-hidden"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={m.url} alt={m.alt ?? ""} className="w-full h-full object-cover" />
+              {isLastSpot && (
+                <div className="absolute inset-0 bg-black/55 grid place-items-center text-white text-2xl font-semibold">
+                  +{overflow}
+                </div>
+              )}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl overflow-hidden glass border border-border/60 w-full max-w-[22rem]">
+      {grid}
+      {message.content && <div className="px-3 py-2 text-sm">{message.content}</div>}
+    </div>
+  );
+}
+
+/** Human-readable byte size. */
+function formatBytes(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(0)} KB`;
+  return `${(kb / 1024).toFixed(1)} MB`;
 }

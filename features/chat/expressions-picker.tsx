@@ -14,6 +14,13 @@ import {
 import { cn } from "@/lib/utils";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import {
+  fetchKlipyGifs,
+  fetchKlipyStickers,
+  fetchKlipyMemes,
+  KLIPY_AVAILABLE,
+  type StickerApiItem
+} from "@/lib/klipy";
+import {
   EMOJI_CATEGORIES,
   GIFS,
   STICKER_PACKS,
@@ -23,10 +30,16 @@ import {
   type MemeItem
 } from "./expressions-data";
 
+/** Sticker pick shape: API stickers carry a URL (no gradient), bundled ones
+ *  still come as emoji + gradient. Consumers can branch on which field is set. */
+export type StickerPickPayload =
+  | { id: string; emoji: string; gradient: string; src?: undefined; alt?: undefined }
+  | { id: string; src: string; alt: string; emoji?: undefined; gradient?: undefined };
+
 export type ExpressionPick =
   | { kind: "emoji"; value: string }
   | { kind: "gif"; gif: GifItem }
-  | { kind: "sticker"; sticker: { id: string; emoji: string; gradient: string } }
+  | { kind: "sticker"; sticker: StickerPickPayload }
   | { kind: "meme"; meme: MemeItem };
 
 type Tab = "emoji" | "gif" | "sticker" | "meme";
@@ -53,6 +66,7 @@ export function ExpressionsPicker({ open, onClose, onPick, anchorRef }: Props) {
   const [pos, setPos] = React.useState<{ left: number; bottom: number } | null>(null);
   const [activeEmojiCat, setActiveEmojiCat] = React.useState(EMOJI_CATEGORIES[0].id);
   const isDesktop = useMediaQuery("(min-width: 768px)");
+  const panelRef = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
     setMounted(true);
@@ -93,9 +107,46 @@ export function ExpressionsPicker({ open, onClose, onPick, anchorRef }: Props) {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
     };
+
+    // On mobile the picker takes up half the screen and has an explicit X
+    // button — users dismiss it that way. Outside-click detection would
+    // close it the moment they tap the input above it, which is exactly
+    // what the user wants to avoid. So only do outside-click on desktop.
+    const onDown = (e: MouseEvent | TouchEvent) => {
+      const panel = panelRef.current;
+      if (!panel) return;
+
+      // event.composedPath() reliably walks every node the event passed
+      // through (works for text-node targets, shadow DOM, etc.).
+      const path = (e.composedPath?.() ?? []) as EventTarget[];
+
+      if (path.includes(panel)) return;
+      if (anchorRef?.current && path.includes(anchorRef.current)) return;
+
+      // Honour the data-keep-picker-open opt-out (the message composer
+      // marks itself with this so typing doesn't dismiss the picker).
+      for (const node of path) {
+        if (
+          node instanceof Element &&
+          node.hasAttribute("data-keep-picker-open")
+        ) {
+          return;
+        }
+      }
+      onClose();
+    };
+
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
+    if (isDesktop) {
+      document.addEventListener("mousedown", onDown);
+    }
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      if (isDesktop) {
+        document.removeEventListener("mousedown", onDown);
+      }
+    };
+  }, [open, onClose, anchorRef, isDesktop]);
 
   /* ---------- search filters ---------- */
   const filteredEmojiCategories = React.useMemo(() => {
@@ -111,7 +162,13 @@ export function ExpressionsPicker({ open, onClose, onPick, anchorRef }: Props) {
       .filter((c) => c.items.length > 0);
   }, [q]);
 
-  const filteredGifs = React.useMemo(
+  /* ---- All three media tabs are powered by Klipy. The bundled mock data
+          is kept around as a fallback in case the API call fails. ---- */
+  const klipyGifs = useKlipyFeed(fetchKlipyGifs, q, open && tab === "gif");
+  const klipyStickers = useKlipyFeed(fetchKlipyStickers, q, open && tab === "sticker");
+  const klipyMemes = useKlipyFeed(fetchKlipyMemes, q, open && tab === "meme");
+
+  const localGifs = React.useMemo(
     () =>
       q.trim() === ""
         ? GIFS
@@ -123,7 +180,7 @@ export function ExpressionsPicker({ open, onClose, onPick, anchorRef }: Props) {
     [q]
   );
 
-  const filteredMemes = React.useMemo(
+  const localMemes = React.useMemo(
     () =>
       q.trim() === ""
         ? MEMES
@@ -162,18 +219,9 @@ export function ExpressionsPicker({ open, onClose, onPick, anchorRef }: Props) {
     <AnimatePresence>
       {shouldRender && (
         <>
-          {/* dismiss layer — kept very light so the chat behind stays readable */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
-            onClick={onClose}
-            className="fixed inset-0 z-[200] bg-black/10 md:bg-transparent"
-          />
-
           <motion.div
             key="panel"
+            ref={panelRef}
             initial={
               useDesktopFloat
                 ? { opacity: 0, y: 8, scale: 0.97 }
@@ -265,17 +313,34 @@ export function ExpressionsPicker({ open, onClose, onPick, anchorRef }: Props) {
                     />
                   )}
                   {tab === "gif" && (
-                    <GifPanel gifs={filteredGifs} onPick={(gif) => onPick({ kind: "gif", gif })} />
+                    <GifPanel
+                      gifs={KLIPY_AVAILABLE && klipyGifs.data.length > 0 ? klipyGifs.data : localGifs}
+                      loading={KLIPY_AVAILABLE && klipyGifs.loading}
+                      error={KLIPY_AVAILABLE && klipyGifs.error && klipyGifs.data.length === 0}
+                      onPick={(gif) => onPick({ kind: "gif", gif })}
+                    />
                   )}
                   {tab === "sticker" && (
-                    <StickerPanel
-                      packs={filteredStickers}
-                      onPick={(sticker) => onPick({ kind: "sticker", sticker })}
-                    />
+                    KLIPY_AVAILABLE ? (
+                      <ApiStickerPanel
+                        stickers={klipyStickers.data}
+                        loading={klipyStickers.loading}
+                        error={klipyStickers.error}
+                        fallbackPacks={filteredStickers}
+                        onPick={(sticker) => onPick({ kind: "sticker", sticker })}
+                      />
+                    ) : (
+                      <StickerPanel
+                        packs={filteredStickers}
+                        onPick={(sticker) => onPick({ kind: "sticker", sticker })}
+                      />
+                    )
                   )}
                   {tab === "meme" && (
                     <MemePanel
-                      memes={filteredMemes}
+                      memes={KLIPY_AVAILABLE && klipyMemes.data.length > 0 ? klipyMemes.data : localMemes}
+                      loading={KLIPY_AVAILABLE && klipyMemes.loading}
+                      error={KLIPY_AVAILABLE && klipyMemes.error && klipyMemes.data.length === 0}
                       onPick={(meme) => onPick({ kind: "meme", meme })}
                     />
                   )}
@@ -284,7 +349,7 @@ export function ExpressionsPicker({ open, onClose, onPick, anchorRef }: Props) {
             </div>
 
             {/* footer hint */}
-            <div className="border-t border-white/10 px-3 py-2 text-[10px] text-muted-foreground flex justify-between">
+            <div className="border-t border-white/10 px-4 py-1 text-[10px] text-muted-foreground flex justify-between">
               <span>{tab === "emoji" ? "Tap to insert" : "Tap to send"}</span>
               <span className="hidden md:inline">Esc to close</span>
             </div>
@@ -346,7 +411,7 @@ function EmojiPanel({
             }}
             className="pt-3"
           >
-            <h4 className="sticky top-0 z-[1] -mx-3 px-3 py-1.5 bg-card/80 backdrop-blur-sm text-[10px] uppercase tracking-wider text-muted-foreground">
+            <h4 className="px-1 py-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
               {cat.name}
             </h4>
             <motion.div
@@ -375,7 +440,7 @@ function EmojiPanel({
                     className="absolute inset-0 grid place-items-center select-none"
                     style={{
                       fontFamily: EMOJI_FONT,
-                      fontSize: "20px",
+                      fontSize: "28px",
                       lineHeight: 1,
                       whiteSpace: "nowrap",
                       overflow: "hidden"
@@ -415,14 +480,24 @@ function EmojiPanel({
 
 function GifPanel({
   gifs,
+  loading,
+  error,
   onPick
 }: {
   gifs: GifItem[];
+  loading?: boolean;
+  error?: boolean;
   onPick: (gif: GifItem) => void;
 }) {
   return (
     <div className="flex-1 overflow-y-auto no-scrollbar px-3 pb-3 pt-1">
-      {gifs.length === 0 ? (
+      {error ? (
+        <p className="text-center text-xs text-muted-foreground py-6">
+          Couldn&apos;t reach Klipy — check your connection.
+        </p>
+      ) : loading && gifs.length === 0 ? (
+        <GifSkeletonGrid />
+      ) : gifs.length === 0 ? (
         <p className="text-center text-xs text-muted-foreground py-6">
           No GIFs match.
         </p>
@@ -454,6 +529,136 @@ function GifPanel({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function GifSkeletonGrid() {
+  // 6 tiles, alternating tall/short, while the Klipy query is in flight
+  return (
+    <div className="columns-2 gap-2 [column-fill:_balance]">
+      {Array.from({ length: 6 }).map((_, i) => (
+        <div
+          key={i}
+          className="relative mb-2 block w-full overflow-hidden rounded-xl glass border border-white/10 break-inside-avoid animate-pulse bg-foreground/5"
+          style={{ aspectRatio: i % 2 ? "4/5" : "1/1" }}
+        />
+      ))}
+    </div>
+  );
+}
+
+/** Generic Klipy feed hook: debounced, abortable, cached. Used for the GIF,
+ *  Sticker, and Meme tabs. Pass the matching `fetchKlipy*` function. */
+function useKlipyFeed<T>(
+  fetcher: (q: string, opts: { signal?: AbortSignal }) => Promise<T[]>,
+  query: string,
+  enabled: boolean
+) {
+  const [data, setData] = React.useState<T[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState(false);
+  const cacheRef = React.useRef<Map<string, T[]>>(new Map());
+
+  React.useEffect(() => {
+    if (!enabled || !KLIPY_AVAILABLE) return;
+
+    const key = query.trim().toLowerCase();
+    const cached = cacheRef.current.get(key);
+    if (cached) {
+      setData(cached);
+      setLoading(false);
+      setError(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    let cancelled = false;
+    const handle = window.setTimeout(() => {
+      setLoading(true);
+      setError(false);
+      fetcher(query, { signal: controller.signal })
+        .then((items) => {
+          if (cancelled) return;
+          cacheRef.current.set(key, items);
+          setData(items);
+          setLoading(false);
+        })
+        .catch((err: unknown) => {
+          if (cancelled) return;
+          if (err instanceof Error && err.name === "AbortError") return;
+          setError(true);
+          setLoading(false);
+        });
+    }, 280);
+
+    return () => {
+      cancelled = true;
+      controller.abort();
+      window.clearTimeout(handle);
+    };
+  }, [query, enabled, fetcher]);
+
+  return { data, loading, error };
+}
+
+/** Klipy-driven sticker grid: flat image tiles (no pack grouping). */
+function ApiStickerPanel({
+  stickers,
+  loading,
+  error,
+  fallbackPacks,
+  onPick
+}: {
+  stickers: StickerApiItem[];
+  loading: boolean;
+  error: boolean;
+  fallbackPacks: typeof STICKER_PACKS;
+  onPick: (sticker: StickerPickPayload) => void;
+}) {
+  // network errored AND we don't have cached results → use the bundled packs
+  if (error && stickers.length === 0) {
+    return <StickerPanel packs={fallbackPacks} onPick={onPick} />;
+  }
+  if (loading && stickers.length === 0) {
+    return (
+      <div className="flex-1 overflow-y-auto no-scrollbar px-3 pb-3 pt-1">
+        <div className="grid grid-cols-4 gap-2">
+          {Array.from({ length: 8 }).map((_, i) => (
+            <div
+              key={i}
+              className="aspect-square rounded-2xl bg-foreground/5 animate-pulse"
+            />
+          ))}
+        </div>
+      </div>
+    );
+  }
+  if (stickers.length === 0) {
+    return <StickerPanel packs={fallbackPacks} onPick={onPick} />;
+  }
+  return (
+    <div className="flex-1 overflow-y-auto no-scrollbar px-3 pb-3 pt-1">
+      <div className="grid grid-cols-4 gap-2">
+        {stickers.map((s) => (
+          <motion.button
+            key={s.id}
+            whileHover={{ y: -2 }}
+            whileTap={{ scale: 0.92 }}
+            onClick={() => onPick({ id: s.id, src: s.src, alt: s.alt })}
+            className="relative aspect-square rounded-2xl overflow-hidden bg-foreground/5 ring-1 ring-white/10"
+            title={s.alt}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={s.src}
+              alt={s.alt}
+              className="absolute inset-0 w-full h-full object-contain p-1.5"
+              loading="lazy"
+            />
+          </motion.button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -513,14 +718,31 @@ function StickerPanel({
 
 function MemePanel({
   memes,
+  loading,
+  error,
   onPick
 }: {
   memes: MemeItem[];
+  loading?: boolean;
+  error?: boolean;
   onPick: (meme: MemeItem) => void;
 }) {
   return (
     <div className="flex-1 overflow-y-auto no-scrollbar px-3 pb-3 pt-1">
-      {memes.length === 0 ? (
+      {error ? (
+        <p className="text-center text-xs text-muted-foreground py-6">
+          Couldn&apos;t reach Klipy — check your connection.
+        </p>
+      ) : loading && memes.length === 0 ? (
+        <div className="grid grid-cols-2 gap-2">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div
+              key={i}
+              className="aspect-[4/5] rounded-xl bg-foreground/5 animate-pulse"
+            />
+          ))}
+        </div>
+      ) : memes.length === 0 ? (
         <p className="text-center text-xs text-muted-foreground py-6">
           No memes match.
         </p>
@@ -539,11 +761,14 @@ function MemePanel({
                 src={m.src}
                 alt={m.caption}
                 className="absolute inset-0 w-full h-full object-cover transition group-hover:scale-105"
+                loading="lazy"
               />
               <div className="absolute inset-0 bg-gradient-to-b from-black/15 via-transparent to-black/75" />
-              <span className="absolute top-2 right-2 text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-white/15 backdrop-blur text-white">
-                {m.tag}
-              </span>
+              {m.tag && (
+                <span className="absolute top-2 right-2 text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-white/15 backdrop-blur text-white">
+                  {m.tag}
+                </span>
+              )}
               <p className="absolute left-2.5 right-2.5 bottom-2 text-[11px] font-semibold text-white leading-tight line-clamp-2">
                 {m.caption}
               </p>

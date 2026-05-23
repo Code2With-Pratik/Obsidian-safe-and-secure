@@ -11,6 +11,13 @@ interface ChatState {
   setActiveChat: (id: string | null) => void;
   sendMessage: (chatId: string, content: string) => void;
   sendVoice: (chatId: string, durationSec: number, waveform: number[]) => void;
+  /** Generic rich-attachment send. Accepts a partial Message (kind + payload
+   *  fields); the store fills in id / authorId / createdAt / status. */
+  sendAttachment: (
+    chatId: string,
+    payload: Partial<Message> & { kind: Message["kind"]; content?: string }
+  ) => void;
+  votePoll: (chatId: string, messageId: string, optionId: string) => void;
   toggleReaction: (chatId: string, messageId: string, emoji: string) => void;
   pinMessage: (chatId: string, messageId: string) => void;
   removeMessages: (chatId: string, messageIds: string[]) => void;
@@ -97,6 +104,67 @@ export const useChatStore = create<ChatState>((set, get) => ({
         }
       }));
     }, 700);
+  },
+
+  sendAttachment: (chatId, payload) => {
+    const id = `m-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const m: Message = {
+      id,
+      chatId,
+      authorId: "me",
+      content: payload.content ?? "",
+      createdAt: new Date().toISOString(),
+      status: "sending",
+      ...payload
+    } as Message;
+
+    const preview = previewFor(m);
+    set((s) => ({
+      messages: {
+        ...s.messages,
+        [chatId]: [...(s.messages[chatId] ?? []), m]
+      },
+      chats: s.chats.map((c) =>
+        c.id === chatId ? { ...c, lastMessage: preview, lastMessageAt: m.createdAt } : c
+      )
+    }));
+    setTimeout(() => {
+      set((s) => ({
+        messages: {
+          ...s.messages,
+          [chatId]: (s.messages[chatId] ?? []).map((x) =>
+            x.id === id ? { ...x, status: "delivered" } : x
+          )
+        }
+      }));
+    }, 600);
+  },
+
+  votePoll: (chatId, messageId, optionId) => {
+    set((s) => ({
+      messages: {
+        ...s.messages,
+        [chatId]: (s.messages[chatId] ?? []).map((m) => {
+          if (m.id !== messageId || !m.poll) return m;
+          const multi = !!m.poll.multi;
+          const nextOptions = m.poll.options.map((opt) => {
+            const had = opt.voters.includes("me");
+            if (opt.id === optionId) {
+              return {
+                ...opt,
+                voters: had ? opt.voters.filter((v) => v !== "me") : [...opt.voters, "me"]
+              };
+            }
+            // single-select polls clear my vote from other options
+            if (!multi && had) {
+              return { ...opt, voters: opt.voters.filter((v) => v !== "me") };
+            }
+            return opt;
+          });
+          return { ...m, poll: { ...m.poll, options: nextOptions } };
+        })
+      }
+    }));
   },
 
   toggleReaction: (chatId, messageId, emoji) =>
@@ -286,3 +354,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
       activeChatId: null
     })
 }));
+
+/** One-line summary of a rich message for the chat-list "lastMessage" cell. */
+function previewFor(m: Message): string {
+  switch (m.kind) {
+    case "image":    return "🖼 Photo";
+    case "video":    return "🎬 Video";
+    case "audio":    return `🎵 ${m.audio?.name ?? "Audio"}`;
+    case "voice":    return `🎤 Voice · ${m.voice?.durationSec ?? 0}s`;
+    case "file":     return `📄 ${m.file?.name ?? "Document"}`;
+    case "sticker":  return "🌟 Sticker";
+    case "gif":      return "🎞 GIF";
+    case "poll":     return `📊 ${m.poll?.question ?? "Poll"}`;
+    case "contact": {
+      const n = m.contacts?.length ?? 0;
+      return n > 1 ? `👤 ${n} contacts` : `👤 ${m.contacts?.[0]?.name ?? "Contact"}`;
+    }
+    case "location": return m.location?.live ? "🛰 Live location" : "📍 Location";
+    case "schedule": return `⏰ Scheduled`;
+    default:         return m.content || "Message";
+  }
+}

@@ -12,40 +12,45 @@ import {
   FileText,
   CalendarClock,
   BarChart3,
-  Mic,
   Music,
-  Gift,
-  Sparkles,
   X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
+export type AttachmentKind =
+  | "photo"
+  | "camera"
+  | "video"
+  | "music"
+  | "doc"
+  | "contact"
+  | "location"
+  | "schedule"
+  | "poll";
+
 interface Item {
-  id: string;
+  id: AttachmentKind;
   label: string;
   icon: React.ReactNode;
   color: string;
 }
 
 const items: Item[] = [
-  { id: "photo", label: "Photos", icon: <ImageIcon />, color: "from-violet-500 to-fuchsia-500" },
-  { id: "camera", label: "Camera", icon: <Camera />, color: "from-pink-500 to-rose-500" },
-  { id: "video", label: "Videos", icon: <Video />, color: "from-amber-400 to-orange-500" },
-  { id: "voice", label: "Voice", icon: <Mic />, color: "from-emerald-400 to-cyan-400" },
-  { id: "doc", label: "Documents", icon: <FileText />, color: "from-blue-500 to-cyan-400" },
-  { id: "contact", label: "Contact", icon: <Contact />, color: "from-cyan-400 to-blue-500" },
-  { id: "location", label: "Location", icon: <MapPin />, color: "from-rose-500 to-pink-500" },
-  { id: "schedule", label: "Schedule", icon: <CalendarClock />, color: "from-violet-500 to-cyan-400" },
-  { id: "poll", label: "Poll", icon: <BarChart3 />, color: "from-fuchsia-500 to-violet-500" },
-  { id: "music", label: "Music", icon: <Music />, color: "from-emerald-400 to-teal-500" },
-  { id: "gift", label: "Gift", icon: <Gift />, color: "from-yellow-400 to-amber-500" },
-  { id: "ai", label: "Nova AI", icon: <Sparkles />, color: "from-violet-500 via-fuchsia-500 to-cyan-400" }
+  { id: "photo",    label: "Photos",    icon: <ImageIcon />,     color: "from-violet-500 to-fuchsia-500" },
+  { id: "camera",   label: "Camera",    icon: <Camera />,        color: "from-pink-500 to-rose-500" },
+  { id: "video",    label: "Videos",    icon: <Video />,         color: "from-amber-400 to-orange-500" },
+  { id: "music",    label: "Music",     icon: <Music />,         color: "from-emerald-400 to-teal-500" },
+  { id: "doc",      label: "Documents", icon: <FileText />,      color: "from-blue-500 to-cyan-400" },
+  { id: "contact",  label: "Contact",   icon: <Contact />,       color: "from-cyan-400 to-blue-500" },
+  { id: "location", label: "Location",  icon: <MapPin />,        color: "from-rose-500 to-pink-500" },
+  { id: "schedule", label: "Schedule",  icon: <CalendarClock />, color: "from-violet-500 to-cyan-400" },
+  { id: "poll",     label: "Poll",      icon: <BarChart3 />,     color: "from-fuchsia-500 to-violet-500" }
 ];
 
 interface Props {
   open: boolean;
   onClose: () => void;
-  onPick?: (id: string) => void;
+  onPick?: (id: AttachmentKind) => void;
 }
 
 export function AttachmentSheet({ open, onClose, onPick }: Props) {
@@ -111,36 +116,27 @@ export function AttachmentSheet({ open, onClose, onPick }: Props) {
                 </button>
               </div>
 
-              <div className="px-4 grid grid-cols-4 gap-2 pb-4">
-                {items.map((it, i) => (
+              <div className="px-4 grid grid-cols-3 gap-3 pb-4">
+                {items.map((it) => (
                   <motion.button
                     key={it.id}
-                    initial={{ opacity: 0, y: 24, scale: 0.9 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    transition={{
-                      delay: 0.05 + i * 0.03,
-                      type: "spring",
-                      stiffness: 280,
-                      damping: 22
-                    }}
-                    whileTap={{ scale: 0.92 }}
-                    whileHover={{ y: -3 }}
+                    whileTap={{ scale: 0.94 }}
                     onClick={() => {
                       onPick?.(it.id);
                       onClose();
                     }}
-                    className="flex flex-col items-center gap-1.5 py-3 rounded-2xl hover:bg-foreground/[0.04] transition group"
+                    className="flex flex-col items-center gap-2 py-4 rounded-2xl hover:bg-foreground/[0.04] transition-colors group"
                   >
                     <span
                       className={cn(
-                        "size-12 rounded-2xl bg-gradient-to-br grid place-items-center text-white shadow-[0_8px_24px_-6px_rgba(0,0,0,0.4)]",
-                        "[&_svg]:size-5 group-hover:shadow-glow transition-shadow",
+                        "size-16 rounded-2xl bg-gradient-to-br grid place-items-center text-white shadow-[0_8px_24px_-6px_rgba(0,0,0,0.4)]",
+                        "[&_svg]:size-7 group-hover:shadow-glow transition-shadow",
                         it.color
                       )}
                     >
                       {it.icon}
                     </span>
-                    <span className="text-[11px] font-medium">{it.label}</span>
+                    <span className="text-xs font-medium">{it.label}</span>
                   </motion.button>
                 ))}
               </div>

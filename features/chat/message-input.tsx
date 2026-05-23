@@ -3,15 +3,31 @@
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Plus, Smile, Mic, Sparkles, ArrowUp, Trash2, Play, Pause } from "lucide-react";
-import { AttachmentSheet } from "./attachment-sheet";
+import { AttachmentSheet, type AttachmentKind } from "./attachment-sheet";
+import {
+  CameraCaptureDialog,
+  ContactPickerDialog,
+  LocationPickerDialog,
+  ScheduleMessageDialog,
+  PollCreatorDialog
+} from "./attachment-dialogs";
 import { ExpressionsPicker, type ExpressionPick } from "./expressions-picker";
 import { useUIStore } from "@/store/use-ui-store";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { cn } from "@/lib/utils";
 
+import type { Message, PollOption } from "@/types";
+
 interface Props {
   onSend: (text: string) => void;
   onSendVoice?: (durationSec: number, waveform: number[]) => void;
+  onSendAttachment?: (
+    payload: Partial<Message> & { kind: Message["kind"]; content?: string }
+  ) => void;
+  /** Fires when the expressions picker opens or closes so the parent can
+   *  scroll the chat to the latest message (since the picker covers the
+   *  bottom half on mobile). */
+  onPickerToggle?: (open: boolean) => void;
   themeBubbleMe?: string;
   themeAccent?: string;
 }
@@ -26,11 +42,112 @@ const VIS_BARS = 128; // bars in the live visualiser — dense like WhatsApp
 
 type RecState = "idle" | "recording" | "preview";
 
-export function MessageInput({ onSend, onSendVoice, themeBubbleMe, themeAccent }: Props) {
+export function MessageInput({
+  onSend,
+  onSendVoice,
+  onSendAttachment,
+  onPickerToggle,
+  themeBubbleMe,
+  themeAccent
+}: Props) {
   const [text, setText] = React.useState("");
   const [showAi, setShowAi] = React.useState(false);
   const [attachOpen, setAttachOpen] = React.useState(false);
   const [exprOpen, setExprOpen] = React.useState(false);
+
+  /* ----- attachment dialogs ----- */
+  const [cameraOpen, setCameraOpen] = React.useState(false);
+  const [contactOpen, setContactOpen] = React.useState(false);
+  const [locationOpen, setLocationOpen] = React.useState(false);
+  const [scheduleOpen, setScheduleOpen] = React.useState(false);
+  const [pollOpen, setPollOpen] = React.useState(false);
+
+  const photoInputRef = React.useRef<HTMLInputElement>(null);
+  const videoInputRef = React.useRef<HTMLInputElement>(null);
+  const docInputRef = React.useRef<HTMLInputElement>(null);
+  const audioInputRef = React.useRef<HTMLInputElement>(null);
+
+  const onFile = (kind: "photo" | "video" | "doc" | "music") =>
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(e.target.files ?? []);
+      if (files.length === 0) return;
+
+      if (kind === "photo") {
+        // Batch every selected image into one message → WhatsApp-style grid.
+        const media = files.map((f) => ({
+          url: URL.createObjectURL(f),
+          alt: f.name,
+          mime: f.type
+        }));
+        onSendAttachment?.({ kind: "image", media });
+      } else if (kind === "video") {
+        // Same for videos.
+        const media = files.map((f) => ({
+          url: URL.createObjectURL(f),
+          alt: f.name,
+          mime: f.type
+        }));
+        onSendAttachment?.({ kind: "video", media });
+      } else if (kind === "music") {
+        files.forEach((f) =>
+          onSendAttachment?.({
+            kind: "audio",
+            audio: { url: URL.createObjectURL(f), name: f.name, size: f.size }
+          })
+        );
+      } else {
+        files.forEach((f) =>
+          onSendAttachment?.({
+            kind: "file",
+            file: {
+              url: URL.createObjectURL(f),
+              name: f.name,
+              size: f.size,
+              mime: f.type
+            }
+          })
+        );
+      }
+      e.target.value = "";
+    };
+
+  const handleAttach = (id: AttachmentKind) => {
+    switch (id) {
+      case "photo":
+        photoInputRef.current?.click();
+        break;
+      case "video":
+        videoInputRef.current?.click();
+        break;
+      case "doc":
+        docInputRef.current?.click();
+        break;
+      case "music":
+        audioInputRef.current?.click();
+        break;
+      case "camera":
+        setCameraOpen(true);
+        break;
+      case "contact":
+        setContactOpen(true);
+        break;
+      case "location":
+        setLocationOpen(true);
+        break;
+      case "schedule":
+        setScheduleOpen(true);
+        break;
+      case "poll":
+        setPollOpen(true);
+        break;
+    }
+  };
+
+  // Notify parent so the chat thread can scroll to bottom whenever the
+  // picker's visibility changes (the mobile picker takes ~52dvh).
+  React.useEffect(() => {
+    onPickerToggle?.(exprOpen);
+  }, [exprOpen, onPickerToggle]);
   const [focused, setFocused] = React.useState(false);
   const setAi = useUIStore((s) => s.setAiAssistantOpen);
   const isDesktop = useMediaQuery("(min-width: 768px)");
@@ -319,11 +436,26 @@ export function MessageInput({ onSend, onSendVoice, themeBubbleMe, themeAccent }
       return;
     }
     if (pick.kind === "gif") {
-      onSend(`🎞 GIF · ${pick.gif.alt}`);
+      onSendAttachment?.({
+        kind: "gif",
+        gif: { src: pick.gif.src, alt: pick.gif.alt }
+      });
     } else if (pick.kind === "sticker") {
-      onSend(`${pick.sticker.emoji}`);
+      if (pick.sticker.emoji) {
+        // bundled sticker — just send the emoji as text
+        onSend(pick.sticker.emoji);
+      } else if (pick.sticker.src) {
+        onSendAttachment?.({
+          kind: "sticker",
+          sticker: { src: pick.sticker.src, alt: pick.sticker.alt }
+        });
+      }
     } else if (pick.kind === "meme") {
-      onSend(`🖼 ${pick.meme.caption}`);
+      onSendAttachment?.({
+        kind: "image",
+        media: [{ url: pick.meme.src, alt: pick.meme.caption }],
+        content: pick.meme.caption
+      });
     }
     setExprOpen(false);
   };
@@ -367,6 +499,7 @@ export function MessageInput({ onSend, onSendVoice, themeBubbleMe, themeAccent }
 
   return (
     <div
+      data-keep-picker-open
       className={cn(
         "relative px-3 md:px-4 pt-2 pb-3",
         liftAbovePicker &&
@@ -577,6 +710,10 @@ export function MessageInput({ onSend, onSendVoice, themeBubbleMe, themeAccent }
       <AttachmentSheet
         open={attachOpen}
         onClose={() => setAttachOpen(false)}
+        onPick={(id) => {
+          setAttachOpen(false);
+          handleAttach(id);
+        }}
       />
 
       <ExpressionsPicker
@@ -584,6 +721,97 @@ export function MessageInput({ onSend, onSendVoice, themeBubbleMe, themeAccent }
         onClose={() => setExprOpen(false)}
         onPick={handleExpression}
         anchorRef={emojiBtnRef}
+      />
+
+      {/* Hidden file inputs — triggered by the AttachmentSheet picks */}
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/*"
+        multiple
+        hidden
+        onChange={onFile("photo")}
+      />
+      <input
+        ref={videoInputRef}
+        type="file"
+        accept="video/*"
+        multiple
+        hidden
+        onChange={onFile("video")}
+      />
+      <input
+        ref={docInputRef}
+        type="file"
+        accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar"
+        multiple
+        hidden
+        onChange={onFile("doc")}
+      />
+      <input
+        ref={audioInputRef}
+        type="file"
+        accept="audio/*"
+        multiple
+        hidden
+        onChange={onFile("music")}
+      />
+
+      <CameraCaptureDialog
+        open={cameraOpen}
+        onClose={() => setCameraOpen(false)}
+        onCapture={(dataUrl) => {
+          onSendAttachment?.({
+            kind: "image",
+            media: [{ url: dataUrl, alt: "Camera capture", mime: "image/jpeg" }]
+          });
+        }}
+      />
+
+      <ContactPickerDialog
+        open={contactOpen}
+        onClose={() => setContactOpen(false)}
+        onPick={(contacts) => {
+          onSendAttachment?.({ kind: "contact", contacts });
+        }}
+      />
+
+      <LocationPickerDialog
+        open={locationOpen}
+        onClose={() => setLocationOpen(false)}
+        onPick={(loc) => {
+          onSendAttachment?.({
+            kind: "location",
+            location: { lat: loc.lat, lng: loc.lng, live: loc.live }
+          });
+        }}
+      />
+
+      <ScheduleMessageDialog
+        open={scheduleOpen}
+        onClose={() => setScheduleOpen(false)}
+        onSchedule={(when, message) => {
+          onSendAttachment?.({
+            kind: "schedule",
+            schedule: { whenIso: when.toISOString(), message }
+          });
+        }}
+      />
+
+      <PollCreatorDialog
+        open={pollOpen}
+        onClose={() => setPollOpen(false)}
+        onCreate={(poll) => {
+          const options: PollOption[] = poll.options.map((text, i) => ({
+            id: `o-${i}-${Math.random().toString(36).slice(2, 6)}`,
+            text,
+            voters: []
+          }));
+          onSendAttachment?.({
+            kind: "poll",
+            poll: { question: poll.question, options, multi: poll.multi }
+          });
+        }}
       />
     </div>
   );

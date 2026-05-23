@@ -281,16 +281,16 @@ export function ChatHeader({ chat }: { chat: Chat }) {
 
             <DropdownMenuSeparator />
 
-            <DropdownMenuItem className="text-amber-400 focus:text-amber-400">
+            <DropdownMenuItem className="text-rose-600 focus:text-rose-400">
               <Ban />
               Block contact
             </DropdownMenuItem>
-            <DropdownMenuItem className="text-rose-400 focus:text-rose-400">
+            <DropdownMenuItem className="text-rose-600 focus:text-rose-400">
               <Flag />
               Report
             </DropdownMenuItem>
             <DropdownMenuItem
-              className="text-rose-400 focus:text-rose-400"
+              className="text-rose-600 focus:text-rose-400"
               onSelect={() => {
                 removeChat(chat.id);
                 router.push("/chats");

@@ -91,7 +91,7 @@ export function UserProfileSheet({ chat, open, onOpenChange }: Props) {
             animate={{ x: 0 }}
             exit={{ x: "100%" }}
             transition={{ type: "spring", stiffness: 240, damping: 30 }}
-            className="fixed right-0 top-0 bottom-0 z-[101] w-full max-w-md glass-strong glass-specular border-l border-white/15 shadow-floating overflow-y-auto no-scrollbar rounded-full"
+            className="fixed right-0 top-0 bottom-0 z-[101] w-full max-w-md glass-strong glass-specular border-l border-white/15 shadow-floating overflow-y-auto no-scrollbar"
           >
             <Header chat={chat} onClose={() => onOpenChange(false)} />
 
