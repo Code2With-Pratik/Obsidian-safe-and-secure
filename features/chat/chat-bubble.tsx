@@ -129,7 +129,7 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
           </div>
         )}
 
-        <div className="relative">
+        <div className={cn("relative w-fit", me && "ml-auto self-end")}>
           <BubbleBody
             me={me}
             message={message}
@@ -278,7 +278,7 @@ function BubbleBody({
   const themStyleProp = undefined;
 
   if (message.kind === "image" && message.media && message.media.length > 0) {
-    return <ImageGridBubble message={message} />;
+    return <ImageGridBubble me={me} message={message} />;
   }
 
   if (message.kind === "video" && message.media) {
@@ -297,7 +297,12 @@ function BubbleBody({
 
   if (message.kind === "gif" && message.gif) {
     return (
-      <div className="rounded-2xl overflow-hidden ring-1 ring-border/40 max-w-[min(280px,100%)]">
+      <div
+        className={cn(
+          "rounded-2xl overflow-hidden ring-1 ring-border/40 max-w-[min(280px,100%)] w-fit",
+          me && "ml-auto"
+        )}
+      >
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={message.gif.src} alt={message.gif.alt ?? "GIF"} className="block w-full" />
       </div>
@@ -306,7 +311,7 @@ function BubbleBody({
 
   if (message.kind === "sticker" && message.sticker) {
     return (
-      <div className="bg-transparent">
+      <div className={cn("bg-transparent w-fit", me && "ml-auto")}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={message.sticker.src}
@@ -708,11 +713,16 @@ type SubProps = {
 };
 
 /** Video preview — native <video> with controls. */
-function VideoBubble({ message }: SubProps) {
+function VideoBubble({ me, message }: SubProps) {
   const src = message.media?.[0]?.url;
   if (!src) return null;
   return (
-    <div className="rounded-2xl overflow-hidden ring-1 ring-border/60 w-full max-w-[22rem] bg-black/40">
+    <div
+      className={cn(
+        "rounded-2xl overflow-hidden ring-1 ring-border/60 w-fit max-w-[22rem] bg-black/40",
+        me && "ml-auto"
+      )}
+    >
       <video
         src={src}
         controls
@@ -1075,7 +1085,35 @@ function ScheduleBubble({ me, bubbleMe, meStyle, message }: SubProps) {
 /** WhatsApp-style image grid (1, 2, 3, 4, 4+N tiles). Tapping any tile opens
  *  the lightbox; the lightbox is given the full ordered list of images in
  *  this single message so swipe-prev/next stays grouped. */
-function ImageGridBubble({ message }: { message: Message }) {
+/** Renders a media URL — uses <video> for mp4/webm, otherwise <img>. */
+function MediaTile({
+  src,
+  alt,
+  className
+}: {
+  src: string;
+  alt?: string;
+  className?: string;
+}) {
+  const isVideo = /\.(mp4|webm|mov|m4v)(\?|$)/i.test(src);
+  if (isVideo) {
+    return (
+      <video
+        src={src}
+        autoPlay
+        muted
+        loop
+        playsInline
+        preload="metadata"
+        className={className}
+      />
+    );
+  }
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={src} alt={alt ?? ""} className={className} loading="lazy" />;
+}
+
+function ImageGridBubble({ me, message }: { me: boolean; message: Message }) {
   const lb = useImageLightbox();
   const media = (message.media ?? []).filter((m) => m.url);
   const n = media.length;
@@ -1092,8 +1130,7 @@ function ImageGridBubble({ message }: { message: Message }) {
         onClick={() => open(0)}
         className="block w-full max-h-80 overflow-hidden"
       >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={media[0].url} alt={media[0].alt ?? ""} className="w-full max-h-80 object-cover" />
+        <MediaTile src={media[0].url} alt={media[0].alt} className="w-full max-h-80 object-cover" />
       </button>
     );
   } else if (n === 2) {
@@ -1101,30 +1138,25 @@ function ImageGridBubble({ message }: { message: Message }) {
       <div className="grid grid-cols-2 gap-[2px]">
         {media.map((m, i) => (
           <button key={i} type="button" onClick={() => open(i)} className="aspect-square overflow-hidden">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={m.url} alt={m.alt ?? ""} className="w-full h-full object-cover" />
+            <MediaTile src={m.url} alt={m.alt} className="w-full h-full object-cover" />
           </button>
         ))}
       </div>
     );
   } else if (n === 3) {
-    // Big left tile + two stacked right tiles
     grid = (
       <div className="grid grid-cols-2 gap-[2px] aspect-[4/3]">
         <button type="button" onClick={() => open(0)} className="row-span-2 overflow-hidden">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={media[0].url} alt={media[0].alt ?? ""} className="w-full h-full object-cover" />
+          <MediaTile src={media[0].url} alt={media[0].alt} className="w-full h-full object-cover" />
         </button>
         {[1, 2].map((i) => (
           <button key={i} type="button" onClick={() => open(i)} className="overflow-hidden">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={media[i].url} alt={media[i].alt ?? ""} className="w-full h-full object-cover" />
+            <MediaTile src={media[i].url} alt={media[i].alt} className="w-full h-full object-cover" />
           </button>
         ))}
       </div>
     );
   } else {
-    // 4 or more: 2x2 grid; if more than 4, overlay "+N" on the 4th tile.
     const shown = media.slice(0, 4);
     const overflow = n - 4;
     grid = (
@@ -1138,8 +1170,7 @@ function ImageGridBubble({ message }: { message: Message }) {
               onClick={() => open(i)}
               className="relative aspect-square overflow-hidden"
             >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={m.url} alt={m.alt ?? ""} className="w-full h-full object-cover" />
+              <MediaTile src={m.url} alt={m.alt} className="w-full h-full object-cover" />
               {isLastSpot && (
                 <div className="absolute inset-0 bg-black/55 grid place-items-center text-white text-2xl font-semibold">
                   +{overflow}
@@ -1153,7 +1184,12 @@ function ImageGridBubble({ message }: { message: Message }) {
   }
 
   return (
-    <div className="rounded-2xl overflow-hidden glass border border-border/60 w-full max-w-[22rem]">
+    <div
+      className={cn(
+        "rounded-2xl overflow-hidden glass border border-border/60 w-fit max-w-[22rem]",
+        me && "ml-auto"
+      )}
+    >
       {grid}
       {message.content && <div className="px-3 py-2 text-sm">{message.content}</div>}
     </div>

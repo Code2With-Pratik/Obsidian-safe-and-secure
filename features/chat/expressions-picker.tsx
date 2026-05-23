@@ -748,32 +748,50 @@ function MemePanel({
         </p>
       ) : (
         <div className="grid grid-cols-2 gap-2">
-          {memes.map((m) => (
-            <motion.button
-              key={m.id}
-              whileHover={{ y: -2 }}
-              whileTap={{ scale: 0.97 }}
-              onClick={() => onPick(m)}
-              className="relative aspect-[4/5] rounded-xl overflow-hidden glass border border-white/10 group"
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={m.src}
-                alt={m.caption}
-                className="absolute inset-0 w-full h-full object-cover transition group-hover:scale-105"
-                loading="lazy"
-              />
-              <div className="absolute inset-0 bg-gradient-to-b from-black/15 via-transparent to-black/75" />
-              {m.tag && (
-                <span className="absolute top-2 right-2 text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-white/15 backdrop-blur text-white">
-                  {m.tag}
-                </span>
-              )}
-              <p className="absolute left-2.5 right-2.5 bottom-2 text-[11px] font-semibold text-white leading-tight line-clamp-2">
-                {m.caption}
-              </p>
-            </motion.button>
-          ))}
+          {memes.map((m) => {
+            const isVideo = /\.(mp4|webm|mov|m4v)(\?|$)/i.test(m.src);
+            return (
+              <motion.button
+                key={m.id}
+                whileHover={{ y: -2 }}
+                whileTap={{ scale: 0.97 }}
+                onClick={() => onPick(m)}
+                className="relative aspect-[4/5] rounded-xl overflow-hidden glass border border-white/10 group bg-foreground/5"
+              >
+                {isVideo ? (
+                  // Klipy clips are often mp4; render with <video> so the
+                  // browser can decode the frames. Looping silent preview
+                  // gives the same vibe as a GIF tile.
+                  <video
+                    src={m.src}
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    preload="metadata"
+                    className="absolute inset-0 w-full h-full object-cover transition group-hover:scale-105"
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={m.src}
+                    alt={m.caption}
+                    className="absolute inset-0 w-full h-full object-cover transition group-hover:scale-105"
+                    loading="lazy"
+                  />
+                )}
+                <div className="absolute inset-0 bg-gradient-to-b from-black/15 via-transparent to-black/75" />
+                {m.tag && (
+                  <span className="absolute top-2 right-2 text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-md bg-white/15 backdrop-blur text-white">
+                    {m.tag}
+                  </span>
+                )}
+                <p className="absolute left-2.5 right-2.5 bottom-2 text-[11px] font-semibold text-white leading-tight line-clamp-2">
+                  {m.caption}
+                </p>
+              </motion.button>
+            );
+          })}
         </div>
       )}
     </div>
