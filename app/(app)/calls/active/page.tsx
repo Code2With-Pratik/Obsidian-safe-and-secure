@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { Lock, Radio, Sparkles, Timer, ChevronLeft } from "lucide-react";
 import { VideoGrid } from "@/features/calls/video-grid";
-import { CallControls } from "@/features/calls/call-controls";
+import { CallControls, CALL_FILTERS } from "@/features/calls/call-controls";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { callParticipants } from "@/lib/mock-data";
@@ -32,6 +32,9 @@ export default function ActiveCall() {
   const startCall = useUIStore((s) => s.startCall);
   const endCall = useUIStore((s) => s.endCall);
   const setMiniCallOpen = useUIStore((s) => s.setMiniCallOpen);
+  const [filterId, setFilterId] = React.useState("none");
+  const filterCss =
+    CALL_FILTERS.find((f) => f.id === filterId)?.css ?? "none";
 
   // If someone lands on /calls/active without an active call (e.g. deep link),
   // create a demo call so the page renders meaningfully.
@@ -51,8 +54,13 @@ export default function ActiveCall() {
     // edge to edge; the top status row and the bottom controls float ON
     // TOP of it (absolute positioning + pointer-events isolation).
     <div className="fixed inset-0 z-[100] overflow-hidden bg-background">
-      {/* 1. Video stage — true fullscreen */}
-      <div className="absolute inset-0">
+      {/* 1. Video stage — true fullscreen. The CSS `filter` applies to the
+              whole stage (the remote video + the PiP self-view); the floating
+              UI sits in a separate sibling so it stays crisp. */}
+      <div
+        className="absolute inset-0 transition-[filter] duration-200"
+        style={{ filter: filterCss }}
+      >
         <VideoGrid
           participants={
             activeCall?.group
@@ -115,6 +123,8 @@ export default function ActiveCall() {
       <div className="absolute bottom-0 inset-x-0 z-10 pb-[max(1rem,env(safe-area-inset-bottom))] grid place-items-center pointer-events-none">
         <div className="pointer-events-auto">
           <CallControls
+            filterId={filterId}
+            onFilterChange={setFilterId}
             onEnd={() => {
               const back = activeCall?.returnTo ?? "/chats";
               endCall();
