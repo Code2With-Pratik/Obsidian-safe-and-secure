@@ -50,7 +50,18 @@ import { UserProfileSheet } from "./user-profile-sheet";
 import { ChatThemeDialog } from "./chat-theme-dialog";
 import type { Chat } from "@/types";
 
-export function ChatHeader({ chat }: { chat: Chat }) {
+export function ChatHeader({
+  chat,
+  search,
+  onSearchChange,
+  onCloseSearch
+}: {
+  chat: Chat;
+  /** When non-null the header shows the search input instead of the title. */
+  search?: string | null;
+  onSearchChange?: (value: string) => void;
+  onCloseSearch?: () => void;
+}) {
   const router = useRouter();
   const startCallStore = useUIStore((s) => s.startCall);
   const chats = useChatStore((s) => s.chats);
@@ -71,7 +82,20 @@ export function ChatHeader({ chat }: { chat: Chat }) {
   const [themeOpen, setThemeOpen] = React.useState(false);
 
   const startCall = (video: boolean) => {
-    startCallStore({ chatId: chat.id, name: chat.name, avatar: chat.avatar, video });
+    // Group / channel / ghost-room chats start a multi-party call; a DM is 1-on-1.
+    const isGroup = chat.type !== "dm" && chat.type !== "secret";
+    startCallStore({
+      chatId: chat.id,
+      name: chat.name,
+      avatar: chat.avatar,
+      video,
+      group: isGroup,
+      participants: isGroup
+        ? Math.max(2, chat.memberIds?.length ?? chat.membersCount ?? 4)
+        : 2,
+      // Send the user back to this exact chat when they hang up.
+      returnTo: `/chats/${chat.id}`
+    });
     router.push("/calls/active");
   };
 
@@ -148,49 +172,89 @@ export function ChatHeader({ chat }: { chat: Chat }) {
     );
   }
 
+  const searchActive = search != null;
+
   return (
     <div className="relative z-10 flex items-center gap-3 px-3 md:px-5 h-16 border-b border-border/40 backdrop-blur-2xl backdrop-saturate-180 bg-card/70 dark:bg-card/65 glass-specular shadow-[0_8px_24px_-16px_rgba(0,0,0,0.5)]">
-      <Link href="/chats" className="md:hidden">
-        <Button variant="ghost" size="icon" className="[&_svg]:size-7 dark:text-white dark:hover:text-white">
-          <ChevronLeft />
-        </Button>
-      </Link>
-
-      <button
-        onClick={() => setProfileOpen(true)}
-        className="flex items-center gap-3 flex-1 min-w-0 hover:bg-foreground/[0.03] -ml-2 pl-2 py-1.5 rounded-xl transition group"
-      >
-        <AnimatedAvatar
-          src={chat.avatar}
-          name={chat.name}
-          size={40}
-          status={chat.online ? "online" : "offline"}
-          pulse={false}
-          breathe={false}
-          ring={false}
-          hoverLift={false}
-        />
-        <div className="flex-1 min-w-0 text-left">
-          <div className="flex items-center gap-2">
-            <span className="font-semibold truncate">{chat.name}</span>
-            {chat.encrypted && <Lock className="size-3.5 text-emerald-400" />}
-            {chat.type === "ghost" && (
-              <Badge variant="glass" className="!text-[10px]">
-                <Ghost className="size-2.5" /> ghost
-              </Badge>
+      {searchActive ? (
+        <>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => onCloseSearch?.()}
+            aria-label="Close search"
+            className="[&_svg]:size-[22px] dark:text-white dark:hover:text-white"
+          >
+            <ChevronLeft />
+          </Button>
+          <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground pointer-events-none" />
+            <input
+              autoFocus
+              value={search ?? ""}
+              onChange={(e) => onSearchChange?.(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") onCloseSearch?.();
+              }}
+              placeholder={`Search in ${chat.name}…`}
+              className="w-full h-10 pl-9 pr-9 rounded-full glass-subtle border border-border/60 bg-transparent text-sm outline-none focus:ring-2 focus:ring-cyan-400/60 placeholder:text-muted-foreground/70"
+            />
+            {search && search.length > 0 && (
+              <button
+                onClick={() => onSearchChange?.("")}
+                aria-label="Clear search"
+                className="absolute right-2 top-1/2 -translate-y-1/2 size-6 rounded-full grid place-items-center hover:bg-foreground/10"
+              >
+                <XIcon className="size-3.5" />
+              </button>
             )}
           </div>
-          <div className="text-[11px] text-muted-foreground truncate">
-            {chat.type === "group" || chat.type === "channel"
-              ? `${chat.membersCount} members · ${Math.floor((chat.membersCount ?? 0) / 5)} online`
-              : chat.online
-              ? "online · typing…"
-              : "last seen 2h ago"}
-          </div>
-        </div>
-      </button>
+        </>
+      ) : (
+        <>
+          <Link href="/chats" className="md:hidden">
+            <Button variant="ghost" size="icon" className="[&_svg]:size-7 dark:text-white dark:hover:text-white">
+              <ChevronLeft />
+            </Button>
+          </Link>
 
-      <div className="flex items-center gap-1">
+          <button
+            onClick={() => setProfileOpen(true)}
+            className="flex items-center gap-3 flex-1 min-w-0 hover:bg-foreground/[0.03] -ml-2 pl-2 py-1.5 rounded-xl transition group"
+          >
+            <AnimatedAvatar
+              src={chat.avatar}
+              name={chat.name}
+              size={40}
+              status={chat.online ? "online" : "offline"}
+              pulse={false}
+              breathe={false}
+              ring={false}
+              hoverLift={false}
+            />
+            <div className="flex-1 min-w-0 text-left">
+              <div className="flex items-center gap-2">
+                <span className="font-semibold truncate">{chat.name}</span>
+                {chat.encrypted && <Lock className="size-3.5 text-emerald-400" />}
+                {chat.type === "ghost" && (
+                  <Badge variant="glass" className="!text-[10px]">
+                    <Ghost className="size-2.5" /> ghost
+                  </Badge>
+                )}
+              </div>
+              <div className="text-[11px] text-muted-foreground truncate">
+                {chat.type === "group" || chat.type === "channel"
+                  ? `${chat.membersCount} members · ${Math.floor((chat.membersCount ?? 0) / 5)} online`
+                  : chat.online
+                  ? "online · typing…"
+                  : "last seen 2h ago"}
+              </div>
+            </div>
+          </button>
+        </>
+      )}
+
+      <div className={`flex items-center gap-1 ${searchActive ? "hidden" : ""}`}>
         <Button
           variant="ghost"
           size="icon"
@@ -212,7 +276,10 @@ export function ChatHeader({ chat }: { chat: Chat }) {
         <Button
           variant="ghost"
           size="icon"
-          className="hidden md:inline-flex [&_svg]:size-[22px] dark:text-white dark:hover:text-white"
+          onClick={() => onSearchChange?.("")}
+          title="Search in chat"
+          aria-label="Search messages"
+          className="[&_svg]:size-[22px] dark:text-white dark:hover:text-white"
         >
           <Search />
         </Button>

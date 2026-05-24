@@ -31,6 +31,7 @@ export default function ActiveCall() {
   const activeCall = useUIStore((s) => s.activeCall);
   const startCall = useUIStore((s) => s.startCall);
   const endCall = useUIStore((s) => s.endCall);
+  const setMiniCallOpen = useUIStore((s) => s.setMiniCallOpen);
 
   // If someone lands on /calls/active without an active call (e.g. deep link),
   // create a demo call so the page renders meaningfully.
@@ -46,17 +47,39 @@ export default function ActiveCall() {
   }, [activeCall, startCall]);
 
   return (
-    <div className="relative h-[calc(100dvh-4rem)] overflow-hidden">
-      <div className="absolute inset-0 -z-10">
-        <div className="absolute inset-0 aurora-bg opacity-50" />
+    // Fullscreen overlay. The video stage fills the entire viewport from
+    // edge to edge; the top status row and the bottom controls float ON
+    // TOP of it (absolute positioning + pointer-events isolation).
+    <div className="fixed inset-0 z-[100] overflow-hidden bg-background">
+      {/* 1. Video stage — true fullscreen */}
+      <div className="absolute inset-0">
+        <VideoGrid
+          participants={
+            activeCall?.group
+              ? callParticipants.slice(0, Math.min(callParticipants.length, activeCall.participants ?? 4))
+              : callParticipants.slice(0, 2)
+          }
+        />
       </div>
 
-      <div className="flex items-center justify-between px-4 md:px-6 py-3">
+      {/* 2. Soft gradients top & bottom so floating UI stays readable
+              against any video frame underneath. */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-black/50 to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-40 bg-gradient-to-t from-black/55 to-transparent" />
+
+      {/* 3. Top status row — Minimize + LIVE/timer/encrypted + bitrate */}
+      <div className="absolute top-0 inset-x-0 z-10 flex items-center justify-between gap-2 px-3 md:px-6 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 pointer-events-none">
         <Button
           variant="glass"
           size="sm"
-          onClick={() => router.push("/chats")}
+          onClick={() => {
+            // Mark the call as minimized BEFORE navigating so the floating
+            // dock knows to appear on the destination route.
+            setMiniCallOpen(true);
+            router.push(activeCall?.returnTo ?? "/chats");
+          }}
           title="Minimize — the call keeps running"
+          className="pointer-events-auto"
         >
           <ChevronLeft /> Minimize
         </Button>
@@ -64,7 +87,7 @@ export default function ActiveCall() {
         <motion.div
           initial={{ opacity: 0, y: -10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="flex items-center gap-3 glass-strong rounded-full px-4 py-1.5 border border-border/60"
+          className="pointer-events-auto flex items-center gap-3 glass-strong rounded-full px-4 py-1.5 border border-border/60"
         >
           <div className="flex items-center gap-1.5">
             <span className="size-2 rounded-full bg-rose-500 animate-pulse" />
@@ -72,33 +95,33 @@ export default function ActiveCall() {
           </div>
           <span className="text-muted-foreground/60">·</span>
           <Timer01 />
-          <span className="text-muted-foreground/60">·</span>
-          <span className="text-xs text-muted-foreground inline-flex items-center gap-1">
+          <span className="text-muted-foreground/60 hidden md:inline">·</span>
+          <span className="hidden md:inline-flex text-xs text-muted-foreground items-center gap-1">
             <Lock className="size-3 text-emerald-400" /> Encrypted
           </span>
         </motion.div>
 
-        <div className="flex items-center gap-2">
+        <div className="pointer-events-auto flex items-center gap-2">
           <Badge variant="cyan" className="hidden md:inline-flex">
             <Sparkles className="size-3" /> AI noise cancel · on
           </Badge>
-          <Badge variant="success">
+          <Badge variant="success" className="hidden sm:inline-flex">
             <Radio className="size-3" /> 320 kbps
           </Badge>
         </div>
       </div>
 
-      <div className="flex-1 px-3 md:px-6 pb-32 h-[calc(100%-180px)]">
-        <VideoGrid participants={callParticipants} />
-      </div>
-
-      <div className="absolute bottom-6 left-0 right-0 grid place-items-center">
-        <CallControls
-          onEnd={() => {
-            endCall();
-            router.push("/calls");
-          }}
-        />
+      {/* 4. Bottom floating controls */}
+      <div className="absolute bottom-0 inset-x-0 z-10 pb-[max(1rem,env(safe-area-inset-bottom))] grid place-items-center pointer-events-none">
+        <div className="pointer-events-auto">
+          <CallControls
+            onEnd={() => {
+              const back = activeCall?.returnTo ?? "/chats";
+              endCall();
+              router.push(back);
+            }}
+          />
+        </div>
       </div>
     </div>
   );

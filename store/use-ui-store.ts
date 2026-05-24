@@ -7,6 +7,12 @@ export interface ActiveCall {
   name: string;
   avatar?: string;
   video: boolean;
+  /** true if the originating chat is a group/channel rather than a 1-on-1 DM. */
+  group?: boolean;
+  /** number of participants when known — drives the group call grid layout. */
+  participants?: number;
+  /** route to send the user back to when the call ends (defaults to the chat). */
+  returnTo?: string;
   startedAt: number;
 }
 

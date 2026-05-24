@@ -48,6 +48,12 @@ export function ChatThread({ chat }: { chat: Chat }) {
   }, [overrideThemeId, overrideCustomBg, globalThemeId, globalCustomBg]);
   const endRef = useRef<HTMLDivElement>(null);
   const [pickerOpen, setPickerOpen] = React.useState(false);
+  /** WhatsApp-style in-chat search. `null` = closed, `""` = open empty, "foo" = active. */
+  const [search, setSearch] = React.useState<string | null>(null);
+  // Clear search whenever the active chat changes.
+  React.useEffect(() => {
+    setSearch(null);
+  }, [chat.id]);
   const isDesktop = useMediaQuery("(min-width: 768px)");
   // Lift the last message above the picker only on mobile (the picker is a
   // bottom sheet there). On desktop the picker is a small floating popover
@@ -58,8 +64,34 @@ export function ChatThread({ chat }: { chat: Chat }) {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [messages.length]);
 
-  const grouped = groupByDay(messages);
+  // When the search has a non-empty query, narrow the list to messages whose
+  // content (or attachment names) contain it. Matches are case-insensitive.
+  const visibleMessages = React.useMemo(() => {
+    const q = (search ?? "").trim().toLowerCase();
+    if (!q) return messages;
+    return messages.filter((m) => {
+      if (m.kind === "system") return false;
+      const haystack =
+        (m.content ?? "") +
+        " " +
+        (m.audio?.name ?? "") +
+        " " +
+        (m.file?.name ?? "") +
+        " " +
+        (m.link?.title ?? "") +
+        " " +
+        (m.poll?.question ?? "") +
+        " " +
+        (m.contacts?.map((c) => c.name).join(" ") ?? "");
+      return haystack.toLowerCase().includes(q);
+    });
+  }, [messages, search]);
+
+  const grouped = groupByDay(visibleMessages);
   const pinned = messages.find((m) => m.pinned);
+  const searchQuery = (search ?? "").trim();
+  const isSearching = searchQuery.length > 0;
+  const matchCount = isSearching ? visibleMessages.length : 0;
 
   return (
     <ImageLightboxProvider>
@@ -78,7 +110,19 @@ export function ChatThread({ chat }: { chat: Chat }) {
         />
       )}
       <div className="relative flex h-full flex-col">
-        <ChatHeader chat={chat} />
+        <ChatHeader
+          chat={chat}
+          search={search}
+          onSearchChange={setSearch}
+          onCloseSearch={() => setSearch(null)}
+        />
+        {isSearching && (
+          <div className="px-4 py-2 text-[11px] text-muted-foreground border-b border-border/40 bg-card/40 backdrop-blur">
+            {matchCount > 0
+              ? `${matchCount} ${matchCount === 1 ? "match" : "matches"} for "${searchQuery}"`
+              : `No matches for "${searchQuery}"`}
+          </div>
+        )}
         <PinnedBar pinned={pinned?.content} />
 
         <ScrollArea className="flex-1 px-3 md:px-6 py-4 scroll-fade-y" key={theme}>

@@ -27,7 +27,10 @@ export function CallControls({ onEnd }: { onEnd?: () => void }) {
     <motion.div
       initial={{ y: 30, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
-      className="mx-auto inline-flex items-center gap-1.5 glass-strong rounded-full px-3 py-2.5 border border-border/60 shadow-floating"
+      // On mobile the controls float free over the call — no pill background.
+      // On desktop we keep the glass capsule so the buttons stay readable
+      // against any backdrop.
+      className="mx-auto inline-flex items-center gap-2 px-3 py-2.5 md:gap-1.5 md:rounded-full md:glass-strong md:border md:border-border/60 md:shadow-floating"
     >
       <ControlButton
         active={!muted}
@@ -47,29 +50,35 @@ export function CallControls({ onEnd }: { onEnd?: () => void }) {
       >
         {camOff ? <VideoOff /> : <Video />}
       </ControlButton>
-      <ControlButton
-        active={share}
-        toggled={share}
-        onClick={() => setShare((s) => !s)}
-        tooltip="Share screen"
-      >
-        <ScreenShare />
-      </ControlButton>
-      <ControlButton tooltip="Reactions">
+      {/* Mobile shows only mic, video, filter, end. Everything else is
+          desktop-only so the call tray on small screens stays compact. */}
+      <span className="hidden md:contents">
+        <ControlButton
+          active={share}
+          toggled={share}
+          onClick={() => setShare((s) => !s)}
+          tooltip="Share screen"
+        >
+          <ScreenShare />
+        </ControlButton>
+      </span>
+      <ControlButton tooltip="Filters & effects">
         <Wand2 />
       </ControlButton>
-      <ControlButton tooltip="Raise hand">
-        <Hand />
-      </ControlButton>
-      <ControlButton tooltip="Participants">
-        <Users />
-      </ControlButton>
-      <ControlButton tooltip="Chat">
-        <MessageSquare />
-      </ControlButton>
-      <ControlButton tooltip="More">
-        <MoreHorizontal />
-      </ControlButton>
+      <span className="hidden md:contents">
+        <ControlButton tooltip="Raise hand">
+          <Hand />
+        </ControlButton>
+        <ControlButton tooltip="Participants">
+          <Users />
+        </ControlButton>
+        <ControlButton tooltip="Chat">
+          <MessageSquare />
+        </ControlButton>
+        <ControlButton tooltip="More">
+          <MoreHorizontal />
+        </ControlButton>
+      </span>
 
       <button
         onClick={onEnd}
@@ -100,12 +109,15 @@ function ControlButton({
     <button
       onClick={onClick}
       className={cn(
-        "size-10 rounded-full grid place-items-center transition",
+        // Mobile: solid black glass pill per button (no parent capsule).
+        // Desktop: just a hover state since the parent capsule provides chrome.
+        "size-11 md:size-10 rounded-full grid place-items-center transition shrink-0",
+        "bg-black/45 backdrop-blur-md text-white md:bg-transparent md:text-foreground/80 md:backdrop-blur-0",
         danger
-          ? "bg-rose-500 text-white"
+          ? "!bg-rose-500 !text-white"
           : toggled
-          ? "bg-foreground/10 text-foreground"
-          : "hover:bg-foreground/10 text-foreground/80"
+          ? "!bg-rose-500/90 !text-white md:!bg-foreground/10 md:!text-foreground"
+          : "hover:bg-black/65 md:hover:bg-foreground/10"
       )}
     >
       {children}
