@@ -36,19 +36,24 @@ export function InterestMatchPopup({ open, count, communityName, onClose }: Prop
       {open && (
         <>
           {/* dimming layer */}
+          {/* Stacked above every other surface — including the Nova AI panel
+              and its dropdowns, which top out at z-[9999]. Inline style is
+              used so nothing in @layer utilities can override it. */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 z-[9998] bg-black/40 backdrop-blur-sm"
+            style={{ zIndex: 2147483646 }}
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm"
           />
           <motion.div
             initial={{ opacity: 0, scale: 0.85, y: 12 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.92, y: -10 }}
             transition={{ type: "spring", stiffness: 240, damping: 22 }}
-            className="fixed inset-0 z-[9999] grid place-items-center pointer-events-none px-4"
+            style={{ zIndex: 2147483647 }}
+            className="fixed inset-0 grid place-items-center pointer-events-none px-4"
           >
             <div className="pointer-events-auto relative w-full max-w-md rounded-3xl border border-white/15 overflow-hidden bg-gradient-to-br from-violet-600/40 via-fuchsia-500/30 to-cyan-400/30 backdrop-blur-2xl shadow-floating">
               {/* aurora wash */}

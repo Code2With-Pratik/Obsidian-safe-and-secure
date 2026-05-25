@@ -268,7 +268,7 @@ export function CreateCommunityDialog({
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 className={cn(
-                  "relative aspect-video rounded-xl overflow-hidden ring-2 transition grid place-items-center",
+                  "relative aspect-[3/2] md:aspect-video rounded-xl overflow-hidden ring-2 transition grid place-items-center",
                   customCover && cover === customCover
                     ? "ring-cyan-400 shadow-glow-cyan"
                     : "ring-white/10 hover:ring-white/30",
@@ -309,7 +309,7 @@ export function CreateCommunityDialog({
                     type="button"
                     onClick={() => setCover(c)}
                     className={cn(
-                      "relative aspect-video rounded-xl overflow-hidden ring-2 transition",
+                      "relative aspect-[3/2] md:aspect-video rounded-xl overflow-hidden ring-2 transition",
                       active
                         ? "ring-cyan-400 shadow-glow-cyan"
                         : "ring-white/10 hover:ring-white/30"

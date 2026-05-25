@@ -95,7 +95,9 @@ export default function CallsPage() {
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium">{h.user.name}</span>
                       {kindIcon[h.kind]}
-                      {h.video && <Video className="size-3 text-muted-foreground" />}
+                      {"video" in h && h.video && (
+                        <Video className="size-3 text-muted-foreground" />
+                      )}
                     </div>
                     <div className="text-xs text-muted-foreground">{h.time} · {h.duration}</div>
                   </div>

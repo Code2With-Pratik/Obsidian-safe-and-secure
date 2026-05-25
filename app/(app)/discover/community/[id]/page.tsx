@@ -47,8 +47,10 @@ export default function CommunityDetailPage() {
   // /discover (Discover page) for everywhere else.
   const searchParams = useSearchParams();
   const from = searchParams?.get("from");
-  const backHref = from === "chats" ? "/chats" : "/discover";
-  const backLabel = from === "chats" ? "Chats" : "Discover";
+  // When coming from the chats Community tab, send the user back to that
+  // exact tab — not the default Messages tab.
+  const backHref = from === "chats" ? "/chats?tab=community" : "/discover";
+  const backLabel = from === "chats" ? "Community" : "Discover";
   const community = useCommunityStore((s) =>
     s.communities.find((c) => c.id === params.id)
   );

@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   Pin,
@@ -82,6 +82,11 @@ export function ChatList({
   onSelect?: (id: string) => void;
 }) {
   const router = useRouter();
+  // `?tab=community` lands the chat list on the Community tab — used by the
+  // back button from the community detail page so users return to where they
+  // came from.
+  const searchParams = useSearchParams();
+  const initialTab = searchParams?.get("tab");
   const chats = useChatStore((s) => s.chats);
   const markRead = useChatStore((s) => s.markRead);
   const addGroup = useChatStore((s) => s.addGroup);
@@ -97,7 +102,16 @@ export function ChatList({
   const [filter, setFilter] = React.useState<Filter>("all");
   const [communityFilter, setCommunityFilter] =
     React.useState<CommunityFilter>("all");
-  const [view, setView] = React.useState<View>("messages");
+  const [view, setView] = React.useState<View>(
+    initialTab === "community" ? "community" : "messages"
+  );
+
+  // If the URL changes after mount (e.g. soft nav back), keep the tab in sync.
+  React.useEffect(() => {
+    if (initialTab === "community" && view !== "community") setView("community");
+    // Only react to a *change* in the param, not local toggle state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialTab]);
   const [q, setQ] = React.useState("");
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [groupOpen, setGroupOpen] = React.useState(false);
