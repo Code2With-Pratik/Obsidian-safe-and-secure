@@ -13,6 +13,12 @@ export interface ActiveCall {
   participants?: number;
   /** route to send the user back to when the call ends (defaults to the chat). */
   returnTo?: string;
+  /** When true, the caller's identity is hidden — the call surface brands as
+   *  "Ghost call" and the host is displayed as a randomized Ghost handle. */
+  ghost?: boolean;
+  /** Optional Ghost handle (e.g. "Ghost#1248") displayed in lieu of the host's
+   *  real name when `ghost` is true. */
+  ghostHandle?: string;
   startedAt: number;
 }
 

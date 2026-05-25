@@ -98,7 +98,22 @@ export interface Message {
   };
   contacts?: { name: string; username?: string; avatar?: string }[];
   location?: { lat: number; lng: number; live?: boolean };
-  schedule?: { whenIso: string; message: string };
+  schedule?: {
+    whenIso: string;
+    message: string;
+    /** If set, the scheduled item is a call invite. The bubble renders a
+     *  countdown + Join button until the start time elapses. */
+    callInvite?: {
+      /** Shared id across every invitee's copy of the same call — used to
+       *  dedupe in the Upcoming list and the View-all view. */
+      callId?: string;
+      video: boolean;
+      title: string;
+      /** Optional end time so we can show "Ends at X". */
+      endsAtIso?: string;
+      participantIds?: ID[];
+    };
+  };
   link?: { url: string; title: string; description?: string; image?: string };
   status?: "sending" | "sent" | "delivered" | "read";
 }

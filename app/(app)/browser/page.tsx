@@ -83,12 +83,23 @@ export default function BrowserPage() {
       <div className="flex items-center gap-1.5 px-2 pt-2 border-b border-border/40">
         <div className="flex items-center gap-1 flex-1 overflow-x-auto no-scrollbar">
           {tabs.map((t) => (
-            <motion.button
+            // Use a div as the tab wrapper so we can safely nest the close
+            // <button> inside. (HTML forbids button-inside-button which causes
+            // a hydration error.) The wrapper gets role="button" for a11y.
+            <motion.div
               key={t.id}
               layout
+              role="button"
+              tabIndex={0}
               onClick={() => setActive(t.id)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setActive(t.id);
+                }
+              }}
               className={cn(
-                "group inline-flex items-center gap-2 px-3 h-9 rounded-t-xl text-xs max-w-[200px] shrink-0 transition border-t border-x border-transparent",
+                "group inline-flex items-center gap-2 px-3 h-9 rounded-t-xl text-xs max-w-[200px] shrink-0 transition border-t border-x border-transparent cursor-pointer select-none",
                 active === t.id
                   ? "bg-background/60 backdrop-blur-xl border-border/60 text-foreground"
                   : "text-muted-foreground hover:bg-foreground/[0.04]"
@@ -102,10 +113,11 @@ export default function BrowserPage() {
                   closeTab(t.id);
                 }}
                 className="size-4 rounded grid place-items-center hover:bg-foreground/10 opacity-0 group-hover:opacity-100 transition"
+                aria-label={`Close ${t.title}`}
               >
                 <X className="size-3" />
               </button>
-            </motion.button>
+            </motion.div>
           ))}
           <Button variant="ghost" size="icon-sm" onClick={addTab}>
             <Plus />

@@ -2,11 +2,41 @@
 
 import * as React from "react";
 import { useRouter, usePathname } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import {
+  AnimatePresence,
+  animate,
+  motion,
+  useMotionValue,
+  type PanInfo
+} from "framer-motion";
 import { Phone, Mic, MicOff, Maximize2, Video, VideoOff, X } from "lucide-react";
 import { useUIStore } from "@/store/use-ui-store";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { initials, cn } from "@/lib/utils";
+
+/** Approximate dock dimensions — used to clamp inside the viewport. */
+const DOCK_W = 268;
+const DOCK_H = 220;
+const MARGIN = 20;
+/** Spring used to "magnetize" the dock to its nearest corner. */
+const SNAP_SPRING = { type: "spring" as const, stiffness: 320, damping: 28, mass: 0.7 };
+
+type Corner = "tl" | "tr" | "bl" | "br";
+
+/** Compute the top-left coordinates for one of the four anchor corners. */
+function cornerCoords(corner: Corner, w: number, h: number) {
+  const left = corner === "tl" || corner === "bl" ? MARGIN : w - DOCK_W - MARGIN;
+  const top = corner === "tl" || corner === "tr" ? MARGIN : h - DOCK_H - MARGIN;
+  return { x: Math.max(MARGIN, left), y: Math.max(MARGIN, top) };
+}
+
+/** Pick the corner closest to (centerX, centerY). */
+function nearestCorner(centerX: number, centerY: number, w: number, h: number): Corner {
+  const isRight = centerX > w / 2;
+  const isBottom = centerY > h / 2;
+  if (isBottom) return isRight ? "br" : "bl";
+  return isRight ? "tr" : "tl";
+}
 
 export function FloatingMiniCall() {
   const router = useRouter();
@@ -21,44 +51,40 @@ export function FloatingMiniCall() {
   /** Block drag-start when interacting with a button inside the dock. */
   const stopDrag = (e: React.PointerEvent) => e.stopPropagation();
 
-  // The dock is visible only when there's an active call AND the user has
-  // explicitly minimized it. This avoids the brief flash you'd otherwise see
-  // between startCall() and the navigation to /calls/active completing.
   const onCallRoute = pathname.startsWith("/calls/active");
   const visible = !!activeCall && miniCallOpen && !onCallRoute;
 
-  // Drag constraints — we anchor the dock at the bottom-left and let the
-  // user drag it across the whole viewport. Framer reads these on each
-  // pointer move so updating state on resize is enough.
-  const computeBounds = () => {
-    if (typeof window === "undefined") {
-      return { left: 0, right: 1200, top: -800, bottom: 100 };
-    }
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    const dockW = 268;
-    const dockH = 220;
-    const anchorLeft = 20;     // left-5
-    const anchorBottom = 20;   // bottom-5 / mobile bottom-24 ≈ 96 — use 20 for room
-    const safety = 8;
-    return {
-      // Left: can drag left until dock's left edge hits viewport edge.
-      left: -(anchorLeft - safety),
-      // Right: dock right edge can sit safety px from viewport right.
-      right: Math.max(0, w - dockW - anchorLeft - safety),
-      // Top: dock top edge can sit safety px from viewport top.
-      top: -Math.max(0, h - dockH - anchorBottom - safety),
-      // Bottom: tiny (already near bottom).
-      bottom: Math.max(0, anchorBottom - safety)
-    };
-  };
-  const [bounds, setBounds] = React.useState(computeBounds);
+  // Motion values for the dock's top-left position in viewport coords. The
+  // dock is `position: fixed; left: 0; top: 0` and we translate it via x/y so
+  // the snap math is straightforward.
+  const x = useMotionValue(MARGIN);
+  const y = useMotionValue(MARGIN);
+  const [corner, setCorner] = React.useState<Corner>("bl");
+
+  // Park at the bottom-left on first mount, then again whenever the dock
+  // becomes visible (so reopening doesn't keep stale coords from last session).
   React.useEffect(() => {
-    const update = () => setBounds(computeBounds());
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, []);
+    if (typeof window === "undefined") return;
+    if (!visible) return;
+    const target = cornerCoords("bl", window.innerWidth, window.innerHeight);
+    x.set(target.x);
+    y.set(target.y);
+    setCorner("bl");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
+
+  // Re-snap to the same corner on window resize so the dock never drifts
+  // off-screen when the viewport shrinks.
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onResize = () => {
+      const target = cornerCoords(corner, window.innerWidth, window.innerHeight);
+      animate(x, target.x, SNAP_SPRING);
+      animate(y, target.y, SNAP_SPRING);
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [corner, x, y]);
 
   React.useEffect(() => {
     if (!activeCall) return;
@@ -71,23 +97,46 @@ export function FloatingMiniCall() {
   const mm = Math.floor(elapsed / 60).toString().padStart(2, "0");
   const ss = (elapsed % 60).toString().padStart(2, "0");
 
+  const handleDragEnd = (_: PointerEvent | MouseEvent | TouchEvent, info: PanInfo) => {
+    if (typeof window === "undefined") return;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    // info.point is the pointer position; we want the dock center for snap math.
+    const left = x.get();
+    const top = y.get();
+    const centerX = left + DOCK_W / 2;
+    const centerY = top + DOCK_H / 2;
+    const next = nearestCorner(centerX, centerY, w, h);
+    const target = cornerCoords(next, w, h);
+    setCorner(next);
+    // Spring the dock home to that corner — feels magnetic.
+    animate(x, target.x, SNAP_SPRING);
+    animate(y, target.y, SNAP_SPRING);
+  };
+
   return (
     <AnimatePresence>
       {visible && activeCall && (
         <motion.div
           drag
           dragMomentum={false}
-          dragElastic={0.12}
-          dragConstraints={bounds}
-          // IMPORTANT: animate/exit only animate opacity + scale. Don't add
-          // `y` here — framer would fight the drag's y-axis transform and
-          // the dock would feel frozen even though the listener fires.
+          dragElastic={0.08}
+          // Soft clamps so the dock can't be flung beyond the viewport during
+          // the drag itself — the onDragEnd snap brings it to a corner.
+          dragConstraints={{
+            left: -200,
+            right: typeof window !== "undefined" ? window.innerWidth + 200 : 2000,
+            top: -200,
+            bottom: typeof window !== "undefined" ? window.innerHeight + 200 : 2000
+          }}
+          onDragEnd={handleDragEnd}
+          style={{ x, y }}
           initial={{ opacity: 0, scale: 0.85 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0, scale: 0.85 }}
           transition={{ type: "spring", stiffness: 260, damping: 24 }}
           whileDrag={{ scale: 1.03, cursor: "grabbing" }}
-          className="fixed left-5 bottom-24 md:bottom-5 z-[70] glass-strong glass-specular border border-white/15 rounded-3xl shadow-floating overflow-hidden w-[268px] select-none touch-none cursor-grab"
+          className="fixed left-0 top-0 z-[70] glass-strong glass-specular border border-white/15 rounded-3xl shadow-floating overflow-hidden w-[268px] select-none touch-none cursor-grab"
         >
           <div
             onDoubleClick={() => router.push("/calls/active")}
@@ -127,9 +176,9 @@ export function FloatingMiniCall() {
             <button
               onPointerDown={stopDrag}
               onClick={() => {
-              setMiniCallOpen(false);
-              router.push("/calls/active");
-            }}
+                setMiniCallOpen(false);
+                router.push("/calls/active");
+              }}
               className="absolute top-2 right-9 size-7 rounded-full grid place-items-center bg-black/30 backdrop-blur-md hover:bg-black/50 transition"
               title="Expand"
             >

@@ -27,6 +27,16 @@ interface ChatState {
   ) => Chat;
   startDM: (userId: string) => Chat;
   joinCommunity: (community: Community) => Chat;
+  /** Drop a "Join call" scheduled-message into each selected user's DM. */
+  scheduleCallWith: (
+    userIds: string[],
+    invite: {
+      whenIso: string;
+      endsAtIso?: string;
+      title: string;
+      video: boolean;
+    }
+  ) => void;
   removeChat: (chatId: string) => void;
   clearAll: () => void;
 }
@@ -294,6 +304,52 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }));
     return newChat;
+  },
+
+  scheduleCallWith: (userIds, invite) => {
+    // One shared `callId` for every invitee's copy of the same call. The
+    // Upcoming list dedupes by this id so a 5-person schedule shows ONE
+    // upcoming entry — not five.
+    const callId = `call-${Date.now()}`;
+    const createdAt = new Date().toISOString();
+    for (const userId of userIds) {
+      const chat = get().startDM(userId);
+      const msg: Message = {
+        id: `m-${callId}-${userId}`,
+        chatId: chat.id,
+        authorId: "me",
+        kind: "schedule",
+        content: invite.title,
+        createdAt,
+        status: "sent",
+        schedule: {
+          whenIso: invite.whenIso,
+          message: invite.title,
+          callInvite: {
+            callId,
+            video: invite.video,
+            title: invite.title,
+            endsAtIso: invite.endsAtIso,
+            participantIds: ["me", ...userIds]
+          }
+        }
+      };
+      set((s) => ({
+        messages: {
+          ...s.messages,
+          [chat.id]: [...(s.messages[chat.id] ?? []), msg]
+        },
+        chats: s.chats.map((c) =>
+          c.id === chat.id
+            ? {
+                ...c,
+                lastMessage: `📞 ${invite.title}`,
+                lastMessageAt: msg.createdAt
+              }
+            : c
+        )
+      }));
+    }
   },
 
   joinCommunity: (community) => {
