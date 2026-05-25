@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { motion } from "framer-motion";
-import { Ghost, Lock, Sparkles, Timer, Users } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { motion, AnimatePresence } from "framer-motion";
+import { Check, Copy, Ghost, Lock, RefreshCcw, Sparkles, Timer, Users } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -17,15 +18,90 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
+import { copyText, cn } from "@/lib/utils";
+import { generatePin, useGhostStore } from "@/store/use-ghost-store";
+import type { GhostRoom } from "@/types";
 
-export function CreateGhostDialog({ children }: { children: React.ReactNode }) {
+const AUTO_CLOSE_OPTIONS: { label: string; hours: number }[] = [
+  { label: "1h", hours: 1 },
+  { label: "4h", hours: 4 },
+  { label: "8h", hours: 8 },
+  { label: "24h", hours: 24 }
+];
+
+interface Props {
+  children?: React.ReactNode;
+  /** Controlled open state (optional — when omitted the trigger drives it). */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  onCreated?: (room: GhostRoom) => void;
+}
+
+export function CreateGhostDialog({ children, open, onOpenChange, onCreated }: Props) {
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
+  const isControlled = open !== undefined;
+  const isOpen = isControlled ? open : uncontrolledOpen;
+  const setOpen = (v: boolean) => {
+    if (!isControlled) setUncontrolledOpen(v);
+    onOpenChange?.(v);
+  };
+
+  const router = useRouter();
+  const createRoom = useGhostStore((s) => s.createRoom);
+
+  const [name, setName] = React.useState("");
+  const [topic, setTopic] = React.useState("");
   const [locked, setLocked] = React.useState(true);
+  const [autoClose, setAutoClose] = React.useState(true);
+  const [autoCloseHours, setAutoCloseHours] = React.useState(8);
   const [capacity, setCapacity] = React.useState([40]);
-  const [pin] = React.useState(() => Math.floor(1000 + Math.random() * 9000).toString());
+  const [pin, setPin] = React.useState(() => generatePin());
+  const [pinCopied, setPinCopied] = React.useState(false);
+
+  // Reset form whenever the dialog opens.
+  React.useEffect(() => {
+    if (isOpen) {
+      setName("");
+      setTopic("");
+      setLocked(true);
+      setAutoClose(true);
+      setAutoCloseHours(8);
+      setCapacity([40]);
+      setPin(generatePin());
+      setPinCopied(false);
+    }
+  }, [isOpen]);
+
+  const regeneratePin = () => {
+    setPin(generatePin());
+    setPinCopied(false);
+  };
+
+  const handleCopyPin = async () => {
+    const ok = await copyText(pin);
+    if (ok) {
+      setPinCopied(true);
+      window.setTimeout(() => setPinCopied(false), 1500);
+    }
+  };
+
+  const handleSubmit = () => {
+    const room = createRoom({
+      name,
+      topic,
+      pin,
+      locked,
+      capacity: capacity[0],
+      autoCloseHours: autoClose ? autoCloseHours : 0
+    });
+    onCreated?.(room);
+    setOpen(false);
+    router.push(`/ghost-rooms/${room.id}`);
+  };
 
   return (
-    <Dialog>
-      <DialogTrigger asChild>{children}</DialogTrigger>
+    <Dialog open={isOpen} onOpenChange={setOpen}>
+      {children && <DialogTrigger asChild>{children}</DialogTrigger>}
       <DialogContent className="!max-w-lg">
         <DialogHeader>
           <div className="size-12 rounded-2xl bg-gradient-to-br from-violet-500 to-cyan-400 grid place-items-center shadow-glow mb-2">
@@ -40,30 +116,146 @@ export function CreateGhostDialog({ children }: { children: React.ReactNode }) {
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label>Room name</Label>
-            <Input placeholder="Midnight Lounge" />
+            <Input
+              placeholder="Midnight Lounge"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={48}
+            />
           </div>
 
           <div className="space-y-1.5">
             <Label>Topic</Label>
-            <Input placeholder="What's the vibe?" />
+            <Input
+              placeholder="What's the vibe?"
+              value={topic}
+              onChange={(e) => setTopic(e.target.value)}
+              maxLength={120}
+            />
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <SettingTile
               icon={<Lock className="size-4" />}
               title="Lock with PIN"
-              subtitle={locked ? `PIN ${pin}` : "Open to anyone with link"}
+              subtitle={locked ? "Only PIN holders can enter" : "Open to anyone"}
             >
               <Switch checked={locked} onCheckedChange={setLocked} />
             </SettingTile>
             <SettingTile
               icon={<Timer className="size-4" />}
               title="Auto-close"
-              subtitle="In 8 hours"
+              subtitle={autoClose ? `In ${autoCloseHours}h` : "Stays open"}
             >
-              <Switch defaultChecked />
+              <Switch checked={autoClose} onCheckedChange={setAutoClose} />
             </SettingTile>
           </div>
+
+          <AnimatePresence initial={false}>
+            {locked && (
+              <motion.div
+                key="pin"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="rounded-xl border border-border/60 bg-background/30 p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <Label className="!text-[11px] uppercase tracking-wider text-muted-foreground">
+                      Room PIN
+                    </Label>
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={regeneratePin}
+                        className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition px-2 py-1 rounded-md hover:bg-foreground/5"
+                      >
+                        <RefreshCcw className="size-3" /> New
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleCopyPin}
+                        className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition px-2 py-1 rounded-md hover:bg-foreground/5"
+                      >
+                        {pinCopied ? (
+                          <>
+                            <Check className="size-3 text-emerald-400" /> Copied
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="size-3" /> Copy
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex justify-center gap-2">
+                    {pin.split("").map((digit, i) => (
+                      <div
+                        key={i}
+                        className="size-10 rounded-lg bg-foreground/10 grid place-items-center font-mono text-lg font-semibold tracking-wider"
+                      >
+                        {digit}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          <AnimatePresence initial={false}>
+            {autoClose && (
+              <motion.div
+                key="auto-close"
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2 }}
+                className="overflow-hidden"
+              >
+                <div className="rounded-xl border border-border/60 bg-background/30 p-3 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <Label className="!text-[11px] uppercase tracking-wider text-muted-foreground">
+                      Auto-close after
+                    </Label>
+                    <span className="text-[11px] text-muted-foreground">
+                      {autoCloseHours}h
+                    </span>
+                  </div>
+                  <div className="flex gap-1.5">
+                    {AUTO_CLOSE_OPTIONS.map((opt) => {
+                      const active = autoCloseHours === opt.hours;
+                      return (
+                        <button
+                          key={opt.hours}
+                          type="button"
+                          onClick={() => setAutoCloseHours(opt.hours)}
+                          className={cn(
+                            "flex-1 h-8 rounded-lg text-xs font-medium transition",
+                            active
+                              ? "bg-foreground text-background"
+                              : "bg-foreground/10 text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          {opt.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <Slider
+                    value={[autoCloseHours]}
+                    onValueChange={(v) => setAutoCloseHours(v[0])}
+                    min={1}
+                    max={72}
+                    step={1}
+                  />
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <div className="space-y-2">
             <div className="flex justify-between text-xs">
@@ -77,8 +269,10 @@ export function CreateGhostDialog({ children }: { children: React.ReactNode }) {
         </div>
 
         <DialogFooter className="!justify-between">
-          <Button variant="ghost">Cancel</Button>
-          <Button variant="gradient">
+          <Button variant="ghost" onClick={() => setOpen(false)}>
+            Cancel
+          </Button>
+          <Button variant="gradient" onClick={handleSubmit}>
             <Sparkles /> Open room
           </Button>
         </DialogFooter>

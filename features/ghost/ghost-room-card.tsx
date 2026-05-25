@@ -1,22 +1,43 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Lock, Flame, Users, Sparkles } from "lucide-react";
+import { Check, Flame, Lock, Sparkles, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useGhostStore } from "@/store/use-ghost-store";
 import type { GhostRoom } from "@/types";
 
-export function GhostRoomCard({ room, onJoin }: { room: GhostRoom; onJoin?: () => void }) {
+export function GhostRoomCard({
+  room,
+  onJoin
+}: {
+  room: GhostRoom;
+  onJoin?: (room: GhostRoom) => void;
+}) {
+  const router = useRouter();
+  const joined = useGhostStore((s) => s.joinedIds.includes(room.id));
+  const joinRoom = useGhostStore((s) => s.joinRoom);
+
+  const handleClick = () => {
+    // Locked rooms always go through the PIN dialog (handled by the parent).
+    if (room.isLocked && !joined) {
+      onJoin?.(room);
+      return;
+    }
+    // Public rooms join directly and enter the room immediately.
+    if (!joined) joinRoom(room.id);
+    onJoin?.(room);
+    router.push(`/ghost-rooms/${room.id}`);
+  };
+
   return (
     <motion.div
       whileHover={{ y: -4, scale: 1.01 }}
       transition={{ type: "spring", stiffness: 220, damping: 20 }}
       className="relative overflow-hidden rounded-3xl border border-border/60 backdrop-blur-2xl group"
     >
-      <div
-        className="absolute inset-0 opacity-70"
-        style={{ background: room.aura }}
-      />
+      <div className="absolute inset-0 opacity-70" style={{ background: room.aura }} />
       <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/30 to-black/70" />
       <motion.div
         className="absolute -top-10 -right-10 size-40 rounded-full bg-white/10 blur-3xl"
@@ -38,6 +59,11 @@ export function GhostRoomCard({ room, onJoin }: { room: GhostRoom; onJoin?: () =
             {room.isLocked && (
               <span className="text-[10px] inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/30 backdrop-blur">
                 <Lock className="size-2.5" /> private
+              </span>
+            )}
+            {joined && (
+              <span className="text-[10px] inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/30 backdrop-blur">
+                <Check className="size-2.5" /> joined
               </span>
             )}
           </div>
@@ -63,11 +89,27 @@ export function GhostRoomCard({ room, onJoin }: { room: GhostRoom; onJoin?: () =
             </div>
           </div>
           <Button
-            onClick={onJoin}
+            onClick={handleClick}
             size="sm"
-            className="bg-white text-black hover:bg-white/90 shadow-glow"
+            className={
+              joined
+                ? "bg-emerald-500 text-white hover:bg-emerald-400"
+                : "bg-white text-black hover:bg-white/90 shadow-glow"
+            }
           >
-            <Sparkles className="size-3.5" /> Join
+            {joined ? (
+              <>
+                <Check className="size-3.5" /> Joined
+              </>
+            ) : room.isLocked ? (
+              <>
+                <Lock className="size-3.5" /> Enter PIN
+              </>
+            ) : (
+              <>
+                <Sparkles className="size-3.5" /> Join
+              </>
+            )}
           </Button>
         </div>
       </div>
