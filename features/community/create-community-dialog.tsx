@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Hash, Image as ImageIcon, Sparkles, Users, X } from "lucide-react";
+import { Check, Hash, ImagePlus, Image as ImageIcon, Sparkles, Users, X } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -32,8 +32,9 @@ const CATEGORIES = [
   "Wellness"
 ];
 
+/** Built-in cover swatches. The first slot in the picker is a custom upload
+ *  tile (see ImageUploadTile) — these are the presets that come after it. */
 const COVERS = [
-  "https://images.unsplash.com/photo-1503602642458-232111445657?w=600&q=80",
   "https://images.unsplash.com/photo-1483412033650-1015ddeb83d1?w=600&q=80",
   "https://images.unsplash.com/photo-1465101046530-73398c7f28ca?w=600&q=80",
   "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?w=600&q=80",
@@ -60,19 +61,33 @@ const INTEREST_SUGGESTIONS = [
 ];
 
 export function CreateCommunityDialog({
-  children
+  children,
+  open: openProp,
+  onOpenChange
 }: {
-  children: React.ReactNode;
+  /** Trigger element. Omit when controlling the dialog with `open`. */
+  children?: React.ReactNode;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
   const router = useRouter();
   const createCommunity = useCommunityStore((s) => s.createCommunity);
-  const [open, setOpen] = React.useState(false);
+  const [internalOpen, setInternalOpen] = React.useState(false);
+  const isControlled = openProp !== undefined;
+  const open = isControlled ? openProp : internalOpen;
+  const setOpen = (v: boolean) => {
+    if (!isControlled) setInternalOpen(v);
+    onOpenChange?.(v);
+  };
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
   const [category, setCategory] = React.useState("Design");
   const [cover, setCover] = React.useState(COVERS[0]);
   const [interestInput, setInterestInput] = React.useState("");
   const [interests, setInterests] = React.useState<string[]>([]);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  /** Custom cover the user uploaded from their device (data URL). */
+  const [customCover, setCustomCover] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (open) {
@@ -80,6 +95,7 @@ export function CreateCommunityDialog({
       setDescription("");
       setCategory("Design");
       setCover(COVERS[0]);
+      setCustomCover(null);
       setInterests([]);
       setInterestInput("");
     }
@@ -110,7 +126,7 @@ export function CreateCommunityDialog({
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>{children}</DialogTrigger>
+      {children && <DialogTrigger asChild>{children}</DialogTrigger>}
       <DialogContent className="!max-w-xl !max-h-[90dvh] !p-0 flex flex-col overflow-hidden">
         <DialogHeader className="px-6 pt-6">
           <div className="size-12 rounded-2xl bg-gradient-to-br from-violet-500 to-cyan-400 grid place-items-center shadow-glow mb-2">
@@ -227,9 +243,66 @@ export function CreateCommunityDialog({
             <Label className="flex items-center gap-1.5">
               <ImageIcon className="size-3" /> Cover
             </Label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const url = reader.result as string;
+                  setCustomCover(url);
+                  setCover(url);
+                };
+                reader.readAsDataURL(file);
+                // Reset so re-selecting the same file still fires onChange.
+                e.target.value = "";
+              }}
+            />
             <div className="grid grid-cols-3 gap-2">
+              {/* Upload-from-device tile — always first in the grid. */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className={cn(
+                  "relative aspect-video rounded-xl overflow-hidden ring-2 transition grid place-items-center",
+                  customCover && cover === customCover
+                    ? "ring-cyan-400 shadow-glow-cyan"
+                    : "ring-white/10 hover:ring-white/30",
+                  !customCover && "bg-gradient-to-br from-white/10 to-white/[0.02]"
+                )}
+                aria-label="Upload cover from device"
+              >
+                {customCover ? (
+                  <>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={customCover}
+                      alt=""
+                      className="absolute inset-0 w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/40" />
+                    <span className="absolute bottom-1.5 left-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-black/55 backdrop-blur text-[9px] text-white">
+                      <Check className="size-2.5" /> custom
+                    </span>
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center gap-1">
+                    <div className="size-9 rounded-full bg-white/10 grid place-items-center ring-1 ring-white/20">
+                      <ImagePlus className="size-4 text-white" />
+                    </div>
+                    <span className="text-[10px] font-semibold text-white/80">
+                      Upload
+                    </span>
+                  </div>
+                )}
+              </button>
+
               {COVERS.map((c) => {
-                const active = c === cover;
+                const active = c === cover && c !== customCover;
                 return (
                   <button
                     key={c}

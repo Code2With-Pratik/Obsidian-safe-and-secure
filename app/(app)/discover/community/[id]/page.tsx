@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   CheckCircle2,
@@ -42,6 +42,13 @@ import { cn } from "@/lib/utils";
 export default function CommunityDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
+  // ?from=chats means the user navigated here from the chat-list Community
+  // tab, so the back button should drop them back into /chats. Default is
+  // /discover (Discover page) for everywhere else.
+  const searchParams = useSearchParams();
+  const from = searchParams?.get("from");
+  const backHref = from === "chats" ? "/chats" : "/discover";
+  const backLabel = from === "chats" ? "Chats" : "Discover";
   const community = useCommunityStore((s) =>
     s.communities.find((c) => c.id === params.id)
   );
@@ -112,7 +119,7 @@ export default function CommunityDetailPage() {
 
   const handleDelete = () => {
     deleteCommunity(community.id);
-    router.push("/discover");
+    router.push(backHref);
   };
 
   return (
@@ -136,9 +143,9 @@ export default function CommunityDetailPage() {
             <Button
               variant="glass"
               size="sm"
-              onClick={() => router.push("/discover")}
+              onClick={() => router.push(backHref)}
             >
-              <ChevronLeft /> Discover
+              <ChevronLeft /> {backLabel}
             </Button>
           </div>
           {community.trending && (

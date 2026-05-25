@@ -14,19 +14,23 @@ interface Props {
   onJoin: (e: React.MouseEvent) => void;
   /** Lower for dense grids (chat list mobile), default for discover. */
   size?: "default" | "compact";
+  /** Where the user is coming from — read by the detail page to wire the
+   *  back button back to that screen (e.g. "chats" / "discover"). */
+  from?: "chats" | "discover";
 }
 
 export function CommunityGridCard({
   community,
   joined,
   onJoin,
-  size = "default"
+  size = "default",
+  from
 }: Props) {
+  const href = from
+    ? `/discover/community/${community.id}?from=${from}`
+    : `/discover/community/${community.id}`;
   return (
-    <Link
-      href={`/discover/community/${community.id}`}
-      className="block group"
-    >
+    <Link href={href} className="block group">
       <motion.article
         whileHover={{ y: -4 }}
         transition={{ type: "spring", stiffness: 240, damping: 22 }}
