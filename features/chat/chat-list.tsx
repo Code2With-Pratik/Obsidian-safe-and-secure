@@ -36,8 +36,11 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { useChatStore } from "@/store/use-chat-store";
+import { useCommunityStore } from "@/store/use-community-store";
 import { users as allUsers, communities as allCommunities } from "@/lib/mock-data";
 import { cn, formatRelative } from "@/lib/utils";
+import { CommunityGridCard, CommunityGridEmpty } from "@/features/community/community-grid-card";
+import { InterestMatchPopup } from "@/features/community/interest-match-popup";
 import { StoriesRail } from "./stories-rail";
 import { NewGroupDialog } from "./new-group-dialog";
 import { EmptyChatList } from "./empty-chat-list";
@@ -45,6 +48,15 @@ import type { Chat, ChatHint, Community } from "@/types";
 import { CheckCircle2, Flame, Sparkles } from "lucide-react";
 
 type Filter = "all" | "unread" | "groups" | "secret" | "favorites";
+type CommunityFilter = "all" | "joined" | "trending" | "mine";
+type View = "messages" | "community";
+
+const COMMUNITY_FILTERS: { id: CommunityFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "joined", label: "Joined" },
+  { id: "trending", label: "Trending" },
+  { id: "mine", label: "Mine" }
+];
 
 function typeIcon(t: Chat["type"]) {
   switch (t) {
@@ -73,12 +85,27 @@ export function ChatList({
   const markRead = useChatStore((s) => s.markRead);
   const addGroup = useChatStore((s) => s.addGroup);
   const startDM = useChatStore((s) => s.startDM);
-  const joinCommunity = useChatStore((s) => s.joinCommunity);
+  const joinChatCommunity = useChatStore((s) => s.joinCommunity);
   const clearAll = useChatStore((s) => s.clearAll);
+
+  // Community store — drives the mobile Community tab in the chat list.
+  const communities = useCommunityStore((s) => s.communities);
+  const joinedCommunityIds = useCommunityStore((s) => s.joinedIds);
+  const hostedCommunityIds = useCommunityStore((s) => s.hostedIds);
+  const joinCommunityById = useCommunityStore((s) => s.joinCommunity);
+
   const [filter, setFilter] = React.useState<Filter>("all");
+  const [communityFilter, setCommunityFilter] =
+    React.useState<CommunityFilter>("all");
+  const [view, setView] = React.useState<View>("messages");
   const [q, setQ] = React.useState("");
   const [searchOpen, setSearchOpen] = React.useState(false);
   const [groupOpen, setGroupOpen] = React.useState(false);
+  const [match, setMatch] = React.useState<{
+    open: boolean;
+    count: number;
+    name: string;
+  }>({ open: false, count: 0, name: "" });
   const searchInputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
@@ -133,10 +160,45 @@ export function ChatList({
     router.push(`/chats/${c.id}`);
   };
 
-  const handleJoinCommunity = (community: Community) => {
-    const c = joinCommunity(community);
+  const handleJoinChatCommunity = (community: Community) => {
+    const c = joinChatCommunity(community);
     setSearchOpen(false);
     router.push(`/chats/${c.id}`);
+  };
+
+  // Filter the community grid by the current query + the active community
+  // filter chip. Used by the mobile Community tab.
+  const filteredCommunities = communities
+    .filter((c) =>
+      q.trim() === ""
+        ? true
+        : c.name.toLowerCase().includes(q.toLowerCase()) ||
+          c.category.toLowerCase().includes(q.toLowerCase()) ||
+          c.description?.toLowerCase().includes(q.toLowerCase()) ||
+          c.interests?.some((i) => i.toLowerCase().includes(q.toLowerCase()))
+    )
+    .filter((c) => {
+      if (communityFilter === "joined") return joinedCommunityIds.includes(c.id);
+      if (communityFilter === "trending") return !!c.trending;
+      if (communityFilter === "mine") return hostedCommunityIds.includes(c.id);
+      return true;
+    });
+
+  const handleJoinCommunityFromCard = (
+    e: React.MouseEvent,
+    community: Community
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (joinedCommunityIds.includes(community.id)) {
+      router.push(`/discover/community/${community.id}`);
+      return;
+    }
+    const { matched } = joinCommunityById(community.id);
+    setMatch({ open: true, count: matched, name: community.name });
+    window.setTimeout(() => {
+      router.push(`/discover/community/${community.id}`);
+    }, 1200);
   };
 
   const isEmpty = chats.length === 0;
@@ -241,8 +303,8 @@ export function ChatList({
         </div>
       </div>
 
-      {/* Filter chips — hidden in empty mode */}
-      {!isEmpty && (
+      {/* Filter chips — swap based on the active view. */}
+      {!isEmpty && view === "messages" && (
         <div className="flex gap-1.5 px-4 mt-2 overflow-x-auto no-scrollbar">
           {(
             [
@@ -259,6 +321,24 @@ export function ChatList({
               className={cn(
                 "px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition",
                 filter === f.id
+                  ? "bg-foreground text-background"
+                  : "glass-subtle text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+      )}
+      {view === "community" && (
+        <div className="flex gap-1.5 px-4 mt-2 overflow-x-auto no-scrollbar">
+          {COMMUNITY_FILTERS.map((f) => (
+            <button
+              key={f.id}
+              onClick={() => setCommunityFilter(f.id)}
+              className={cn(
+                "px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition",
+                communityFilter === f.id
                   ? "bg-foreground text-background"
                   : "glass-subtle text-muted-foreground hover:text-foreground"
               )}
@@ -301,7 +381,7 @@ export function ChatList({
                   key={c.id}
                   community={c}
                   joined={joinedCommunityNames.has(c.name)}
-                  onJoin={() => handleJoinCommunity(c)}
+                  onJoin={() => handleJoinChatCommunity(c)}
                 />
               ))}
             </>
@@ -352,44 +432,87 @@ export function ChatList({
         <EmptyChatList onEnter={() => setSearchOpen(true)} />
       )}
 
-      {/* NORMAL CHAT LIST */}
+      {/* NORMAL LIST — either chats or communities depending on the view tab. */}
       {!searchOpen && !isEmpty && (
         <>
-          <div className="px-5 pt-2 pb-1 flex items-baseline gap-2">
-            <h3 className="text-[15px] font-semibold tracking-tight">Messages</h3>
-            <span className="text-[10px] text-muted-foreground">
-              {filtered.length} {filtered.length === 1 ? "conversation" : "conversations"}
-            </span>
+          {/* Messages / Community toggle. On mobile this acts as the main
+              section heading; on desktop the same toggle is fine too. */}
+          <div className="px-5 pt-2 pb-1 flex items-baseline gap-5">
+            <ViewTab
+              label="Messages"
+              active={view === "messages"}
+              onClick={() => setView("messages")}
+            />
+            <ViewTab
+              label="Community"
+              active={view === "community"}
+              onClick={() => setView("community")}
+            />
           </div>
 
-          <ScrollArea className="flex-1 px-3 scroll-fade-y">
-            {pinned.length > 0 && <SectionLabel>Pinned</SectionLabel>}
-            {pinned.map((chat) => (
-              <ChatRow
-                key={chat.id}
-                chat={chat}
-                active={chat.id === activeId}
-                onSelect={onSelect}
-              />
-            ))}
-            {pinned.length > 0 && rest.length > 0 && (
-              <SectionLabel>All conversations</SectionLabel>
-            )}
-            {rest.map((chat) => (
-              <ChatRow
-                key={chat.id}
-                chat={chat}
-                active={chat.id === activeId}
-                onSelect={onSelect}
-              />
-            ))}
-            {filtered.length === 0 && (
-              <div className="grid place-items-center py-16 text-center text-sm text-muted-foreground">
-                <p>No conversations match this filter.</p>
-              </div>
-            )}
-            <div className="h-4" />
-          </ScrollArea>
+          {view === "messages" ? (
+            <ScrollArea className="flex-1 px-3 scroll-fade-y">
+              {pinned.length > 0 && <SectionLabel>Pinned</SectionLabel>}
+              {pinned.map((chat) => (
+                <ChatRow
+                  key={chat.id}
+                  chat={chat}
+                  active={chat.id === activeId}
+                  onSelect={onSelect}
+                />
+              ))}
+              {pinned.length > 0 && rest.length > 0 && (
+                <SectionLabel>All conversations</SectionLabel>
+              )}
+              {rest.map((chat) => (
+                <ChatRow
+                  key={chat.id}
+                  chat={chat}
+                  active={chat.id === activeId}
+                  onSelect={onSelect}
+                />
+              ))}
+              {filtered.length === 0 && (
+                <div className="grid place-items-center py-16 text-center text-sm text-muted-foreground">
+                  <p>No conversations match this filter.</p>
+                </div>
+              )}
+              <div className="h-4" />
+            </ScrollArea>
+          ) : (
+            <ScrollArea className="flex-1 px-3 scroll-fade-y">
+              {filteredCommunities.length === 0 ? (
+                <CommunityGridEmpty
+                  title={
+                    communityFilter === "joined"
+                      ? "You haven't joined any yet"
+                      : communityFilter === "mine"
+                        ? "You haven't created any communities"
+                        : communityFilter === "trending"
+                          ? "Nothing trending here"
+                          : "No matches"
+                  }
+                  body={
+                    communityFilter === "joined"
+                      ? "Browse Discover and tap Join on a community that vibes."
+                      : "Try a different keyword, filter, or create your own community from Discover."
+                  }
+                />
+              ) : (
+                <div className="grid grid-cols-2 gap-2.5 pt-1 pb-4">
+                  {filteredCommunities.map((c) => (
+                    <CommunityGridCard
+                      key={c.id}
+                      community={c}
+                      joined={joinedCommunityIds.includes(c.id)}
+                      onJoin={(e) => handleJoinCommunityFromCard(e, c)}
+                      size="compact"
+                    />
+                  ))}
+                </div>
+              )}
+            </ScrollArea>
+          )}
         </>
       )}
 
@@ -405,7 +528,47 @@ export function ChatList({
           router.push(`/chats/${created.id}`);
         }}
       />
+
+      <InterestMatchPopup
+        open={match.open}
+        count={match.count}
+        communityName={match.name}
+        onClose={() => setMatch({ open: false, count: 0, name: "" })}
+      />
     </div>
+  );
+}
+
+function ViewTab({
+  label,
+  active,
+  onClick
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      className="relative inline-flex pb-1.5"
+    >
+      <span
+        className={cn(
+          "text-[15px] font-semibold tracking-tight transition",
+          active ? "text-foreground" : "text-muted-foreground hover:text-foreground/80"
+        )}
+      >
+        {label}
+      </span>
+      {active && (
+        <motion.span
+          layoutId="view-tab-indicator"
+          className="absolute -bottom-0.5 left-0 right-0 h-0.5 rounded-full bg-gradient-to-r from-violet-400 to-cyan-400"
+          transition={{ type: "spring", stiffness: 380, damping: 30 }}
+        />
+      )}
+    </button>
   );
 }
 
