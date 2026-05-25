@@ -55,6 +55,21 @@ export default function ActiveCall() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // After mount, if the call gets ended (activeCall becomes null) the page
+  // should leave this screen immediately. Otherwise the participants grid
+  // briefly renders mock tiles before the manual `router.push` lands —
+  // especially noticeable on multi-user calls.
+  const initialCallSeen = React.useRef(false);
+  React.useEffect(() => {
+    if (activeCall) {
+      initialCallSeen.current = true;
+      return;
+    }
+    if (initialCallSeen.current) {
+      router.push("/calls");
+    }
+  }, [activeCall, router]);
+
   return (
     // Fullscreen overlay. The video stage fills the entire viewport from
     // edge to edge; the top status row and the bottom controls float ON

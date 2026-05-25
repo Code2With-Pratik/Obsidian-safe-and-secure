@@ -227,9 +227,13 @@ export default function CallsPage() {
   };
 
   return (
-    <ScrollArea className="h-[calc(100dvh-4rem)]">
-      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8 md:py-12">
-        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
+    // Mobile: the whole page scrolls naturally — there isn't room for fixed
+    // layouts on small screens. Desktop (md+): lock to the viewport so the
+    // header + action grid stay put and only the bottom cards scroll
+    // internally. Tailwind `md:*` switches between the two regimes.
+    <div className="md:h-[calc(100dvh-4rem)] md:overflow-hidden overflow-y-auto h-[calc(100dvh-4rem)]">
+      <div className="max-w-7xl mx-auto md:h-full px-4 md:px-8 py-6 md:py-8 flex flex-col">
+        <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="shrink-0">
           <h1 className="text-4xl md:text-5xl font-display font-semibold tracking-tight">
             Calls & <span className="neon-text">meetings</span>
           </h1>
@@ -241,7 +245,7 @@ export default function CallsPage() {
         {/* Layout order: Start, Ghost, Schedule, then the wide Total time
             card. `grid-flow-dense` lets the 2-col-spanning Total card slot in
             wherever it fits on each breakpoint without leaving gaps. */}
-        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 grid-flow-dense mt-8">
+        <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 grid-flow-dense mt-6 shrink-0">
           <ActionTile
             icon={<Video />}
             title="Start a call"
@@ -272,10 +276,10 @@ export default function CallsPage() {
           />
         </div>
 
-        <div className="mt-12 grid gap-6 lg:grid-cols-3">
+        <div className="mt-8 grid gap-6 lg:grid-cols-3 md:flex-1 md:min-h-0">
           {/* Recent calls — header stays fixed; the list scrolls inside the
               card so the card never balloons past the viewport. */}
-          <div className="lg:col-span-2 glass rounded-3xl p-6 flex flex-col max-h-[min(560px,calc(100dvh-12rem))]">
+          <div className="lg:col-span-2 glass rounded-3xl p-6 flex flex-col md:h-full md:min-h-0">
             <div className="flex items-center justify-between mb-4 shrink-0">
               <h2 className="text-lg font-semibold">Recent calls</h2>
               <Button
@@ -292,7 +296,9 @@ export default function CallsPage() {
               <FilterChips filter={filter} onChange={setFilter} />
             </div>
 
-            <ScrollArea className="flex-1 mt-4 -mx-2">
+            {/* Desktop scrolls within the card (`md:flex-1 md:overflow-y-auto`);
+                mobile lets the list flow naturally so the whole page scrolls. */}
+            <div className="mt-4 md:flex-1 md:min-h-0 md:overflow-y-auto -mx-2 no-scrollbar">
               <div className="space-y-1 px-2">
                 {filtered.length === 0 ? (
                   <EmptyState
@@ -314,11 +320,11 @@ export default function CallsPage() {
                   ))
                 )}
               </div>
-            </ScrollArea>
+            </div>
           </div>
 
           {/* Upcoming — same fixed-header + scrolling-list pattern. */}
-          <div className="glass rounded-3xl p-6 flex flex-col max-h-[min(560px,calc(100dvh-12rem))]">
+          <div className="glass rounded-3xl p-6 flex flex-col md:h-full md:min-h-0">
             <div className="flex items-center justify-between mb-4 shrink-0">
               <h2 className="text-lg font-semibold">Upcoming</h2>
               <Button
@@ -330,7 +336,7 @@ export default function CallsPage() {
                 View all
               </Button>
             </div>
-            <ScrollArea className="flex-1 -mx-2">
+            <div className="md:flex-1 md:min-h-0 md:overflow-y-auto -mx-2 no-scrollbar">
               <div className="space-y-3 px-2">
                 {upcoming.length === 0 ? (
                   <EmptyState
@@ -377,7 +383,7 @@ export default function CallsPage() {
                 ))
               )}
               </div>
-            </ScrollArea>
+            </div>
           </div>
         </div>
       </div>
@@ -401,7 +407,7 @@ export default function CallsPage() {
         rows={upcoming}
         onJoin={joinScheduled}
       />
-    </ScrollArea>
+    </div>
   );
 }
 
@@ -423,27 +429,29 @@ function ActionTile({
   onClick?: () => void;
 }) {
   return (
-    <motion.button
-      whileHover={{ y: -4 }}
+    <button
       onClick={onClick}
-      // Stack icon + title with a small fixed gap — no mt-auto pushing the
-      // text to the bottom, so the card reads compact and matches the Total
-      // Time card's rhythm.
-      className="relative overflow-hidden rounded-3xl glass p-5 cursor-pointer text-left flex flex-col"
+      // No hover-lift — just a clean border highlight (white in dark, black
+      // in light) so the card stays put visually.
+      className={cn(
+        "relative overflow-hidden rounded-3xl glass p-5 cursor-pointer text-left flex flex-col",
+        "transition-[border-color,box-shadow] duration-200",
+        "hover:border-black/40 dark:hover:border-white/60"
+      )}
     >
-      <div className={`size-10 rounded-xl bg-gradient-to-br ${gradient} grid place-items-center text-white shadow-glow [&_svg]:size-[18px]`}>
+      <div className={`size-12 rounded-2xl bg-gradient-to-br ${gradient} grid place-items-center text-white shadow-glow [&_svg]:size-[22px]`}>
         {icon}
       </div>
       <div className="mt-3">
-        <h3 className="font-semibold text-base leading-tight">{title}</h3>
-        <p className="text-xs text-muted-foreground truncate mt-0.5">{subtitle}</p>
+        <h3 className="font-semibold text-lg leading-tight">{title}</h3>
+        <p className="text-sm text-muted-foreground truncate mt-0.5">{subtitle}</p>
       </div>
       {cta && (
         <Badge variant="default" className="absolute top-3 right-3 !text-[9px] !py-0 !px-1.5">
           New
         </Badge>
       )}
-    </motion.button>
+    </button>
   );
 }
 
@@ -461,12 +469,15 @@ function TotalTimeCard({
   outgoing: string;
 }) {
   return (
-    <motion.div
-      whileHover={{ y: -4 }}
+    <div
       // Same flex-col rhythm as ActionTile so the title/subtitle baselines
       // line up across the row. Border + radius + padding match the Recent
       // calls / Upcoming cards below for a consistent design language.
-      className="relative overflow-hidden rounded-3xl glass p-5 sm:col-span-2 lg:col-span-2 flex flex-col"
+      className={cn(
+        "relative overflow-hidden rounded-3xl glass p-5 sm:col-span-2 lg:col-span-2 flex flex-col",
+        "transition-[border-color,box-shadow] duration-200",
+        "hover:border-black/40 dark:hover:border-white/60"
+      )}
     >
       <div
         aria-hidden
@@ -488,19 +499,19 @@ function TotalTimeCard({
       {/* Icon — sits in the same flow as an action tile's icon. The pills
           float out to the top-right via absolute positioning so they don't
           inflate the icon row height (which would push the title down). */}
-      <div className="relative size-10 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-500 grid place-items-center text-white shadow-glow-cyan [&_svg]:size-[18px]">
+      <div className="relative size-12 rounded-2xl bg-gradient-to-br from-cyan-400 to-blue-500 grid place-items-center text-white shadow-glow-cyan [&_svg]:size-[22px]">
         <TrendingUp />
       </div>
 
-      <div className="absolute top-5 right-5 flex flex-col gap-2.5 min-w-[120px]">
+      <div className="absolute top-5 right-5 flex flex-col gap-1 min-w-[140px]">
         <TimeSplit
-          icon={<PhoneIncoming className="size-3" />}
+          icon={<PhoneIncoming className="size-3.5" />}
           label="Incoming"
           value={incoming}
           accent="emerald"
         />
         <TimeSplit
-          icon={<PhoneOutgoing className="size-3" />}
+          icon={<PhoneOutgoing className="size-3.5" />}
           label="Outgoing"
           value={outgoing}
           accent="cyan"
@@ -510,13 +521,12 @@ function TotalTimeCard({
       {/* Title + subtitle + total stacked together, with the SAME small
           gap from the icon row that the action tiles use (mt-3). */}
       <div className="relative mt-3 min-w-0">
-        <h3 className="font-semibold text-base leading-tight">Total call time</h3>
-        <p className="text-xs text-muted-foreground truncate mt-0.5">{totalLabel}</p>
-        <div className="text-2xl font-display font-semibold tracking-tight tabular-nums leading-none mt-1.5">
+        <h3 className="font-semibold text-lg leading-tight">Total call time</h3>
+        <div className="text-lg font-display font-semibold tracking-tight tabular-nums leading-none mt-1.5">
           {total}
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
@@ -532,17 +542,17 @@ function TimeSplit({
   accent: "emerald" | "cyan";
 }) {
   return (
-    <div className="glass-subtle rounded-xl px-3 py-1.5">
+    <div className="glass-subtle rounded-xl px-3.5 py-2">
       <div
         className={cn(
-          "flex items-center gap-1 text-[10px] uppercase tracking-wider leading-none",
+          "flex items-center gap-1.5 text-[11px] uppercase tracking-wider leading-none",
           accent === "emerald" ? "text-emerald-300" : "text-cyan-300"
         )}
       >
         {icon}
         {label}
       </div>
-      <div className="text-sm font-semibold tabular-nums mt-1">{value}</div>
+      <div className="text-base font-semibold tabular-nums mt-1">{value}</div>
     </div>
   );
 }
