@@ -1,6 +1,7 @@
 import type {
   Chat,
   Community,
+  CommunityPost,
   FileItem,
   GhostRoom,
   Message,
@@ -267,7 +268,7 @@ export const ghostRooms: GhostRoom[] = [
     id: "gr1",
     name: "Midnight Lounge",
     topic: "Drop in. Be no one. Talk about anything.",
-    pin: "4928",
+    pin: "492801",
     members: 42,
     capacity: 100,
     isLocked: false,
@@ -278,7 +279,7 @@ export const ghostRooms: GhostRoom[] = [
     id: "gr2",
     name: "Confess Anonymously",
     topic: "Safe room. No identities. No screenshots.",
-    pin: "1101",
+    pin: "110125",
     members: 18,
     capacity: 50,
     isLocked: true,
@@ -288,7 +289,7 @@ export const ghostRooms: GhostRoom[] = [
     id: "gr3",
     name: "Founders After Dark",
     topic: "Raw startup talk, no investors allowed.",
-    pin: "8231",
+    pin: "823104",
     members: 27,
     capacity: 40,
     isLocked: false,
@@ -299,7 +300,7 @@ export const ghostRooms: GhostRoom[] = [
     id: "gr4",
     name: "Designers Unfiltered",
     topic: "What you'd never say in your design crit.",
-    pin: "5555",
+    pin: "555512",
     members: 33,
     capacity: 60,
     isLocked: true,
@@ -309,7 +310,7 @@ export const ghostRooms: GhostRoom[] = [
     id: "gr5",
     name: "3AM Thoughts",
     topic: "Late night feelings. No judgment.",
-    pin: "0303",
+    pin: "030307",
     members: 88,
     capacity: 120,
     isLocked: false,
@@ -319,7 +320,7 @@ export const ghostRooms: GhostRoom[] = [
     id: "gr6",
     name: "Music Producers Lounge",
     topic: "Drop links, drop ideas, drop loops.",
-    pin: "7770",
+    pin: "777088",
     members: 14,
     capacity: 30,
     isLocked: false,
@@ -362,10 +363,197 @@ export const files: FileItem[] = [
 ];
 
 export const communities: Community[] = [
-  { id: "co1", name: "Design Mornings", cover: "https://images.unsplash.com/photo-1503602642458-232111445657?w=600&q=80", members: 18_200, online: 412, category: "Design", verified: true, trending: true },
-  { id: "co2", name: "Synth Citizens", cover: "https://images.unsplash.com/photo-1483412033650-1015ddeb83d1?w=600&q=80", members: 24_900, online: 882, category: "Music", trending: true },
-  { id: "co3", name: "Indie Game Dev", cover: "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=600&q=80", members: 51_300, online: 1320, category: "Gaming" },
-  { id: "co4", name: "AI Frontiers", cover: "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?w=600&q=80", members: 73_100, online: 2240, category: "AI", verified: true, trending: true },
-  { id: "co5", name: "Astrofolk", cover: "https://images.unsplash.com/photo-1465101046530-73398c7f28ca?w=600&q=80", members: 9_400, online: 211, category: "Space" },
-  { id: "co6", name: "Solo Founders", cover: "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=600&q=80", members: 12_600, online: 290, category: "Startups" }
+  {
+    id: "co1",
+    name: "Design Mornings",
+    cover: "https://images.unsplash.com/photo-1503602642458-232111445657?w=600&q=80",
+    members: 18_200,
+    online: 412,
+    category: "Design",
+    verified: true,
+    trending: true,
+    hostId: "u3",
+    description:
+      "Slow-coffee critiques, glass UI exploration and tomorrow's interfaces — drop in before standup.",
+    interests: ["design", "ui", "ux", "glassmorphism", "typography"]
+  },
+  {
+    id: "co2",
+    name: "Synth Citizens",
+    cover: "https://images.unsplash.com/photo-1483412033650-1015ddeb83d1?w=600&q=80",
+    members: 24_900,
+    online: 882,
+    category: "Music",
+    trending: true,
+    hostId: "u4",
+    description: "Synthwave producers and night-drive heads. Drop loops, drop links.",
+    interests: ["music", "synthwave", "producers", "late-night", "audio"]
+  },
+  {
+    id: "co3",
+    name: "Indie Game Dev",
+    cover: "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=600&q=80",
+    members: 51_300,
+    online: 1320,
+    category: "Gaming",
+    hostId: "u5",
+    description: "Devlogs, postmortems and 'finished a game today' threads. Be kind, be specific.",
+    interests: ["gamedev", "indie", "unity", "godot", "gaming"]
+  },
+  {
+    id: "co4",
+    name: "AI Frontiers",
+    cover: "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?w=600&q=80",
+    members: 73_100,
+    online: 2240,
+    category: "AI",
+    verified: true,
+    trending: true,
+    hostId: "u6",
+    description: "Frontier papers, agents and the weird wonderful stuff happening this week.",
+    interests: ["ai", "ml", "agents", "llm", "research"]
+  },
+  {
+    id: "co5",
+    name: "Astrofolk",
+    cover: "https://images.unsplash.com/photo-1465101046530-73398c7f28ca?w=600&q=80",
+    members: 9_400,
+    online: 211,
+    category: "Space",
+    hostId: "u7",
+    description: "Telescope photos, launch parties, and stargazing meetups.",
+    interests: ["space", "astronomy", "stars", "telescope", "cosmos"]
+  },
+  {
+    id: "co6",
+    name: "Solo Founders",
+    cover: "https://images.unsplash.com/photo-1521737604893-d14cc237f11d?w=600&q=80",
+    members: 12_600,
+    online: 290,
+    category: "Startups",
+    hostId: "u8",
+    description: "Raw startup talk, candid revenue posts, no investors allowed.",
+    interests: ["startups", "indiehackers", "saas", "bootstrapped", "founders"]
+  }
 ];
+
+export const communityPosts: Record<string, CommunityPost[]> = {
+  co1: [
+    {
+      id: "cp1-1",
+      communityId: "co1",
+      authorId: "u3",
+      kind: "text",
+      content:
+        "Sunday challenge: redesign a dashboard you hate using only glass surfaces and one accent color. Drop your before/after below 👇",
+      reactions: [
+        { emoji: "🔥", count: 142, byMe: false },
+        { emoji: "💜", count: 88, byMe: false },
+        { emoji: "🧊", count: 36, byMe: false }
+      ],
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString()
+    },
+    {
+      id: "cp1-2",
+      communityId: "co1",
+      authorId: "u3",
+      kind: "image",
+      content: "New iOS app spec just hit. Notice how the chrome dissolves into the wallpaper — that's the whole trick.",
+      media: [
+        {
+          url: "https://images.unsplash.com/photo-1545239351-1141bd82e8a6?w=900&q=80",
+          alt: "Glass UI mockup",
+          kind: "image"
+        }
+      ],
+      reactions: [
+        { emoji: "🤩", count: 211, byMe: false },
+        { emoji: "💡", count: 47, byMe: false }
+      ],
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 9).toISOString()
+    },
+    {
+      id: "cp1-3",
+      communityId: "co1",
+      authorId: "u3",
+      kind: "poll",
+      content: "Real talk — which is the most overused trend right now?",
+      poll: {
+        question: "Most overused design trend?",
+        options: [
+          { id: "o1", label: "Bento grids", votes: 412 },
+          { id: "o2", label: "Tilted card stacks", votes: 198 },
+          { id: "o3", label: "Aurora gradients", votes: 624 },
+          { id: "o4", label: "Wide cyan accents", votes: 87 }
+        ]
+      },
+      reactions: [{ emoji: "😅", count: 92, byMe: false }],
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 24).toISOString()
+    }
+  ],
+  co2: [
+    {
+      id: "cp2-1",
+      communityId: "co2",
+      authorId: "u4",
+      kind: "song",
+      content: "On loop all morning. The pad in the chorus is unreal.",
+      song: {
+        title: "Ylang Ylang",
+        artist: "FKJ",
+        cover: "https://images.unsplash.com/photo-1493225457124-a3eb161ffa5f?w=400&q=80",
+        durationSec: 264
+      },
+      reactions: [
+        { emoji: "🎧", count: 318, byMe: false },
+        { emoji: "💜", count: 122, byMe: false }
+      ],
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 6).toISOString()
+    },
+    {
+      id: "cp2-2",
+      communityId: "co2",
+      authorId: "u4",
+      kind: "text",
+      content: "Open mic Friday — drop your unreleased loops in the thread, we'll vote. Top 3 get featured on the next compilation.",
+      reactions: [
+        { emoji: "🔥", count: 256, byMe: false },
+        { emoji: "🙌", count: 84, byMe: false }
+      ],
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 30).toISOString()
+    }
+  ],
+  co4: [
+    {
+      id: "cp4-1",
+      communityId: "co4",
+      authorId: "u6",
+      kind: "text",
+      content:
+        "Quiet milestone but worth marking — a single open-weights 32B is now matching GPT-4-class on multi-hop reasoning. Inference moved to laptops faster than anyone predicted.",
+      reactions: [
+        { emoji: "🤯", count: 612, byMe: false },
+        { emoji: "💯", count: 188, byMe: false }
+      ],
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 2).toISOString()
+    },
+    {
+      id: "cp4-2",
+      communityId: "co4",
+      authorId: "u6",
+      kind: "poll",
+      content: "Where are you spending the most time this quarter?",
+      poll: {
+        question: "Your focus area?",
+        options: [
+          { id: "o1", label: "Agents / tool use", votes: 542 },
+          { id: "o2", label: "Retrieval + grounding", votes: 318 },
+          { id: "o3", label: "Eval + safety", votes: 196 },
+          { id: "o4", label: "Local + on-device", votes: 401 }
+        ]
+      },
+      reactions: [{ emoji: "🧠", count: 144, byMe: false }],
+      createdAt: new Date(Date.now() - 1000 * 60 * 60 * 14).toISOString()
+    }
+  ]
+};

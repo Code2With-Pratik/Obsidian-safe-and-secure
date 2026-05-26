@@ -21,7 +21,9 @@ import {
   MapPin,
   Navigation,
   CalendarClock,
-  Music as MusicIcon
+  Music as MusicIcon,
+  Phone,
+  Video as VideoIcon
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -30,6 +32,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
+import { useRouter } from "next/navigation";
+import { useUIStore } from "@/store/use-ui-store";
 import { cn, copyText, formatTime, initials } from "@/lib/utils";
 import { ReactionPicker } from "./reaction-picker";
 import { useImageLightbox } from "./image-lightbox";
@@ -1052,10 +1056,14 @@ function LocationBubble({ me, bubbleMe, meStyle, message }: SubProps) {
   );
 }
 
-/** Scheduled message receipt. */
+/** Scheduled message receipt. Renders a call-invite countdown + Join button
+ *  when `schedule.callInvite` is set, otherwise the plain scheduled note. */
 function ScheduleBubble({ me, bubbleMe, meStyle, message }: SubProps) {
   const sch = message.schedule!;
   const when = new Date(sch.whenIso);
+  if (sch.callInvite) {
+    return <ScheduledCallBubble me={me} message={message} bubbleMe={bubbleMe} meStyle={meStyle} />;
+  }
   return (
     <div
       style={me ? meStyle : undefined}
@@ -1080,6 +1088,140 @@ function ScheduleBubble({ me, bubbleMe, meStyle, message }: SubProps) {
       <p className="text-sm whitespace-pre-wrap break-words">{sch.message}</p>
     </div>
   );
+}
+
+/** Specialized scheduled-call bubble — shows a live countdown to the start
+ *  time, flips to "Live now" once the time has elapsed, and exposes a Join
+ *  button that drops the user straight into the active-call screen. */
+function ScheduledCallBubble({
+  me,
+  message,
+  bubbleMe,
+  meStyle
+}: SubProps) {
+  const sch = message.schedule!;
+  const invite = sch.callInvite!;
+  const router = useRouter();
+  const startCall = useUIStore((s) => s.startCall);
+
+  const target = React.useMemo(() => new Date(sch.whenIso).getTime(), [sch.whenIso]);
+  const [now, setNow] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    // Tick once per second so the countdown stays accurate without thrashing.
+    const id = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const diffSec = Math.max(0, Math.floor((target - now) / 1000));
+  const isLive = diffSec === 0;
+  const countdown = formatCountdown(diffSec);
+
+  // "Requesting host approval" intermediate state — once the call has
+  // already started, members can't join freely; the host must accept. We
+  // simulate that with a short pending state before the call actually opens.
+  const [requesting, setRequesting] = React.useState(false);
+
+  const doJoin = () => {
+    startCall({
+      chatId: message.chatId,
+      name: invite.title,
+      video: invite.video,
+      group: (invite.participantIds?.length ?? 0) > 2,
+      participants: invite.participantIds?.length ?? 2,
+      returnTo: `/chats/${message.chatId}`
+    });
+    router.push("/calls/active");
+  };
+
+  const handleJoin = () => {
+    if (!isLive) return; // pre-start: nothing to do until live
+    if (requesting) return;
+    setRequesting(true);
+    // Host approval is mock — accept after a short delay.
+    window.setTimeout(() => {
+      setRequesting(false);
+      doJoin();
+    }, 1400);
+  };
+
+  return (
+    <div
+      style={me ? meStyle : undefined}
+      className={cn(
+        "rounded-2xl px-3.5 py-3 max-w-[min(22rem,100%)] space-y-2.5",
+        me
+          ? "rounded-br-none" +
+              (bubbleMe ? "" : " bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white")
+          : "rounded-bl-none glass border border-border/60"
+      )}
+    >
+      <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider opacity-80">
+        {invite.video ? <VideoIcon className="size-3.5" /> : <Phone className="size-3.5" />}
+        {isLive ? "Live now" : "Scheduled call"}
+      </div>
+      <p className="text-sm font-semibold break-words">{invite.title}</p>
+      <div className="text-[11px] opacity-80">
+        Starts{" "}
+        {new Date(sch.whenIso).toLocaleString(undefined, {
+          weekday: "short",
+          month: "short",
+          day: "numeric",
+          hour: "numeric",
+          minute: "2-digit"
+        })}
+      </div>
+      <div className="flex items-center justify-between gap-2 pt-1">
+        <div
+          className={cn(
+            "px-2.5 py-1 rounded-full text-[11px] font-mono tabular-nums",
+            isLive
+              ? "bg-emerald-500/25 text-emerald-200"
+              : "bg-foreground/10 text-foreground/85"
+          )}
+        >
+          {isLive ? "● LIVE" : `in ${countdown}`}
+        </div>
+        <motion.button
+          whileTap={{ scale: 0.95 }}
+          onClick={handleJoin}
+          disabled={!isLive || requesting}
+          className={cn(
+            "inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-semibold shadow-glow transition",
+            !isLive
+              ? "bg-white/70 text-black/50 cursor-not-allowed"
+              : requesting
+                ? "bg-amber-400/90 text-black cursor-wait"
+                : "bg-emerald-500 hover:bg-emerald-400 text-white"
+          )}
+        >
+          {requesting ? (
+            <>
+              <Clock className="size-3.5 animate-spin" />
+              Asking host…
+            </>
+          ) : (
+            <>
+              {invite.video ? <VideoIcon className="size-3.5" /> : <Phone className="size-3.5" />}
+              Join call
+            </>
+          )}
+        </motion.button>
+      </div>
+    </div>
+  );
+}
+
+/** Format a duration of seconds as "Xd Yh", "Xh Ym", "Xm Ys", or "Xs". */
+function formatCountdown(totalSec: number) {
+  if (totalSec <= 0) return "0s";
+  const d = Math.floor(totalSec / 86400);
+  const h = Math.floor((totalSec % 86400) / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (d > 0) return `${d}d ${h}h`;
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m ${String(s).padStart(2, "0")}s`;
+  return `${s}s`;
 }
 
 /** WhatsApp-style image grid (1, 2, 3, 4, 4+N tiles). Tapping any tile opens

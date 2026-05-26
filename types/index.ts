@@ -98,7 +98,22 @@ export interface Message {
   };
   contacts?: { name: string; username?: string; avatar?: string }[];
   location?: { lat: number; lng: number; live?: boolean };
-  schedule?: { whenIso: string; message: string };
+  schedule?: {
+    whenIso: string;
+    message: string;
+    /** If set, the scheduled item is a call invite. The bubble renders a
+     *  countdown + Join button until the start time elapses. */
+    callInvite?: {
+      /** Shared id across every invitee's copy of the same call — used to
+       *  dedupe in the Upcoming list and the View-all view. */
+      callId?: string;
+      video: boolean;
+      title: string;
+      /** Optional end time so we can show "Ends at X". */
+      endsAtIso?: string;
+      participantIds?: ID[];
+    };
+  };
   link?: { url: string; title: string; description?: string; image?: string };
   status?: "sending" | "sent" | "delivered" | "read";
 }
@@ -166,4 +181,40 @@ export interface Community {
   category: string;
   verified?: boolean;
   trending?: boolean;
+  /** User id of the host — only the host can post + delete. */
+  hostId?: ID;
+  description?: string;
+  /** Topic tags used to compute "X people match your interest" popup on join. */
+  interests?: string[];
+  /** Optional chat-theme id to override the user's global theme. */
+  theme?: string;
+}
+
+export interface CommunityPoll {
+  question: string;
+  options: { id: string; label: string; votes: number }[];
+}
+
+export interface CommunitySong {
+  title: string;
+  artist: string;
+  cover: string;
+  durationSec: number;
+}
+
+export type CommunityPostKind = "text" | "image" | "video" | "song" | "poll";
+
+export interface CommunityPost {
+  id: ID;
+  communityId: ID;
+  authorId: ID;
+  kind: CommunityPostKind;
+  content?: string;
+  media?: { url: string; alt?: string; kind?: "image" | "video" }[];
+  song?: CommunitySong;
+  poll?: CommunityPoll;
+  /** User ids mentioned in this post (rendered as @handles). */
+  mentions?: ID[];
+  reactions?: { emoji: string; count: number; byMe: boolean }[];
+  createdAt: string;
 }

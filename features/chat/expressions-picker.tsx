@@ -56,7 +56,7 @@ interface Props {
   onClose: () => void;
   onPick: (pick: ExpressionPick) => void;
   /** anchor element for desktop popover positioning */
-  anchorRef?: React.RefObject<HTMLElement>;
+  anchorRef?: React.RefObject<HTMLElement | null>;
 }
 
 export function ExpressionsPicker({ open, onClose, onPick, anchorRef }: Props) {

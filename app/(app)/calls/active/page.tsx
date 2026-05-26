@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Lock, Radio, Sparkles, Timer, ChevronLeft } from "lucide-react";
+import { Ghost, Lock, Radio, Sparkles, Timer, ChevronLeft } from "lucide-react";
 import { VideoGrid } from "@/features/calls/video-grid";
 import { CallControls, CALL_FILTERS } from "@/features/calls/call-controls";
 import { Button } from "@/components/ui/button";
@@ -38,16 +38,37 @@ export default function ActiveCall() {
 
   // If someone lands on /calls/active without an active call (e.g. deep link),
   // create a demo call so the page renders meaningfully.
+  // Runs ONCE on mount — otherwise `endCall()` clearing `activeCall` would
+  // immediately re-trigger this effect and spawn a phantom demo call while
+  // the route change is still in flight (visible as a "ghost call" glitch
+  // before redirecting).
   React.useEffect(() => {
-    if (!activeCall) {
+    if (!useUIStore.getState().activeCall) {
       startCall({
         chatId: "c1",
         name: "Kai Nakamura",
         avatar: "https://api.dicebear.com/9.x/notionists/svg?backgroundType=gradientLinear&backgroundColor=8b5cf6,ec4899,22d3ee,a3e635,fbbf24,fb923c,60a5fa,f472b6&radius=18&seed=kai",
-        video: true
+        video: true,
+        returnTo: "/calls"
       });
     }
-  }, [activeCall, startCall]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // After mount, if the call gets ended (activeCall becomes null) the page
+  // should leave this screen immediately. Otherwise the participants grid
+  // briefly renders mock tiles before the manual `router.push` lands —
+  // especially noticeable on multi-user calls.
+  const initialCallSeen = React.useRef(false);
+  React.useEffect(() => {
+    if (activeCall) {
+      initialCallSeen.current = true;
+      return;
+    }
+    if (initialCallSeen.current) {
+      router.push("/calls");
+    }
+  }, [activeCall, router]);
 
   return (
     // Fullscreen overlay. The video stage fills the entire viewport from
@@ -97,15 +118,25 @@ export default function ActiveCall() {
           animate={{ opacity: 1, y: 0 }}
           className="pointer-events-auto flex items-center gap-3 glass-strong rounded-full px-4 py-1.5 border border-border/60"
         >
-          <div className="flex items-center gap-1.5">
-            <span className="size-2 rounded-full bg-rose-500 animate-pulse" />
-            <span className="text-xs font-medium">LIVE</span>
-          </div>
+          {activeCall?.ghost ? (
+            <>
+              <Ghost className="size-3.5 text-violet-300" />
+              <span className="text-xs font-medium tracking-tight">
+                {activeCall.ghostHandle ?? "Ghost call"}
+              </span>
+            </>
+          ) : (
+            <div className="flex items-center gap-1.5">
+              <span className="size-2 rounded-full bg-rose-500 animate-pulse" />
+              <span className="text-xs font-medium">LIVE</span>
+            </div>
+          )}
           <span className="text-muted-foreground/60">·</span>
           <Timer01 />
           <span className="text-muted-foreground/60 hidden md:inline">·</span>
           <span className="hidden md:inline-flex text-xs text-muted-foreground items-center gap-1">
-            <Lock className="size-3 text-emerald-400" /> Encrypted
+            <Lock className="size-3 text-emerald-400" />
+            {activeCall?.ghost ? "Anonymous" : "Encrypted"}
           </span>
         </motion.div>
 
@@ -126,7 +157,9 @@ export default function ActiveCall() {
             filterId={filterId}
             onFilterChange={setFilterId}
             onEnd={() => {
-              const back = activeCall?.returnTo ?? "/chats";
+              // Capture `returnTo` BEFORE clearing `activeCall` so the
+              // navigation target survives. Default to the Calls tab.
+              const back = activeCall?.returnTo ?? "/calls";
               endCall();
               router.push(back);
             }}

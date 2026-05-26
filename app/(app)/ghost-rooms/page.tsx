@@ -1,20 +1,45 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { motion } from "framer-motion";
 import { Ghost, KeyRound, Plus, Search, Share2 } from "lucide-react";
 import { GhostRoomCard } from "@/features/ghost/ghost-room-card";
 import { CreateGhostDialog } from "@/features/ghost/create-ghost-dialog";
+import { JoinPinDialog } from "@/features/ghost/join-pin-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { ghostRooms } from "@/lib/mock-data";
+import { useGhostStore } from "@/store/use-ghost-store";
+import type { GhostRoom } from "@/types";
 
 export default function GhostRoomsPage() {
   const [q, setQ] = React.useState("");
-  const filtered = ghostRooms.filter((g) => g.name.toLowerCase().includes(q.toLowerCase()));
+  const rooms = useGhostStore((s) => s.rooms);
+  const joinedIds = useGhostStore((s) => s.joinedIds);
+  const createdIds = useGhostStore((s) => s.createdIds);
+  const joinRoom = useGhostStore((s) => s.joinRoom);
+
+  const [pinDialogRoom, setPinDialogRoom] = React.useState<GhostRoom | null>(null);
+  const [joinByPinOpen, setJoinByPinOpen] = React.useState(false);
+
+  const matches = (r: GhostRoom) =>
+    r.name.toLowerCase().includes(q.toLowerCase()) ||
+    r.topic.toLowerCase().includes(q.toLowerCase());
+  const filtered = rooms.filter(matches);
+  const newest = [...rooms]
+    .sort((a, b) => (b.id > a.id ? 1 : -1))
+    .filter(matches)
+    .slice(0, 6);
+  const mine = rooms.filter((r) => createdIds.includes(r.id)).filter(matches);
+  const joined = rooms.filter((r) => joinedIds.includes(r.id)).filter(matches);
+
+  const handleJoinClick = (room: GhostRoom) => {
+    // The card already handles public joins; we only get here for locked rooms.
+    if (room.isLocked && !joinedIds.includes(room.id)) {
+      setPinDialogRoom(room);
+    }
+  };
 
   return (
     <ScrollArea className="h-[calc(100dvh-4rem)]">
@@ -48,7 +73,11 @@ export default function GhostRoomsPage() {
                   <Plus /> Create room
                 </Button>
               </CreateGhostDialog>
-              <Button variant="glass" size="lg">
+              <Button
+                variant="glass"
+                size="lg"
+                onClick={() => setJoinByPinOpen(true)}
+              >
                 <KeyRound /> Join with PIN
               </Button>
             </div>
@@ -74,52 +103,89 @@ export default function GhostRoomsPage() {
               <TabsTrigger value="trending">Trending</TabsTrigger>
               <TabsTrigger value="new">New</TabsTrigger>
               <TabsTrigger value="mine">My rooms</TabsTrigger>
-              <TabsTrigger value="scheduled">Scheduled</TabsTrigger>
+              <TabsTrigger value="joined">Joined</TabsTrigger>
             </TabsList>
 
             <TabsContent value="trending" className="mt-6">
-              <motion.div
-                initial="hidden"
-                animate="visible"
-                variants={{
-                  hidden: {},
-                  visible: { transition: { staggerChildren: 0.05 } }
-                }}
-                className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
-              >
-                {filtered.map((room) => (
-                  <motion.div
-                    key={room.id}
-                    variants={{
-                      hidden: { opacity: 0, y: 20 },
-                      visible: { opacity: 1, y: 0 }
-                    }}
-                  >
-                    <GhostRoomCard room={room} />
-                  </motion.div>
-                ))}
-              </motion.div>
+              <RoomGrid rooms={filtered} onJoin={handleJoinClick} />
             </TabsContent>
-
             <TabsContent value="new" className="mt-6">
-              <EmptyHint title="No new rooms yet" body="Be the first to open a fresh ghost room tonight." />
+              {newest.length > 0 ? (
+                <RoomGrid rooms={newest} onJoin={handleJoinClick} />
+              ) : (
+                <EmptyHint title="No new rooms yet" body="Be the first to open a fresh ghost room tonight." />
+              )}
             </TabsContent>
             <TabsContent value="mine" className="mt-6">
-              <EmptyHint
-                title="You have no rooms"
-                body="Create one and share the PIN with the people who matter."
-              />
+              {mine.length > 0 ? (
+                <RoomGrid rooms={mine} onJoin={handleJoinClick} />
+              ) : (
+                <EmptyHint
+                  title="You have no rooms"
+                  body="Create one and share the PIN with the people who matter."
+                />
+              )}
             </TabsContent>
-            <TabsContent value="scheduled" className="mt-6">
-              <EmptyHint
-                title="Nothing scheduled"
-                body="Schedule a ghost room for later and we'll notify your invitees."
-              />
+            <TabsContent value="joined" className="mt-6">
+              {joined.length > 0 ? (
+                <RoomGrid rooms={joined} onJoin={handleJoinClick} />
+              ) : (
+                <EmptyHint
+                  title="Nothing joined yet"
+                  body="Hop into a trending room or punch in a PIN someone shared."
+                />
+              )}
             </TabsContent>
           </Tabs>
         </div>
       </div>
+
+      {/* PIN dialog for a specific locked room */}
+      <JoinPinDialog
+        open={pinDialogRoom !== null}
+        onOpenChange={(v) => !v && setPinDialogRoom(null)}
+        room={pinDialogRoom ?? undefined}
+      />
+
+      {/* Standalone "Join with PIN" — matches against any room */}
+      <JoinPinDialog
+        open={joinByPinOpen}
+        onOpenChange={setJoinByPinOpen}
+        onJoined={(room) => joinRoom(room.id)}
+      />
     </ScrollArea>
+  );
+}
+
+function RoomGrid({
+  rooms,
+  onJoin
+}: {
+  rooms: GhostRoom[];
+  onJoin: (room: GhostRoom) => void;
+}) {
+  return (
+    <motion.div
+      initial="hidden"
+      animate="visible"
+      variants={{
+        hidden: {},
+        visible: { transition: { staggerChildren: 0.05 } }
+      }}
+      className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
+    >
+      {rooms.map((room) => (
+        <motion.div
+          key={room.id}
+          variants={{
+            hidden: { opacity: 0, y: 20 },
+            visible: { opacity: 1, y: 0 }
+          }}
+        >
+          <GhostRoomCard room={room} onJoin={onJoin} />
+        </motion.div>
+      ))}
+    </motion.div>
   );
 }
 

@@ -3,181 +3,292 @@
 import * as React from "react";
 import { motion } from "framer-motion";
 import {
-  MousePointer2,
-  Pen,
-  Square,
-  Circle,
-  Type,
-  Image as ImageIcon,
-  StickyNote,
-  Eraser,
-  Undo2,
-  Redo2,
+  ChevronDown,
+  Download,
+  Link2,
+  Loader2,
+  Minus,
+  Plus,
   Share2,
-  Users,
-  Sparkles,
-  Brain
+  Users
 } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
-import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
+import { BoardCanvas } from "@/features/whiteboard/board-canvas";
+import { WhiteboardToolbar } from "@/features/whiteboard/toolbar";
+import { BoardsSidebar } from "@/features/whiteboard/boards-sidebar";
+import { Minimap } from "@/features/whiteboard/minimap";
+import { ShareDialog } from "@/features/whiteboard/share-dialog";
+import { AccessPopover } from "@/features/whiteboard/access-popover";
+import { SelectionToolbar } from "@/features/whiteboard/selection-toolbar";
+import { IconPanel } from "@/features/whiteboard/icon-panel";
+import { downloadBoardAsPng } from "@/features/whiteboard/export-png";
+import { useWhiteboardStore } from "@/store/use-whiteboard-store";
 import { users } from "@/lib/mock-data";
-import { cn } from "@/lib/utils";
 
-const tools = [
-  { icon: <MousePointer2 />, label: "Select" },
-  { icon: <Pen />, label: "Pen" },
-  { icon: <Eraser />, label: "Eraser" },
-  { icon: <Square />, label: "Square" },
-  { icon: <Circle />, label: "Circle" },
-  { icon: <Type />, label: "Text" },
-  { icon: <StickyNote />, label: "Sticky" },
-  { icon: <ImageIcon />, label: "Image" }
-];
-
-const notes = [
-  { x: 12, y: 18, color: "from-amber-300 to-amber-400", text: "Hero: 'The future of communication'", rot: -3 },
-  { x: 32, y: 30, color: "from-pink-300 to-pink-400", text: "Use aurora gradient bg on splash", rot: 2 },
-  { x: 58, y: 16, color: "from-cyan-300 to-cyan-400", text: "Ghost rooms = killer feature", rot: -1 },
-  { x: 72, y: 42, color: "from-violet-300 to-violet-400", text: "Whiteboard inside calls?", rot: 4 },
-  { x: 18, y: 60, color: "from-emerald-300 to-emerald-400", text: "Brainstorm mode → AI clusters ideas", rot: -2 },
-  { x: 48, y: 64, color: "from-rose-300 to-rose-400", text: "Stickers as DND-able layers", rot: 3 }
-];
-
-const cursors = [
-  { x: 28, y: 32, name: "Kai", color: "#22D3EE" },
-  { x: 64, y: 50, name: "Iris", color: "#EC4899" },
-  { x: 40, y: 70, name: "Nova", color: "#A3E635" }
+const COLLAB_USERS = [
+  { ...users[1], color: "#22D3EE" },
+  { ...users[2], color: "#EC4899" },
+  { ...users[3], color: "#A3E635" },
+  { ...users[4], color: "#FBBF24" }
 ];
 
 export default function WhiteboardPage() {
-  const [active, setActive] = React.useState("Pen");
+  // The whiteboard store is persisted in localStorage so its hydrated state
+  // (camera, user-created boards, generated ids) is entirely client-side.
+  // Rendering it on the server would produce HTML that diverges from the
+  // post-hydration client tree. Gate the entire UI behind a mounted flag so
+  // SSR ships a neutral placeholder and the real board renders once we're
+  // running on the client.
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const board = useWhiteboardStore((s) => s.activeBoard());
+  const setCamera = useWhiteboardStore((s) => s.setCamera);
+
+  const [collapsed, setCollapsed] = React.useState(false);
+  const [shareOpen, setShareOpen] = React.useState(false);
+  const [iconPanelOpen, setIconPanelOpen] = React.useState(false);
+  const [downloading, setDownloading] = React.useState(false);
+
+  /** Snapshot the current board and trigger an HD PNG download. We close the
+   *  dropdown via the spinner state so the menu doesn't disappear before the
+   *  blob URL kicks the browser into download mode. */
+  const handleDownload = React.useCallback(async () => {
+    const current = useWhiteboardStore.getState().activeBoard();
+    if (!current) return;
+    setDownloading(true);
+    try {
+      await downloadBoardAsPng(current);
+    } catch (err) {
+      console.error("Failed to export board", err);
+    } finally {
+      setDownloading(false);
+    }
+  }, []);
+
+  // Roving "ghost cursors" — pure visual effect so the board feels live.
+  const [tick, setTick] = React.useState(0);
+  React.useEffect(() => {
+    if (!mounted) return;
+    const id = window.setInterval(() => setTick((t) => t + 1), 60);
+    return () => window.clearInterval(id);
+  }, [mounted]);
+
+  if (!mounted) {
+    return (
+      <div className="h-[calc(100dvh-4rem)] grid place-items-center text-muted-foreground text-sm">
+        Loading whiteboard…
+      </div>
+    );
+  }
+
+  if (!board) return null;
+
+  const zoom = board.camera.zoom;
 
   return (
-    <div className="h-[calc(100dvh-4rem)] relative overflow-hidden">
-      <div
-        className="absolute inset-0"
-        style={{
-          backgroundImage:
-            "radial-gradient(hsl(var(--border) / 0.6) 1px, transparent 1px)",
-          backgroundSize: "24px 24px"
-        }}
+    <div className="h-[calc(100dvh-4rem)] flex overflow-hidden">
+      <BoardsSidebar
+        collapsed={collapsed}
+        onToggleCollapsed={() => setCollapsed((v) => !v)}
       />
-      <div className="absolute inset-0 bg-gradient-to-b from-background/50 via-transparent to-background/50" />
 
-      <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 glass-strong rounded-2xl px-2 py-1.5 border border-border/60 shadow-floating">
-        {tools.map((t) => (
-          <Tooltip key={t.label}>
-            <TooltipTrigger asChild>
-              <button
-                onClick={() => setActive(t.label)}
-                className={cn(
-                  "size-9 grid place-items-center rounded-xl transition [&_svg]:size-4",
-                  active === t.label
-                    ? "bg-foreground text-background"
-                    : "hover:bg-foreground/5"
-                )}
-              >
-                {t.icon}
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>{t.label}</TooltipContent>
-          </Tooltip>
-        ))}
-        <div className="w-px h-6 bg-border/60 mx-1" />
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button className="size-9 grid place-items-center rounded-xl hover:bg-foreground/5">
-              <Undo2 className="size-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Undo</TooltipContent>
-        </Tooltip>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button className="size-9 grid place-items-center rounded-xl hover:bg-foreground/5">
-              <Redo2 className="size-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent>Redo</TooltipContent>
-        </Tooltip>
-      </div>
+      <div
+        data-board-viewport
+        className="relative flex-1 min-w-0 overflow-hidden"
+      >
+        {/* Drawing surface — fills the viewport. */}
+        <BoardCanvas />
 
-      <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
-        <div className="hidden md:flex items-center gap-2 glass rounded-full px-3 py-1.5">
-          <Users className="size-3.5 text-muted-foreground" />
-          <div className="flex -space-x-2">
-            {users.slice(1, 5).map((u) => (
-              <Avatar key={u.id} className="size-6 ring-2 ring-background">
-                <AvatarImage src={u.avatar} />
-              </Avatar>
-            ))}
-          </div>
-          <span className="text-xs text-muted-foreground">4 editing</span>
-        </div>
-        <Button variant="glass" size="sm">
-          <Brain /> Brainstorm
-        </Button>
-        <Button variant="gradient" size="sm">
-          <Share2 /> Share
-        </Button>
-      </div>
-
-      <div className="absolute inset-0 pt-20">
-        {notes.map((n, i) => (
+        {/* Top: floating toolbar (center) + presence/actions (right). */}
+        <div className="pointer-events-none absolute top-0 inset-x-0 z-20 flex items-start justify-between gap-3 px-4 pt-4">
           <motion.div
-            key={i}
-            drag
-            dragMomentum={false}
-            initial={{ opacity: 0, scale: 0.5, rotate: n.rot }}
-            animate={{ opacity: 1, scale: 1, rotate: n.rot }}
-            transition={{ delay: i * 0.05 }}
-            whileHover={{ scale: 1.05, zIndex: 10 }}
-            style={{
-              left: `${n.x}%`,
-              top: `${n.y}%`
-            }}
-            className={`absolute w-44 h-44 rounded-2xl bg-gradient-to-br ${n.color} p-4 shadow-floating cursor-grab active:cursor-grabbing text-slate-900`}
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="pointer-events-auto"
           >
-            <p className="text-sm font-medium leading-snug">{n.text}</p>
-            <div className="absolute bottom-2 right-2 text-[10px] opacity-70">
-              {users[i % users.length]?.name.split(" ")[0]}
-            </div>
+            <BoardTitle />
           </motion.div>
-        ))}
 
-        {cursors.map((c, i) => (
           <motion.div
-            key={i}
-            style={{ left: `${c.x}%`, top: `${c.y}%` }}
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1, x: [0, 12, -8, 0], y: [0, -10, 6, 0] }}
-            transition={{ duration: 6 + i, repeat: Infinity }}
-            className="absolute pointer-events-none flex items-center gap-1"
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="pointer-events-auto"
+          >
+            <WhiteboardToolbar onOpenIcons={() => setIconPanelOpen(true)} />
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="pointer-events-auto flex items-center gap-2"
+          >
+            <AccessPopover>
+              <button
+                className="hidden md:flex items-center gap-2 glass rounded-full px-3 py-1.5 border border-border/60 hover:bg-foreground/5 transition cursor-pointer pointer-events-auto"
+                aria-label="Manage access"
+              >
+                <Users className="size-3.5 text-muted-foreground" />
+                <div className="flex -space-x-2">
+                  {COLLAB_USERS.map((u) => (
+                    <Avatar
+                      key={u.id}
+                      className="size-6 ring-2 ring-background"
+                      style={{ boxShadow: `0 0 0 1px ${u.color}` }}
+                    >
+                      <AvatarImage src={u.avatar} />
+                    </Avatar>
+                  ))}
+                </div>
+                <span className="text-xs text-muted-foreground">
+                  {COLLAB_USERS.length} editing
+                </span>
+                <ChevronDown className="size-3 text-muted-foreground" />
+              </button>
+            </AccessPopover>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="gradient" size="sm">
+                  <Share2 /> Share <ChevronDown className="size-3.5 opacity-80" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" sideOffset={8} className="min-w-[220px]">
+                <DropdownMenuLabel>Share board</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onSelect={() => setShareOpen(true)}>
+                  <Link2 />
+                  <div className="flex flex-col">
+                    <span>Share via link</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      Copy a join link
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={downloading}
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    handleDownload();
+                  }}
+                >
+                  {downloading ? <Loader2 className="animate-spin" /> : <Download />}
+                  <div className="flex flex-col">
+                    <span>{downloading ? "Preparing…" : "Download HD"}</span>
+                    <span className="text-[10px] text-muted-foreground">
+                      Full canvas, 2× PNG
+                    </span>
+                  </div>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </motion.div>
+        </div>
+
+        {/* Live "ghost cursors" — pure decoration, draw in screen space. */}
+        <GhostCursors tick={tick} />
+
+        {/* Bottom-center: selection bar only (shown when 2+ items selected). */}
+        <div className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-2">
+          <SelectionToolbar />
+        </div>
+
+        {/* Bottom-right: minimap + zoom controls */}
+        <div className="absolute bottom-4 right-4 z-20 flex flex-col items-end gap-2 pointer-events-none">
+          <div className="pointer-events-auto">
+            <Minimap />
+          </div>
+          <div className="pointer-events-auto inline-flex items-center gap-1 glass-strong rounded-full border border-border/60 shadow-floating p-1">
+            <button
+              onClick={() => setCamera({ zoom: Math.max(0.25, zoom - 0.15) })}
+              className="size-7 grid place-items-center rounded-full hover:bg-foreground/10 text-foreground/80 hover:text-foreground transition"
+              aria-label="Zoom out"
+            >
+              <Minus className="size-3.5" />
+            </button>
+            <span className="text-[11px] font-mono tabular-nums w-10 text-center text-muted-foreground">
+              {Math.round(zoom * 100)}%
+            </span>
+            <button
+              onClick={() => setCamera({ zoom: Math.min(4, zoom + 0.15) })}
+              className="size-7 grid place-items-center rounded-full hover:bg-foreground/10 text-foreground/80 hover:text-foreground transition"
+              aria-label="Zoom in"
+            >
+              <Plus className="size-3.5" />
+            </button>
+            <button
+              onClick={() => setCamera({ x: 0, y: 0, zoom: 1 })}
+              className="text-[10px] font-medium px-2 h-7 rounded-full hover:bg-foreground/10 text-foreground/70 hover:text-foreground transition"
+            >
+              Fit
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <ShareDialog open={shareOpen} onOpenChange={setShareOpen} />
+      <IconPanel open={iconPanelOpen} onOpenChange={setIconPanelOpen} />
+    </div>
+  );
+}
+
+function BoardTitle() {
+  const board = useWhiteboardStore((s) => s.activeBoard());
+  if (!board) return null;
+  return (
+    <div className="glass rounded-full px-4 py-1.5 border border-border/60 inline-flex items-center gap-2 text-xs">
+      <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
+      <span className="font-semibold">{board.name}</span>
+      <span className="text-muted-foreground">· {board.elements.length} items</span>
+    </div>
+  );
+}
+
+/** Decorative animated cursors of other people. */
+function GhostCursors({ tick }: { tick: number }) {
+  const cursors = React.useMemo(
+    () => [
+      { name: "Kai", color: "#22D3EE", phase: 0 },
+      { name: "Iris", color: "#EC4899", phase: 1.5 },
+      { name: "Nova", color: "#A3E635", phase: 3.2 }
+    ],
+    []
+  );
+  return (
+    <div className="pointer-events-none absolute inset-0 z-10">
+      {cursors.map((c) => {
+        // Smooth lissajous-style path so they float around indefinitely.
+        const t = tick * 0.05 + c.phase;
+        const x = 50 + Math.cos(t * 0.7) * 30;
+        const y = 50 + Math.sin(t * 0.9) * 30;
+        return (
+          <div
+            key={c.name}
+            style={{ left: `${x}%`, top: `${y}%` }}
+            className="absolute -translate-x-1/2 -translate-y-1/2 flex items-center gap-1"
           >
             <svg width="20" height="20" viewBox="0 0 20 20" fill={c.color}>
               <path d="M4 1l13 8-6 1-3 6-4-15z" />
             </svg>
             <span
-              className="text-[10px] px-1.5 py-0.5 rounded text-white"
+              className="text-[10px] px-1.5 py-0.5 rounded text-white shadow"
               style={{ backgroundColor: c.color }}
             >
               {c.name}
             </span>
-          </motion.div>
-        ))}
-      </div>
-
-      <motion.div
-        initial={{ y: 100 }}
-        animate={{ y: 0 }}
-        className="absolute bottom-6 left-1/2 -translate-x-1/2 z-20 glass-strong rounded-full px-4 py-2 border border-border/60 shadow-floating inline-flex items-center gap-3 text-xs"
-      >
-        <Sparkles className="size-3.5 text-violet-400" />
-        <span>AI cluster · 6 notes grouped by theme</span>
-        <Badge variant="cyan">Apply</Badge>
-      </motion.div>
+          </div>
+        );
+      })}
     </div>
   );
 }
