@@ -9,7 +9,6 @@ import {
   Ghost,
   Compass,
   Phone,
-  Globe,
   PencilRuler,
   Folder,
   Settings,
@@ -27,7 +26,6 @@ const navItems = [
   { href: "/ghost-rooms", label: "Ghost Rooms", icon: Ghost, badge: 0 },
   { href: "/discover", label: "Discover", icon: Compass, badge: 0 },
   { href: "/calls", label: "Calls", icon: Phone, badge: 0 },
-  { href: "/browser", label: "Browser", icon: Globe, badge: 0 },
   { href: "/whiteboard", label: "Whiteboard", icon: PencilRuler, badge: 0 },
   { href: "/files", label: "Vault", icon: Folder, badge: 0 }
 ];
