@@ -85,6 +85,7 @@ export default function FilesPage() {
   const setVaultPassword = useVaultStore((s) => s.setVaultPassword);
   const unlock = useVaultStore((s) => s.unlock);
   const lock = useVaultStore((s) => s.lock);
+  const changePassword = useVaultStore((s) => s.changePassword);
 
   const [currentFolderId, setCurrentFolderId] = React.useState<string | null>(null);
   const [tab, setTab] = React.useState("all");
@@ -92,6 +93,8 @@ export default function FilesPage() {
   const [drag, setDrag] = React.useState(false);
   const [newFolderOpen, setNewFolderOpen] = React.useState(false);
   const [pwOpen, setPwOpen] = React.useState(false);
+  /** Which password flow the dialog is currently in. Reset on close. */
+  const [pwMode, setPwMode] = React.useState<"set" | "unlock" | "change">("set");
   /** Preview-dialog state: list of files navigable in the dialog + the
    *  index of the one the user clicked. `startIndex === null` = closed. */
   const [preview, setPreview] = React.useState<{
@@ -102,26 +105,56 @@ export default function FilesPage() {
   const pendingActionRef = React.useRef<(() => void) | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+  /* ---- multi-select ---- */
+  const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const selectionActive = selected.size > 0;
+  const toggleSelect = React.useCallback((id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+  const clearSelection = React.useCallback(() => setSelected(new Set()), []);
+
   /** Run `fn` if the node is accessible. If it's a vault item and the
    *  vault is still locked, queue the action behind the password dialog. */
   const accessNode = React.useCallback(
     (node: VaultNode, fn: () => void) => {
       if (node.vault && !unlocked) {
         pendingActionRef.current = fn;
+        // Will use "unlock" automatically since a password exists when
+        // there are vault items (we don't allow vault flag without one).
+        setPwMode(password ? "unlock" : "set");
         setPwOpen(true);
         return;
       }
       fn();
     },
-    [unlocked]
+    [unlocked, password]
+  );
+
+  /** Open the password dialog in the right mode. Auto-detects "set" vs
+   *  "unlock"; pass "change" explicitly. */
+  const openPwDialog = React.useCallback(
+    (mode?: "set" | "unlock" | "change") => {
+      const next = mode ?? (password ? "unlock" : "set");
+      setPwMode(next);
+      setPwOpen(true);
+    },
+    [password]
   );
 
   /** Same idea for actions that aren't tied to a specific node — used by the
    *  "Move to vault" menu when no password is set yet. */
-  const requirePassword = React.useCallback((after?: () => void) => {
-    if (after) pendingActionRef.current = after;
-    setPwOpen(true);
-  }, []);
+  const requirePassword = React.useCallback(
+    (after?: () => void) => {
+      if (after) pendingActionRef.current = after;
+      openPwDialog();
+    },
+    [openPwDialog]
+  );
 
   /** Open the preview dialog at `node`. The navigable list = every FILE
    *  currently visible (folders excluded) — so the user can swipe through
@@ -175,9 +208,10 @@ export default function FilesPage() {
    *  password dialog immediately — no intermediate "tap to unlock" step. */
   React.useEffect(() => {
     if (tab === "vault" && !unlocked) {
+      setPwMode(password ? "unlock" : "set");
       setPwOpen(true);
     }
-  }, [tab, unlocked]);
+  }, [tab, unlocked, password]);
 
   /* ---- drag and drop ---- */
   const onDrop = async (e: React.DragEvent) => {
@@ -200,7 +234,7 @@ export default function FilesPage() {
   /* ---- vault tab gating ---- */
   const requestVaultAccess = () => {
     // First time? → set password. Otherwise → unlock.
-    setPwOpen(true);
+    openPwDialog();
   };
 
   // Total bytes (across files, ignoring vault items the user can't see yet).
@@ -271,17 +305,27 @@ export default function FilesPage() {
                 <Folder /> New folder
               </Button>
               {!password ? (
-                <Button variant="glass" size="sm" onClick={() => setPwOpen(true)}>
+                <Button variant="glass" size="sm" onClick={() => openPwDialog("set")}>
                   <ShieldCheck /> Set vault password
                 </Button>
               ) : unlocked ? (
-                <Button variant="glass" size="sm" onClick={() => lock()}>
-                  <Lock /> Lock vault
-                </Button>
+                <>
+                  <Button variant="glass" size="sm" onClick={() => lock()}>
+                    <Lock /> Lock vault
+                  </Button>
+                  <Button variant="glass" size="sm" onClick={() => openPwDialog("change")}>
+                    <ShieldCheck /> Change password
+                  </Button>
+                </>
               ) : (
-                <Button variant="glass" size="sm" onClick={() => setPwOpen(true)}>
-                  <Unlock /> Unlock vault
-                </Button>
+                <>
+                  <Button variant="glass" size="sm" onClick={() => openPwDialog("unlock")}>
+                    <Unlock /> Unlock vault
+                  </Button>
+                  <Button variant="glass" size="sm" onClick={() => openPwDialog("change")}>
+                    <ShieldCheck /> Change password
+                  </Button>
+                </>
               )}
             </div>
           </div>
@@ -444,9 +488,16 @@ export default function FilesPage() {
       <VaultPasswordDialog
         open={pwOpen}
         onClose={() => setPwOpen(false)}
-        mode={password ? "unlock" : "set"}
-        onSubmit={(pw) => {
-          const ok = !password ? (setVaultPassword(pw), true) : unlock(pw);
+        mode={pwMode}
+        onSubmit={(payload) => {
+          let ok = false;
+          if (pwMode === "change") {
+            const { current, next } = payload as { current: string; next: string };
+            ok = changePassword(current, next);
+          } else {
+            const pw = payload as string;
+            ok = !password ? (setVaultPassword(pw), true) : unlock(pw);
+          }
           if (ok) {
             // Fire whatever the user was trying to do before we asked for
             // the password (open a file, navigate into a folder, etc.).

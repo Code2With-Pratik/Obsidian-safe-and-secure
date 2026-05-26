@@ -47,13 +47,16 @@ function Shell({
             onClick={onClose}
             className="fixed inset-0 z-[210] bg-black/40 backdrop-blur-sm"
           />
+          {/* Centering is handled entirely by the grid wrapper — DON'T also
+              translate via x:"-50%" / left:50% on the inner card, that
+              double-centers and shifts it off to one side. */}
           <div className="fixed inset-0 z-[211] grid place-items-center px-3 pointer-events-none">
             <motion.div
-              initial={{ opacity: 0, x: "-50%", y: 24, scale: 0.97 }}
-              animate={{ opacity: 1, x: "-50%", y: 0, scale: 1 }}
-              exit={{ opacity: 0, x: "-50%", y: 24, scale: 0.97 }}
+              initial={{ opacity: 0, y: 24, scale: 0.97 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 24, scale: 0.97 }}
               transition={{ type: "spring", stiffness: 280, damping: 28 }}
-              style={{ width: `min(${width}px, 100%)`, left: "50%" }}
+              style={{ width: `min(${width}px, 100%)` }}
               className="pointer-events-auto relative glass-strong glass-specular rounded-3xl border border-white/15 shadow-floating overflow-hidden"
             >
               <div className="flex items-center justify-between px-5 pt-5 pb-3">
@@ -128,8 +131,10 @@ export function NewFolderDialog({
 }
 
 /* ─────────────────────────────────────────────────────────────
- * 2. Vault password — handles both first-time set AND unlock
+ * 2. Vault password — handles set / unlock / change
  * ───────────────────────────────────────────────────────────── */
+export type VaultPwMode = "set" | "unlock" | "change";
+
 export function VaultPasswordDialog({
   open,
   onClose,
@@ -138,16 +143,23 @@ export function VaultPasswordDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  /** "set" = first-time password creation, "unlock" = enter existing password. */
-  mode: "set" | "unlock";
-  onSubmit: (password: string) => boolean | void;
+  /** "set" = first-time creation, "unlock" = enter existing, "change" = old → new. */
+  mode: VaultPwMode;
+  /** For "set"/"unlock" only the new password is passed. For "change" we
+   *  pass `{ current, next }`. Return `false` to keep the dialog open and
+   *  display "Wrong password". */
+  onSubmit: (
+    payload: string | { current: string; next: string }
+  ) => boolean | void;
 }) {
+  const [current, setCurrent] = React.useState("");
   const [pw, setPw] = React.useState("");
   const [confirm, setConfirm] = React.useState("");
   const [err, setErr] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (!open) {
+      setCurrent("");
       setPw("");
       setConfirm("");
       setErr(null);
@@ -156,6 +168,29 @@ export function VaultPasswordDialog({
 
   const submit = () => {
     setErr(null);
+    if (mode === "change") {
+      if (!current) {
+        setErr("Enter your current password.");
+        return;
+      }
+      if (pw.length < 4) {
+        setErr("New password needs at least 4 characters.");
+        return;
+      }
+      if (pw !== confirm) {
+        setErr("New passwords don't match.");
+        return;
+      }
+      const ok = onSubmit({ current, next: pw });
+      if (ok === false) {
+        setErr("Current password is wrong.");
+        setCurrent("");
+        return;
+      }
+      onClose();
+      return;
+    }
+
     if (pw.length < 4) {
       setErr("At least 4 characters please.");
       return;
@@ -173,31 +208,56 @@ export function VaultPasswordDialog({
     onClose();
   };
 
+  const title =
+    mode === "set"
+      ? "Lock your vault"
+      : mode === "unlock"
+        ? "Unlock vault"
+        : "Change vault password";
+  const subtitle =
+    mode === "set"
+      ? "Set a password to protect files & folders in your vault."
+      : mode === "unlock"
+        ? "Enter your vault password to view protected items."
+        : "Confirm the current password before choosing a new one.";
+
   return (
-    <Shell
-      open={open}
-      onClose={onClose}
-      title={mode === "set" ? "Lock your vault" : "Unlock vault"}
-      subtitle={
-        mode === "set"
-          ? "Set a password to protect files & folders in your vault."
-          : "Enter your vault password to view protected items."
-      }
-      width={420}
-    >
+    <Shell open={open} onClose={onClose} title={title} subtitle={subtitle} width={420}>
       <div className="flex items-center justify-center mb-4 mt-1">
         <div className="size-14 rounded-2xl bg-gradient-to-br from-violet-500 to-cyan-400 grid place-items-center shadow-glow">
-          {mode === "set" ? (
-            <ShieldCheck className="size-7 text-white" />
-          ) : (
+          {mode === "unlock" ? (
             <KeyRound className="size-7 text-white" />
+          ) : (
+            <ShieldCheck className="size-7 text-white" />
           )}
         </div>
       </div>
 
-      <label className="block">
+      {mode === "change" && (
+        <label className="block">
+          <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
+            Current password
+          </div>
+          <div className="relative">
+            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <input
+              value={current}
+              onChange={(e) => setCurrent(e.target.value)}
+              type="password"
+              autoFocus
+              placeholder="••••••"
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submit();
+              }}
+              className="w-full h-11 pl-9 pr-3 rounded-xl glass-subtle bg-transparent text-sm outline-none focus:ring-2 focus:ring-cyan-400/60"
+            />
+          </div>
+        </label>
+      )}
+
+      <label className={cn("block", mode === "change" && "mt-3")}>
         <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-          {mode === "set" ? "New password" : "Password"}
+          {mode === "unlock" ? "Password" : "New password"}
         </div>
         <div className="relative">
           <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -205,7 +265,7 @@ export function VaultPasswordDialog({
             value={pw}
             onChange={(e) => setPw(e.target.value)}
             type="password"
-            autoFocus
+            autoFocus={mode !== "change"}
             placeholder="••••••"
             onKeyDown={(e) => {
               if (e.key === "Enter") submit();
@@ -215,7 +275,7 @@ export function VaultPasswordDialog({
         </div>
       </label>
 
-      {mode === "set" && (
+      {(mode === "set" || mode === "change") && (
         <label className="block mt-3">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
             Confirm
@@ -236,12 +296,10 @@ export function VaultPasswordDialog({
         </label>
       )}
 
-      {err && (
-        <p className={cn("text-[12px] text-rose-400 mt-3 text-center")}>{err}</p>
-      )}
+      {err && <p className={cn("text-[12px] text-rose-400 mt-3 text-center")}>{err}</p>}
 
       <Button onClick={submit} variant="gradient" className="w-full mt-5">
-        {mode === "set" ? "Lock vault" : "Unlock"}
+        {mode === "set" ? "Lock vault" : mode === "unlock" ? "Unlock" : "Update password"}
       </Button>
     </Shell>
   );

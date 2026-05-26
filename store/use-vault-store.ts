@@ -49,6 +49,9 @@ interface VaultState {
   setVaultPassword: (password: string) => void;
   unlock: (password: string) => boolean;
   lock: () => void;
+  /** Validates `currentPassword` before swapping in `newPassword`. Returns
+   *  false if the current password doesn't match. */
+  changePassword: (currentPassword: string, newPassword: string) => boolean;
 }
 
 /** Crude kind detection from MIME type or extension. */
@@ -197,5 +200,17 @@ export const useVaultStore = create<VaultState>((set, get) => ({
     return false;
   },
 
-  lock: () => set({ unlocked: false })
+  lock: () => set({ unlocked: false }),
+
+  changePassword: (currentPassword, newPassword) => {
+    if (!newPassword) return false;
+    // No password yet → treat as initial set.
+    if (!get().password) {
+      set({ password: newPassword, unlocked: true });
+      return true;
+    }
+    if (currentPassword !== get().password) return false;
+    set({ password: newPassword, unlocked: true });
+    return true;
+  }
 }));
