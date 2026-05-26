@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useVaultStore, type VaultNode, type VaultFileKind } from "@/store/use-vault-store";
 import { NewFolderDialog, VaultPasswordDialog } from "@/features/vault/vault-dialogs";
+import { FilePreviewDialog } from "@/features/vault/file-preview-dialog";
 import { cn } from "@/lib/utils";
 
 const iconFor: Record<VaultFileKind, React.ReactNode> = {
@@ -91,7 +92,45 @@ export default function FilesPage() {
   const [drag, setDrag] = React.useState(false);
   const [newFolderOpen, setNewFolderOpen] = React.useState(false);
   const [pwOpen, setPwOpen] = React.useState(false);
+  /** Preview-dialog state: list of files navigable in the dialog + the
+   *  index of the one the user clicked. `startIndex === null` = closed. */
+  const [preview, setPreview] = React.useState<{
+    items: VaultNode[];
+    startIndex: number | null;
+  }>({ items: [], startIndex: null });
+  /** Action queued behind the password prompt — fires only after a successful unlock. */
+  const pendingActionRef = React.useRef<(() => void) | null>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  /** Run `fn` if the node is accessible. If it's a vault item and the
+   *  vault is still locked, queue the action behind the password dialog. */
+  const accessNode = React.useCallback(
+    (node: VaultNode, fn: () => void) => {
+      if (node.vault && !unlocked) {
+        pendingActionRef.current = fn;
+        setPwOpen(true);
+        return;
+      }
+      fn();
+    },
+    [unlocked]
+  );
+
+  /** Same idea for actions that aren't tied to a specific node — used by the
+   *  "Move to vault" menu when no password is set yet. */
+  const requirePassword = React.useCallback((after?: () => void) => {
+    if (after) pendingActionRef.current = after;
+    setPwOpen(true);
+  }, []);
+
+  /** Open the preview dialog at `node`. The navigable list = every FILE
+   *  currently visible (folders excluded) — so the user can swipe through
+   *  every image/video/etc. in the current view. */
+  const openPreview = React.useCallback((node: VaultNode, all: VaultNode[]) => {
+    const files = all.filter((n) => n.kind === "file");
+    const idx = files.findIndex((n) => n.id === node.id);
+    setPreview({ items: files, startIndex: Math.max(0, idx) });
+  }, []);
 
   /* ---- derived ---- */
   const breadcrumb = pathTo(currentFolderId);
@@ -102,26 +141,43 @@ export default function FilesPage() {
     const matchesQ = (n: VaultNode) => !needle || n.name.toLowerCase().includes(needle);
 
     if (tab === "vault") {
-      // Vault tab — flat list of every vault item (only when unlocked).
+      // Vault tab — only visible once unlocked. Supports the same folder
+      // navigation as All files, but starts at the root and only includes
+      // vault-flagged children at each level (plus their descendants once
+      // you drill into them).
       if (!unlocked) return [];
-      return nodes.filter((n) => n.vault).filter(matchesQ);
+      // At the root of the vault tab show every vault-flagged top-level
+      // node. Inside a folder show everything in that folder (the parent
+      // being a vault item implies its contents are protected too).
+      if (currentFolderId == null) {
+        return nodes.filter((n) => n.parentId === null && n.vault).filter(matchesQ);
+      }
+      return byParent(currentFolderId).filter(matchesQ);
     }
     if (tab === "starred") {
-      return nodes.filter((n) => n.starred).filter((n) => !n.vault || unlocked).filter(matchesQ);
+      // Show every starred item — locked ones are still listed with a
+      // badge and prompt for the password when clicked.
+      return nodes.filter((n) => n.starred).filter(matchesQ);
     }
     if (tab === "recent") {
       return [...nodes]
         .filter((n) => n.kind === "file")
-        .filter((n) => !n.vault || unlocked)
         .filter(matchesQ)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
         .slice(0, 12);
     }
-    // "all" — show contents of the current folder only.
-    return byParent(currentFolderId)
-      .filter((n) => !n.vault || unlocked)
-      .filter(matchesQ);
-  }, [tab, nodes, byParent, currentFolderId, q, unlocked]);
+    // "all" — show contents of the current folder (including locked items
+    // so you can see them with a 🔒 badge; clicking will prompt the password).
+    return byParent(currentFolderId).filter(matchesQ);
+  }, [tab, nodes, byParent, currentFolderId, q]);
+
+  /** When the user switches to the Vault tab while it's locked, pop the
+   *  password dialog immediately — no intermediate "tap to unlock" step. */
+  React.useEffect(() => {
+    if (tab === "vault" && !unlocked) {
+      setPwOpen(true);
+    }
+  }, [tab, unlocked]);
 
   /* ---- drag and drop ---- */
   const onDrop = async (e: React.DragEvent) => {
@@ -286,11 +342,16 @@ export default function FilesPage() {
             </div>
             <NodeGrid
               nodes={visibleNodes}
-              onOpenFolder={setCurrentFolderId}
+              onActivate={(n) =>
+                accessNode(n, () => {
+                  if (n.kind === "folder") setCurrentFolderId(n.id);
+                  else openPreview(n, visibleNodes);
+                })
+              }
               onStar={toggleStar}
               onVault={(id) => {
                 if (!password) {
-                  setPwOpen(true);
+                  requirePassword();
                   return;
                 }
                 toggleVault(id);
@@ -303,9 +364,14 @@ export default function FilesPage() {
           <TabsContent value="starred" className="mt-5">
             <NodeGrid
               nodes={visibleNodes}
-              onOpenFolder={setCurrentFolderId}
+              onActivate={(n) =>
+                accessNode(n, () => {
+                  if (n.kind === "folder") setCurrentFolderId(n.id);
+                  else openPreview(n, visibleNodes);
+                })
+              }
               onStar={toggleStar}
-              onVault={(id) => password ? toggleVault(id) : setPwOpen(true)}
+              onVault={(id) => password ? toggleVault(id) : requirePassword()}
               onDelete={remove}
               emptyLabel="Nothing starred yet."
             />
@@ -315,23 +381,53 @@ export default function FilesPage() {
             {!unlocked ? (
               <VaultLockedState onUnlock={requestVaultAccess} hasPassword={!!password} />
             ) : (
-              <NodeGrid
-                nodes={visibleNodes}
-                onOpenFolder={setCurrentFolderId}
-                onStar={toggleStar}
-                onVault={toggleVault}
-                onDelete={remove}
-                emptyLabel="Your vault is empty. Move a file in from the All tab."
-              />
+              <>
+                {/* Vault breadcrumb so the user can navigate into vault folders. */}
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-3 overflow-x-auto no-scrollbar">
+                  <button
+                    onClick={() => setCurrentFolderId(null)}
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-foreground/5 hover:text-foreground transition"
+                  >
+                    <Lock className="size-3.5" /> Vault root
+                  </button>
+                  {breadcrumb.map((b) => (
+                    <React.Fragment key={b.id}>
+                      <ChevronRight className="size-3.5 opacity-60" />
+                      <button
+                        onClick={() => setCurrentFolderId(b.id)}
+                        className="px-2 py-1 rounded-lg hover:bg-foreground/5 hover:text-foreground transition truncate max-w-[180px]"
+                      >
+                        {b.name}
+                      </button>
+                    </React.Fragment>
+                  ))}
+                </div>
+                <NodeGrid
+                  nodes={visibleNodes}
+                  onActivate={(n) => {
+                    if (n.kind === "folder") setCurrentFolderId(n.id);
+                    else openPreview(n, visibleNodes);
+                  }}
+                  onStar={toggleStar}
+                  onVault={toggleVault}
+                  onDelete={remove}
+                  emptyLabel="Your vault is empty. Move a file in from the All tab."
+                />
+              </>
             )}
           </TabsContent>
 
           <TabsContent value="recent" className="mt-5">
             <NodeGrid
               nodes={visibleNodes}
-              onOpenFolder={setCurrentFolderId}
+              onActivate={(n) =>
+                accessNode(n, () => {
+                  if (n.kind === "folder") setCurrentFolderId(n.id);
+                  else openPreview(n, visibleNodes);
+                })
+              }
               onStar={toggleStar}
-              onVault={(id) => password ? toggleVault(id) : setPwOpen(true)}
+              onVault={(id) => password ? toggleVault(id) : requirePassword()}
               onDelete={remove}
               emptyLabel="No recent uploads yet."
             />
@@ -350,12 +446,22 @@ export default function FilesPage() {
         onClose={() => setPwOpen(false)}
         mode={password ? "unlock" : "set"}
         onSubmit={(pw) => {
-          if (!password) {
-            setVaultPassword(pw);
-            return true;
+          const ok = !password ? (setVaultPassword(pw), true) : unlock(pw);
+          if (ok) {
+            // Fire whatever the user was trying to do before we asked for
+            // the password (open a file, navigate into a folder, etc.).
+            const queued = pendingActionRef.current;
+            pendingActionRef.current = null;
+            if (queued) queued();
           }
-          return unlock(pw);
+          return ok;
         }}
+      />
+
+      <FilePreviewDialog
+        items={preview.items}
+        startIndex={preview.startIndex}
+        onClose={() => setPreview((p) => ({ ...p, startIndex: null }))}
       />
     </ScrollArea>
   );
@@ -404,14 +510,15 @@ function VaultLockedState({
 /* ───────────── Grid of folders + files ───────────── */
 function NodeGrid({
   nodes,
-  onOpenFolder,
+  onActivate,
   onStar,
   onVault,
   onDelete,
   emptyLabel
 }: {
   nodes: VaultNode[];
-  onOpenFolder: (id: string) => void;
+  /** Single click handler — page wraps it in the password gate for vault items. */
+  onActivate: (node: VaultNode) => void;
   onStar: (id: string) => void;
   onVault: (id: string) => void;
   onDelete: (id: string) => void;
@@ -432,7 +539,7 @@ function NodeGrid({
             <FolderCard
               key={n.id}
               node={n}
-              onOpen={() => onOpenFolder(n.id)}
+              onOpen={() => onActivate(n)}
               onStar={() => onStar(n.id)}
               onVault={() => onVault(n.id)}
               onDelete={() => onDelete(n.id)}
@@ -441,6 +548,7 @@ function NodeGrid({
             <FileCard
               key={n.id}
               node={n}
+              onOpen={() => onActivate(n)}
               onStar={() => onStar(n.id)}
               onVault={() => onVault(n.id)}
               onDelete={() => onDelete(n.id)}
@@ -511,20 +619,20 @@ function FolderCard({
 /* ───────────── Single file card ───────────── */
 function FileCard({
   node,
+  onOpen,
   onStar,
   onVault,
   onDelete
 }: {
   node: VaultNode;
+  onOpen: () => void;
   onStar: () => void;
   onVault: () => void;
   onDelete: () => void;
 }) {
   const kind = node.fileKind ?? "other";
   const isImage = kind === "image" && (node.preview || node.url);
-  const openFile = () => {
-    if (node.url) window.open(node.url, "_blank", "noopener,noreferrer");
-  };
+  const openFile = onOpen;
   return (
     <motion.div
       layout
