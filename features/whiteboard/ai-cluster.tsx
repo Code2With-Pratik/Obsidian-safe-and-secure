@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { Brain, Check, Sparkles, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -136,6 +137,13 @@ export function AiClusterBar() {
   const clusters = React.useMemo(() => clusterNotes(notes), [notes]);
 
   const [open, setOpen] = React.useState(false);
+  // The trigger sits inside a `translate(-50%)` parent, which creates a new
+  // containing block for `position: fixed` children. Portalling the modal to
+  // <body> escapes that block so it centers against the actual viewport.
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => {
+    setMounted(true);
+  }, []);
 
   if (notes.length < 2) return null;
 
@@ -163,23 +171,25 @@ export function AiClusterBar() {
         <Badge variant="cyan">Preview</Badge>
       </motion.button>
 
-      <AnimatePresence>
-        {open && (
-          <>
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[80] bg-black/40 backdrop-blur-sm"
-              onClick={() => setOpen(false)}
-            />
-            <motion.div
-              initial={{ opacity: 0, y: 24, scale: 0.95 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: 24, scale: 0.95 }}
-              transition={{ type: "spring", stiffness: 260, damping: 24 }}
-              className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[81] w-[min(90vw,560px)] glass-strong border border-white/15 rounded-3xl shadow-floating p-5"
-            >
+      {mounted &&
+        createPortal(
+          <AnimatePresence>
+            {open && (
+              <>
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="fixed inset-0 z-[80] bg-black/40 backdrop-blur-sm"
+                  onClick={() => setOpen(false)}
+                />
+                <motion.div
+                  initial={{ opacity: 0, y: 24, scale: 0.95 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 24, scale: 0.95 }}
+                  transition={{ type: "spring", stiffness: 260, damping: 24 }}
+                  className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[81] w-[min(90vw,560px)] max-h-[min(90vh,720px)] flex flex-col glass-strong border border-white/15 rounded-3xl shadow-floating p-5"
+                >
               <div className="flex items-start gap-3">
                 <div className="size-10 rounded-xl bg-gradient-to-br from-violet-500 to-cyan-400 grid place-items-center text-white shadow-glow">
                   <Brain />
@@ -201,7 +211,7 @@ export function AiClusterBar() {
                 </button>
               </div>
 
-              <div className="mt-4 grid gap-2 max-h-[50vh] overflow-y-auto no-scrollbar">
+              <div className="mt-4 grid gap-2 flex-1 min-h-0 overflow-y-auto no-scrollbar pr-1">
                 {clusters.map((c) => (
                   <div
                     key={c.topic}
@@ -238,10 +248,12 @@ export function AiClusterBar() {
                   </Button>
                 </div>
               </div>
-            </motion.div>
-          </>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>,
+          document.body
         )}
-      </AnimatePresence>
     </>
   );
 }

@@ -22,7 +22,11 @@ interface Props {
 
 export function ShareDialog({ open, onOpenChange }: Props) {
   const board = useWhiteboardStore((s) => s.activeBoard());
-  const [access, setAccess] = React.useState<"link" | "team" | "private">("team");
+  const setBoardVisibility = useWhiteboardStore((s) => s.setBoardVisibility);
+  // The visibility tier lives on the board (persisted via Zustand), so
+  // reopening the dialog reflects the saved state.
+  const access = board?.visibility ?? "team";
+  const setAccess = (v: "link" | "team" | "private") => setBoardVisibility(v);
   const [copied, setCopied] = React.useState(false);
 
   const link = board

@@ -8,19 +8,24 @@ const TooltipProvider = TooltipPrimitive.Provider;
 const Tooltip = TooltipPrimitive.Root;
 const TooltipTrigger = TooltipPrimitive.Trigger;
 
+// Render in a portal so the tooltip can escape parents with `overflow-hidden`
+// (e.g. the whiteboard viewport) and float freely above the page.
 const TooltipContent = React.forwardRef<
   React.ElementRef<typeof TooltipPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof TooltipPrimitive.Content>
->(({ className, sideOffset = 6, ...props }, ref) => (
-  <TooltipPrimitive.Content
-    ref={ref}
-    sideOffset={sideOffset}
-    className={cn(
-      "z-50 overflow-hidden rounded-lg border border-border/60 glass px-2.5 py-1.5 text-xs text-foreground shadow-floating animate-in fade-in-0 zoom-in-95",
-      className
-    )}
-    {...props}
-  />
+>(({ className, sideOffset = 6, collisionPadding = 8, ...props }, ref) => (
+  <TooltipPrimitive.Portal>
+    <TooltipPrimitive.Content
+      ref={ref}
+      sideOffset={sideOffset}
+      collisionPadding={collisionPadding}
+      className={cn(
+        "z-[100] overflow-hidden rounded-lg border border-border/60 glass px-2.5 py-1.5 text-xs text-foreground shadow-floating animate-in fade-in-0 zoom-in-95",
+        className
+      )}
+      {...props}
+    />
+  </TooltipPrimitive.Portal>
 ));
 TooltipContent.displayName = TooltipPrimitive.Content.displayName;
 

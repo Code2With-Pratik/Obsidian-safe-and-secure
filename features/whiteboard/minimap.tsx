@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { animate } from "framer-motion";
 import { useWhiteboardStore, type Element } from "@/store/use-whiteboard-store";
 
 const MAP_W = 200;
@@ -26,6 +27,21 @@ function computeContentBounds(elements: Element[]) {
         if (x > maxX) maxX = x;
         if (y > maxY) maxY = y;
       }
+    } else if (el.kind === "line") {
+      const xs = [el.x, el.x2];
+      const ys = [el.y, el.y2];
+      for (const v of xs) {
+        if (v < minX) minX = v;
+        if (v > maxX) maxX = v;
+      }
+      for (const v of ys) {
+        if (v < minY) minY = v;
+        if (v > maxY) maxY = v;
+      }
+    } else if (el.kind === "connection") {
+      // Connections derive their bounds from their endpoint notes; skip here
+      // (the notes themselves will have already been counted).
+      continue;
     } else {
       const w = (el as { w?: number }).w ?? 100;
       const h = (el as { h?: number }).h ?? 30;
@@ -49,67 +65,112 @@ export function Minimap() {
   const board = useWhiteboardStore((s) => s.activeBoard());
   const setCamera = useWhiteboardStore((s) => s.setCamera);
   const containerRef = React.useRef<HTMLDivElement>(null);
-  // Viewport dimensions of the actual board area — measured once on mount,
-  // updated on resize, used to draw the "you are here" rect.
+  // Viewport dimensions of the actual board area — driven by ResizeObserver
+  // so the "you are here" rect stays accurate while the window resizes.
   const [viewport, setViewport] = React.useState({ w: 1, h: 1 });
 
   React.useEffect(() => {
-    const update = () => {
-      const root = document.querySelector<HTMLElement>("[data-board-viewport]");
-      if (root) {
-        const r = root.getBoundingClientRect();
-        setViewport({ w: r.width, h: r.height });
-      }
-    };
-    update();
-    window.addEventListener("resize", update);
-    const id = window.setInterval(update, 1000);
-    return () => {
-      window.removeEventListener("resize", update);
-      window.clearInterval(id);
-    };
+    const root = document.querySelector<HTMLElement>("[data-board-viewport]");
+    if (!root) return;
+    const ro = new ResizeObserver((entries) => {
+      const r = entries[0].contentRect;
+      setViewport({ w: r.width, h: r.height });
+    });
+    ro.observe(root);
+    return () => ro.disconnect();
   }, []);
+
+  // Track an in-flight animation so we can cancel it cleanly when the user
+  // starts a new pan.
+  const animRef = React.useRef<{ stop: () => void } | null>(null);
+  const stopAnim = () => {
+    animRef.current?.stop();
+    animRef.current = null;
+  };
+
+  /** Drag bookkeeping. We set this on pointerdown and let pointermove update
+   *  the camera in real time; pointerup clears it. */
+  const draggingRef = React.useRef(false);
 
   if (!board) return null;
   const bounds = computeContentBounds(board.elements);
-  const scaleX = MAP_W / bounds.w;
-  const scaleY = MAP_H / bounds.h;
-  const scale = Math.min(scaleX, scaleY);
+  const scale = Math.min(MAP_W / bounds.w, MAP_H / bounds.h);
 
-  // Visible region in canvas space = (-camera.x / zoom, -camera.y / zoom) to
-  // (-camera.x + viewport.w) / zoom etc.
   const camera = board.camera;
-  const vx = (-camera.x) / camera.zoom;
-  const vy = (-camera.y) / camera.zoom;
+  const vx = -camera.x / camera.zoom;
+  const vy = -camera.y / camera.zoom;
   const vw = viewport.w / camera.zoom;
   const vh = viewport.h / camera.zoom;
 
   const mapX = (x: number) => (x - bounds.x) * scale;
   const mapY = (y: number) => (y - bounds.y) * scale;
 
-  /** Click-to-pan: clicking anywhere on the minimap centers the canvas
-   *  there. */
-  const handleClick = (e: React.MouseEvent) => {
-    const rect = containerRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const cx = e.clientX - rect.left;
-    const cy = e.clientY - rect.top;
-    // Convert minimap-px back to canvas-px
-    const canvasX = cx / scale + bounds.x;
-    const canvasY = cy / scale + bounds.y;
-    // Center viewport on that canvas point
-    const camX = -canvasX * camera.zoom + viewport.w / 2;
-    const camY = -canvasY * camera.zoom + viewport.h / 2;
-    setCamera({ x: camX, y: camY });
+  /** Center the camera on the given minimap-px coordinates. `smooth=false`
+   *  is used during drag for instant feedback; `true` for one-shot clicks. */
+  const panToMapPoint = (cx: number, cy: number, smooth: boolean) => {
+    const canvasCX = cx / scale + bounds.x;
+    const canvasCY = cy / scale + bounds.y;
+    const targetX = -canvasCX * camera.zoom + viewport.w / 2;
+    const targetY = -canvasCY * camera.zoom + viewport.h / 2;
+    stopAnim();
+    if (!smooth) {
+      setCamera({ x: targetX, y: targetY });
+      return;
+    }
+    // Springy tween from current → target. Sample 60fps via framer's animate.
+    const startX = camera.x;
+    const startY = camera.y;
+    const xCtrl = animate(startX, targetX, {
+      type: "spring",
+      stiffness: 240,
+      damping: 28,
+      onUpdate: (v) => setCamera({ x: v })
+    });
+    const yCtrl = animate(startY, targetY, {
+      type: "spring",
+      stiffness: 240,
+      damping: 28,
+      onUpdate: (v) => setCamera({ y: v })
+    });
+    animRef.current = {
+      stop: () => {
+        xCtrl.stop();
+        yCtrl.stop();
+      }
+    };
+  };
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (!containerRef.current) return;
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+    draggingRef.current = true;
+    const rect = containerRef.current.getBoundingClientRect();
+    panToMapPoint(e.clientX - rect.left, e.clientY - rect.top, true);
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!draggingRef.current || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    // While dragging, skip the spring — track the cursor 1:1 for responsiveness.
+    panToMapPoint(e.clientX - rect.left, e.clientY - rect.top, false);
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    draggingRef.current = false;
+    (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
   };
 
   return (
     <div
       ref={containerRef}
-      onClick={handleClick}
-      className="relative rounded-xl border border-border/60 bg-card/60 backdrop-blur-xl shadow-floating overflow-hidden cursor-pointer"
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={handlePointerUp}
+      className="relative rounded-xl border border-border/60 bg-card/60 backdrop-blur-xl shadow-floating overflow-hidden cursor-crosshair select-none touch-none"
       style={{ width: MAP_W, height: MAP_H }}
-      title="Click to pan"
+      title="Click or drag to pan"
     >
       {/* Element bounding boxes */}
       <svg
@@ -145,6 +206,24 @@ export function Minimap() {
               />
             );
           }
+          if (el.kind === "line") {
+            return (
+              <line
+                key={el.id}
+                x1={mapX(el.x)}
+                y1={mapY(el.y)}
+                x2={mapX(el.x2)}
+                y2={mapY(el.y2)}
+                stroke={el.color}
+                strokeWidth={1.5}
+              />
+            );
+          }
+          if (el.kind === "connection") {
+            // Skip — connection lines aren't worth the lookup overhead in the
+            // tiny minimap; the connected notes already show.
+            return null;
+          }
           const w = (el as { w?: number }).w ?? 100;
           const h = (el as { h?: number }).h ?? 30;
           let fill = "rgba(148,163,184,0.5)";
@@ -165,14 +244,15 @@ export function Minimap() {
             />
           );
         })}
-        {/* Viewport indicator */}
+        {/* Viewport indicator — slightly emphasised so it's easy to read at
+            a glance. */}
         <rect
           x={mapX(vx)}
           y={mapY(vy)}
           width={vw * scale}
           height={vh * scale}
-          fill="none"
-          stroke="rgba(34,211,238,0.9)"
+          fill="rgba(34,211,238,0.12)"
+          stroke="rgba(34,211,238,0.95)"
           strokeWidth={1.5}
           rx={3}
         />
