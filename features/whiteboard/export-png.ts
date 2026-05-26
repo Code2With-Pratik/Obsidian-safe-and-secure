@@ -14,7 +14,28 @@ import type { Board, Element, NoteElement } from "@/store/use-whiteboard-store";
 
 const PAD = 80;
 const HD_SCALE = 2;
-const BG = "#0a0a0f";
+const DEFAULT_BG = "#0a0a0f";
+const DEFAULT_ADAPTIVE_FG = "#FAFAFA";
+
+/** Read the page's live foreground + background so the exported PNG matches
+ *  the user's current theme. `currentColor` references inside the SVG bind
+ *  to the foreground, and the canvas backdrop matches whatever theme the
+ *  user is looking at. Falls back to the dark defaults if the document
+ *  isn't available (SSR, …). */
+function resolveLiveTheme(): { fg: string; bg: string } {
+  if (typeof window === "undefined" || typeof document === "undefined") {
+    return { fg: DEFAULT_ADAPTIVE_FG, bg: DEFAULT_BG };
+  }
+  try {
+    const cs = getComputedStyle(document.body);
+    return {
+      fg: cs.color || DEFAULT_ADAPTIVE_FG,
+      bg: cs.backgroundColor || DEFAULT_BG
+    };
+  } catch {
+    return { fg: DEFAULT_ADAPTIVE_FG, bg: DEFAULT_BG };
+  }
+}
 
 /* -------------------------------------------------------- */
 /* Font mapping + embedding                                 */
@@ -422,10 +443,14 @@ async function buildSvg(
     ? `<defs><style type="text/css"><![CDATA[\n${fontCss}\n]]></style></defs>`
     : "";
 
+  // Stamp the live theme foreground onto the root via `color="…"` so any
+  // `currentColor` strokes / fills inside resolve to a concrete value when
+  // the SVG is rasterised in isolation. Backdrop tracks the same theme.
+  const theme = resolveLiveTheme();
   const svg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="${bounds.x} ${bounds.y} ${bounds.w} ${bounds.h}" width="${bounds.w}" height="${bounds.h}">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="${bounds.x} ${bounds.y} ${bounds.w} ${bounds.h}" width="${bounds.w}" height="${bounds.h}" color="${theme.fg}">
   ${styleBlock}
-  <rect x="${bounds.x}" y="${bounds.y}" width="${bounds.w}" height="${bounds.h}" fill="${BG}" />
+  <rect x="${bounds.x}" y="${bounds.y}" width="${bounds.w}" height="${bounds.h}" fill="${theme.bg}" />
   ${parts.join("\n")}
 </svg>`;
   return { svg, bounds };

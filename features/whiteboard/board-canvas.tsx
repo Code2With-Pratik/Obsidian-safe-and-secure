@@ -519,8 +519,13 @@ export function BoardCanvas() {
         backgroundPosition: gridBgPos
       }}
     >
-      {/* SVG layer for drawn paths and shapes */}
-      <svg className="absolute inset-0 w-full h-full pointer-events-none" overflow="visible">
+      {/* SVG layer for drawn paths and shapes. `text-foreground` sets the
+          CSS color so any element painted with `currentColor` adapts to the
+          dark/light theme automatically. */}
+      <svg
+        className="absolute inset-0 w-full h-full pointer-events-none text-foreground"
+        overflow="visible"
+      >
         <g style={{ transform, transformOrigin: "0 0" }}>
           {/* Render connections first so they sit BEHIND notes/text. */}
           {board.elements
@@ -587,9 +592,11 @@ export function BoardCanvas() {
         </g>
       </svg>
 
-      {/* HTML layer: sticky notes + text labels — share the camera transform. */}
+      {/* HTML layer: sticky notes + text labels — share the camera transform.
+          `text-foreground` carries the theme colour so text/icon elements
+          using `currentColor` resolve correctly in both modes. */}
       <div
-        className="absolute top-0 left-0 origin-top-left pointer-events-none"
+        className="absolute top-0 left-0 origin-top-left pointer-events-none text-foreground"
         style={{ transform }}
       >
         {board.elements.map((el) => {

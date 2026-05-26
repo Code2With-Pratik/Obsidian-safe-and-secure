@@ -3,7 +3,6 @@
 import * as React from "react";
 import { motion } from "framer-motion";
 import {
-  Brain,
   ChevronDown,
   Download,
   Link2,
@@ -29,7 +28,6 @@ import { BoardsSidebar } from "@/features/whiteboard/boards-sidebar";
 import { Minimap } from "@/features/whiteboard/minimap";
 import { ShareDialog } from "@/features/whiteboard/share-dialog";
 import { AccessPopover } from "@/features/whiteboard/access-popover";
-import { AiClusterBar } from "@/features/whiteboard/ai-cluster";
 import { SelectionToolbar } from "@/features/whiteboard/selection-toolbar";
 import { IconPanel } from "@/features/whiteboard/icon-panel";
 import { downloadBoardAsPng } from "@/features/whiteboard/export-png";
@@ -200,20 +198,9 @@ export default function WhiteboardPage() {
         {/* Live "ghost cursors" — pure decoration, draw in screen space. */}
         <GhostCursors tick={tick} />
 
-        {/* Bottom-center: AI cluster banner + brainstorm + selection bar */}
+        {/* Bottom-center: selection bar only (shown when 2+ items selected). */}
         <div className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-2">
           <SelectionToolbar />
-          <div className="pointer-events-auto flex items-center gap-2">
-            <AiClusterBar />
-            <Button
-              variant="glass"
-              size="sm"
-              onClick={() => useWhiteboardStore.getState().setTool("note")}
-              className="hidden md:inline-flex"
-            >
-              <Brain /> Brainstorm
-            </Button>
-          </div>
         </div>
 
         {/* Bottom-right: minimap + zoom controls */}

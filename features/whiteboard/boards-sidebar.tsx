@@ -45,7 +45,7 @@ export function BoardsSidebar({
       <div className="flex items-center justify-between px-3 h-12 border-b border-border/40 shrink-0">
         {!collapsed && (
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-            Boards
+            Whiteboards
           </p>
         )}
         <button
@@ -61,6 +61,23 @@ export function BoardsSidebar({
       </div>
 
       <div className="flex-1 overflow-y-auto no-scrollbar px-2 py-2 space-y-0.5">
+        <button
+          onClick={() => {
+            const b = createBoard(
+              `Board ${useWhiteboardStore.getState().boards.length + 1}`
+            );
+            setEditingId(b.id);
+          }}
+          className={cn(
+            "w-full inline-flex items-center justify-center gap-2 mb-1.5 rounded-xl text-xs font-medium transition",
+            "bg-gradient-to-br from-violet-500 to-cyan-400 text-white shadow-glow hover:brightness-110",
+            collapsed ? "h-10" : "h-9"
+          )}
+          aria-label="New board"
+        >
+          <Plus className="size-4" />
+          {!collapsed && "New board"}
+        </button>
         {boards.map((b) => {
           const active = b.id === activeBoardId;
           const isEditing = editingId === b.id;
@@ -151,23 +168,6 @@ export function BoardsSidebar({
         })}
       </div>
 
-      <div className="border-t border-border/40 p-2 shrink-0">
-        <button
-          onClick={() => {
-            const b = createBoard(
-              `Board ${useWhiteboardStore.getState().boards.length + 1}`
-            );
-            setEditingId(b.id);
-          }}
-          className={cn(
-            "w-full inline-flex items-center justify-center gap-2 h-9 rounded-xl text-xs font-medium transition",
-            "bg-gradient-to-br from-violet-500 to-cyan-400 text-white shadow-glow hover:brightness-110"
-          )}
-        >
-          <Plus className="size-4" />
-          {!collapsed && "New board"}
-        </button>
-      </div>
     </motion.aside>
   );
 }

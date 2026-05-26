@@ -39,15 +39,19 @@ const TOOLS: { id: Tool; icon: React.ReactNode; label: string; key?: string }[] 
   { id: "note", icon: <StickyIcon />, label: "Sticky note", key: "N" }
 ];
 
+/** "currentColor" lets the drawing pick up the theme foreground via CSS —
+ *  white-ish in dark mode, near-black in light mode. The other entries are
+ *  fixed colours that look fine on both themes. */
+const ADAPTIVE_COLOR = "currentColor";
 const COLORS = [
-  "#0F172A",
-  "#FFFFFF",
+  ADAPTIVE_COLOR,
   "#8B5CF6",
   "#EC4899",
   "#22D3EE",
   "#10B981",
   "#FBBF24",
-  "#F97316"
+  "#F97316",
+  "#0F172A"
 ];
 
 export function WhiteboardToolbar({ onOpenIcons }: ToolbarProps = {}) {
@@ -179,8 +183,19 @@ export function WhiteboardToolbar({ onOpenIcons }: ToolbarProps = {}) {
             )}
           >
             <span
-              className="size-5 rounded-full ring-2 ring-white/20 shadow-inner"
-              style={{ backgroundColor: color }}
+              className={cn(
+                "size-5 rounded-full ring-2 ring-white/20 shadow-inner",
+                // The adaptive swatch can't use `backgroundColor: currentColor`
+                // alone (it'd vanish on a same-coloured button). Mark it with a
+                // half-fill instead so it's visually distinct.
+                color === ADAPTIVE_COLOR &&
+                  "bg-gradient-to-br from-white to-slate-900"
+              )}
+              style={
+                color === ADAPTIVE_COLOR
+                  ? undefined
+                  : { backgroundColor: color }
+              }
             />
           </button>
         </TooltipTrigger>
@@ -236,27 +251,36 @@ export function WhiteboardToolbar({ onOpenIcons }: ToolbarProps = {}) {
               Pick a color
             </p>
             <span className="text-[10px] text-muted-foreground font-mono">
-              {color.toUpperCase()}
+              {color === ADAPTIVE_COLOR ? "ADAPTIVE" : color.toUpperCase()}
             </span>
           </div>
           <div className="grid grid-cols-8 gap-1.5 mb-3">
-            {COLORS.map((c) => (
-              <button
-                key={c}
-                onClick={() => {
-                  setColor(c);
-                  setColorOpen(false);
-                }}
-                aria-label={`Color ${c}`}
-                className={cn(
-                  "size-7 rounded-full border transition",
-                  color === c
-                    ? "border-cyan-400 ring-2 ring-cyan-400/40 scale-110"
-                    : "border-white/15 hover:border-white/40 hover:scale-110"
-                )}
-                style={{ backgroundColor: c }}
-              />
-            ))}
+            {COLORS.map((c) => {
+              const isAdaptive = c === ADAPTIVE_COLOR;
+              return (
+                <button
+                  key={c}
+                  onClick={() => {
+                    setColor(c);
+                    setColorOpen(false);
+                  }}
+                  aria-label={isAdaptive ? "Adaptive (theme)" : `Color ${c}`}
+                  title={
+                    isAdaptive
+                      ? "Adaptive — follows the theme (white in dark, black in light)"
+                      : c
+                  }
+                  className={cn(
+                    "size-7 rounded-full border transition",
+                    color === c
+                      ? "border-cyan-400 ring-2 ring-cyan-400/40 scale-110"
+                      : "border-white/15 hover:border-white/40 hover:scale-110",
+                    isAdaptive && "bg-gradient-to-br from-white to-slate-900"
+                  )}
+                  style={isAdaptive ? undefined : { backgroundColor: c }}
+                />
+              );
+            })}
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
