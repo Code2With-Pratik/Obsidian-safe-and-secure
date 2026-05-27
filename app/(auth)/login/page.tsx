@@ -50,7 +50,7 @@ export default function LoginPage() {
         <div className="flex flex-col items-center text-center mb-8">
           <NovaLogo className="h-14 w-14" />
           <h1 className="mt-5 text-2xl font-semibold tracking-tight">Welcome back</h1>
-          <p className="text-sm text-muted-foreground mt-1">Sign in to continue to Nova</p>
+          <p className="text-sm text-muted-foreground mt-1">Sign in to continue to Obsidian</p>
         </div>
 
         <div className="grid grid-cols-3 gap-2 mb-6">

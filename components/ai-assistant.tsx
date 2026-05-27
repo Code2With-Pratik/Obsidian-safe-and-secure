@@ -142,7 +142,7 @@ export function AIAssistant() {
               >
                 <NovaMascot size={36} />
               </motion.div>
-              <div className="font-display font-semibold tracking-tight">Nova AI</div>
+              <div className="font-display font-semibold tracking-tight">Obsidian AI</div>
             </div>
             <div className="flex items-center gap-1">
               <DropdownMenu>
@@ -161,7 +161,7 @@ export function AIAssistant() {
                   style={{ zIndex: 9999 }}
                 >
                   <DropdownMenuLabel className="!text-[10px]">
-                    Nova AI · session
+                    Obsidian AI · session
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onSelect={() => setMessages([])}>
@@ -174,7 +174,7 @@ export function AIAssistant() {
                       if (typeof navigator !== "undefined" && "share" in navigator) {
                         navigator
                           .share({
-                            title: "Nova AI conversation",
+                            title: "Obsidian AI conversation",
                             text: messages.map((m) => `${m.role}: ${m.text}`).join("\n\n")
                           })
                           .catch(() => {});

@@ -27,6 +27,7 @@ import { GhostCallDialog } from "@/features/calls/ghost-call-dialog";
 import { useChatStore } from "@/store/use-chat-store";
 import { useUIStore } from "@/store/use-ui-store";
 import { users } from "@/lib/mock-data";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { User } from "@/types";
 
@@ -132,6 +133,7 @@ function formatScheduledWhen(iso: string): string {
 }
 
 export default function CallsPage() {
+  const t = useT();
   const router = useRouter();
   const startDM = useChatStore((s) => s.startDM);
   // Surface every scheduled-call message across all chats so the Upcoming
@@ -235,7 +237,7 @@ export default function CallsPage() {
       <div className="max-w-7xl mx-auto md:h-full px-4 md:px-8 py-6 md:py-8 flex flex-col">
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} className="shrink-0">
           <h1 className="text-4xl md:text-5xl font-display font-semibold tracking-tight">
-            Calls & <span className="neon-text">meetings</span>
+            <span className="neon-text">{t("Calls & meetings")}</span>
           </h1>
           <p className="text-muted-foreground mt-2 max-w-xl">
             Crystal-clear voice and video. AI noise cancellation, live captions, and floating mini calls — all built in.

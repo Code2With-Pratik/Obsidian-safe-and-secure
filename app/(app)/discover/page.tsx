@@ -15,6 +15,7 @@ import {
   CommunityGridEmpty
 } from "@/features/community/community-grid-card";
 import { useCommunityStore } from "@/store/use-community-store";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { Community } from "@/types";
 
@@ -28,6 +29,7 @@ const COMMUNITY_FILTERS: { id: CommunityFilter; label: string }[] = [
 ];
 
 export default function DiscoverPage() {
+  const t = useT();
   const router = useRouter();
   const communities = useCommunityStore((s) => s.communities);
   const joinedIds = useCommunityStore((s) => s.joinedIds);
@@ -84,7 +86,7 @@ export default function DiscoverPage() {
         >
           <div>
             <h1 className="text-4xl md:text-5xl font-display font-semibold tracking-tight">
-              <span className="neon-text">Discover</span>
+              <span className="neon-text">{t("Discover")}</span>
             </h1>
             <p className="text-muted-foreground mt-2 max-w-xl">
               Communities, rooms and people tuned to you — host your own world or jump into someone else's.

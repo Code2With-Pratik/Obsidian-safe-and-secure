@@ -260,7 +260,7 @@ function GhostCursors({ tick }: { tick: number }) {
     () => [
       { name: "Kai", color: "#22D3EE", phase: 0 },
       { name: "Iris", color: "#EC4899", phase: 1.5 },
-      { name: "Nova", color: "#A3E635", phase: 3.2 }
+      { name: "Obsidian", color: "#A3E635", phase: 3.2 }
     ],
     []
   );

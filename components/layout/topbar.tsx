@@ -34,7 +34,7 @@ export function Topbar() {
         </div>
       </div>
 
-      <div className="md:hidden flex-1 font-display font-semibold tracking-tight">Nova</div>
+      <div className="md:hidden flex-1 font-display font-semibold tracking-tight">Obsidian</div>
 
       <div className="ml-auto flex items-center gap-1.5">
         <Tooltip>
@@ -53,7 +53,7 @@ export function Topbar() {
               <Sparkles className="relative" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>Nova AI · ⌘J</TooltipContent>
+          <TooltipContent>Obsidian AI · ⌘J</TooltipContent>
         </Tooltip>
 
         <NotificationCenter>

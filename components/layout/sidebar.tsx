@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -11,14 +12,13 @@ import {
   Phone,
   PencilRuler,
   Folder,
-  Settings,
-  Bell
+  Settings
 } from "lucide-react";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useAuthStore } from "@/store/use-auth-store";
-import { NovaLogo } from "@/components/brand/nova-logo";
+import { useT } from "@/lib/i18n";
 import { cn, initials } from "@/lib/utils";
 
 const navItems = [
@@ -36,6 +36,7 @@ const EXPANDED = 260;
 export function Sidebar() {
   const pathname = usePathname();
   const user = useAuthStore((s) => s.user);
+  const t = useT();
   const [hovered, setHovered] = React.useState(false);
   const expanded = hovered;
 
@@ -56,9 +57,16 @@ export function Sidebar() {
           expanded && "shadow-floating"
         )}
       >
-        <div className="flex items-center gap-2.5 px-4 pt-5 pb-4 h-[68px]">
+        <div className="flex items-center gap-2.5 px-2 py-3">
           <Link href="/chats" className="flex items-center gap-2.5 shrink-0">
-            <NovaLogo className="size-9 shrink-0" />
+            <Image
+              src="/Logo.png"
+              alt="Obsidian"
+              width={60}
+              height={60}
+              priority
+              className="size-[60px] shrink-0 rounded-xl object-contain"
+            />
             <AnimatePresence initial={false}>
               {expanded && (
                 <motion.div
@@ -69,7 +77,7 @@ export function Sidebar() {
                   className="flex flex-col whitespace-nowrap"
                 >
                   <span className="font-display text-base font-semibold leading-tight tracking-tight">
-                    Nova
+                    Obsidian
                   </span>
                   <span className="text-[10px] text-muted-foreground -mt-0.5">
                     comms · OS
@@ -97,10 +105,10 @@ export function Sidebar() {
                 {active && (
                   <motion.span
                     layoutId="nav-active"
-                    className="absolute left-0 top-2 bottom-2 w-1 rounded-r-full bg-gradient-to-b from-violet-400 to-cyan-400"
+                    className="absolute left-0 top-2 bottom-2 w-1 bg-gradient-to-b from-violet-400 to-cyan-400"
                   />
                 )}
-                <item.icon className="size-[18px] shrink-0" />
+                <item.icon className="size-[22px] shrink-0" />
                 <AnimatePresence initial={false}>
                   {expanded && (
                     <motion.span
@@ -108,9 +116,9 @@ export function Sidebar() {
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: -4 }}
                       transition={{ duration: 0.18 }}
-                      className="text-sm font-medium whitespace-nowrap"
+                      className="text-[15px] font-medium whitespace-nowrap"
                     >
-                      {item.label}
+                      {t(item.label)}
                     </motion.span>
                   )}
                 </AnimatePresence>
@@ -127,7 +135,7 @@ export function Sidebar() {
                 {!expanded ? (
                   <Tooltip>
                     <TooltipTrigger asChild>{link}</TooltipTrigger>
-                    <TooltipContent side="right">{item.label}</TooltipContent>
+                    <TooltipContent side="right">{t(item.label)}</TooltipContent>
                   </Tooltip>
                 ) : (
                   link
@@ -145,7 +153,7 @@ export function Sidebar() {
               !expanded && "justify-center px-0"
             )}
           >
-            <Settings className="size-[18px] shrink-0" />
+            <Settings className="size-[22px] shrink-0" />
             <AnimatePresence initial={false}>
               {expanded && (
                 <motion.span
@@ -153,9 +161,9 @@ export function Sidebar() {
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -4 }}
                   transition={{ duration: 0.18 }}
-                  className="text-sm whitespace-nowrap"
+                  className="text-[15px] whitespace-nowrap"
                 >
-                  Settings
+                  {t("Settings")}
                 </motion.span>
               )}
             </AnimatePresence>
@@ -182,15 +190,14 @@ export function Sidebar() {
                   className="flex-1 min-w-0 flex items-center gap-2 whitespace-nowrap"
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="text-sm font-medium truncate">
+                    <div className="text-[15px] font-medium truncate">
                       {user?.name ?? "Aria Vance"}
                     </div>
-                    <div className="text-[11px] text-muted-foreground flex items-center gap-1">
+                    <div className="text-xs text-muted-foreground flex items-center gap-1">
                       <span className="size-1.5 rounded-full bg-emerald-400" />
-                      Online · @{user?.username ?? "aria"}
+                      {t("Online")} · @{user?.username ?? "aria"}
                     </div>
                   </div>
-                  <Bell className="size-4 text-muted-foreground shrink-0" />
                 </motion.div>
               )}
             </AnimatePresence>

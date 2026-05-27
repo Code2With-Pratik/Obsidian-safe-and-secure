@@ -24,6 +24,11 @@ export function NovaMascot({ className, size = 160, mood }: Props) {
   React.useEffect(() => {
     let alive = true;
     const loop = async () => {
+      // Wait a frame so the motion component has subscribed to these controls
+      // before the first start() — otherwise framer-motion warns that
+      // controls.start() was called before the component mounted.
+      await new Promise<void>((res) => requestAnimationFrame(() => res()));
+      if (!alive) return;
       while (alive) {
         const r = Math.random();
         if (r < 0.25) {

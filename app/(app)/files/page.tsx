@@ -15,7 +15,6 @@ import {
   Search,
   Lock,
   Unlock,
-  Plus,
   Star,
   Share2,
   MoreHorizontal,
@@ -202,19 +201,21 @@ export default function FilesPage() {
       sel.forEach((n) => {
         if (n.vault) toggleVault(n.id);
       });
+      clearSelection();
       return;
     }
     const doMove = () => {
       sel.forEach((n) => {
         if (!n.vault) toggleVault(n.id);
       });
+      clearSelection();
     };
     if (!password) {
       requirePassword(doMove);
       return;
     }
     doMove();
-  }, [selected, password, toggleVault, requirePassword]);
+  }, [selected, password, toggleVault, requirePassword, clearSelection]);
 
   /** Open the preview dialog at `node`. The navigable list = every FILE
    *  currently visible (folders excluded) — so the user can swipe through
@@ -252,26 +253,28 @@ export default function FilesPage() {
       // badge and prompt for the password when clicked.
       return nodes.filter((n) => n.starred).filter(matchesQ);
     }
-    if (tab === "recent") {
-      return [...nodes]
-        .filter((n) => n.kind === "file")
-        .filter(matchesQ)
-        .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-        .slice(0, 12);
-    }
     // "all" — show contents of the current folder (including locked items
     // so you can see them with a 🔒 badge; clicking will prompt the password).
     return byParent(currentFolderId).filter(matchesQ);
   }, [tab, nodes, byParent, currentFolderId, q]);
 
-  /** When the user switches to the Vault tab while it's locked, pop the
-   *  password dialog immediately — no intermediate "tap to unlock" step. */
-  React.useEffect(() => {
-    if (tab === "vault" && !unlocked) {
-      setPwMode(password ? "unlock" : "set");
-      setPwOpen(true);
-    }
-  }, [tab, unlocked, password]);
+  /** Switching tabs resets the folder cursor (All + Vault share it, so a
+   *  stale folder id would otherwise hide the vault's root items) and drops
+   *  the current selection. Switching *to* the locked Vault tab also pops the
+   *  password dialog — but only here, so locking while already on the Vault
+   *  tab doesn't immediately re-prompt. */
+  const handleTabChange = React.useCallback(
+    (next: string) => {
+      setTab(next);
+      setCurrentFolderId(null);
+      clearSelection();
+      if (next === "vault" && !unlocked) {
+        setPwMode(password ? "unlock" : "set");
+        setPwOpen(true);
+      }
+    },
+    [clearSelection, unlocked, password]
+  );
 
   /* ---- drag and drop ---- */
   const onDrop = async (e: React.DragEvent) => {
@@ -428,12 +431,41 @@ export default function FilesPage() {
         }}
       >
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
-          <h1 className="text-4xl md:text-5xl font-display font-semibold tracking-tight">
-            Files & <span className="neon-text">Vault</span>
-          </h1>
-          <p className="text-muted-foreground mt-2 max-w-xl">
-            Drag, drop, share. Lock anything sensitive in your vault — protected by a
-            password only you know.
+          {/* Heading (left) + storage (right) in one row on every screen.
+              On mobile "Your"/"Vault" stack onto two lines; on md+ they sit
+              inline and the paragraph lives under the heading (web layout
+              preserved). */}
+          <div className="flex items-start justify-between gap-4">
+            <div className="min-w-0">
+              <h1 className="text-4xl md:text-5xl font-display font-semibold tracking-tight">
+                <span className="block md:inline text-foreground">Your</span>{" "}
+                <span className="block md:inline neon-text">Vault</span>
+              </h1>
+              {/* Web: paragraph under the heading. */}
+              <p className="hidden md:block text-muted-foreground mt-2 max-w-xl">
+                You can protect your files and folders.
+              </p>
+            </div>
+            <div className="shrink-0 w-auto md:w-64 text-right">
+              <p className="text-3xl md:text-5xl font-display font-semibold tracking-tight text-foreground leading-none whitespace-nowrap">
+                {formatBytes(usedBytes)}
+              </p>
+              <p className="text-sm md:text-base text-muted-foreground mt-1.5">
+                of 5 GB used
+              </p>
+              <div className="mt-2.5 h-3 w-full rounded-full bg-foreground/10 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-violet-500 via-fuchsia-500 to-cyan-400 transition-all"
+                  style={{
+                    width: `${Math.max(2, Math.min(100, (usedBytes / 5e9) * 100))}%`
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+          {/* Mobile: paragraph below the heading + storage row. */}
+          <p className="md:hidden text-muted-foreground mt-3">
+            You can protect your files and folders.
           </p>
         </motion.div>
 
@@ -450,10 +482,10 @@ export default function FilesPage() {
           }}
           onDrop={onDrop}
           className={cn(
-            "mt-8 rounded-3xl border-2 border-dashed glass p-8 grid place-items-center transition cursor-pointer",
+            "mt-8 rounded-3xl border-2 border-dashed glass p-6 md:p-8 grid place-items-center transition cursor-pointer",
             drag
               ? "border-cyan-400 ring-2 ring-cyan-400/40 bg-cyan-400/[0.04]"
-              : "border-border/60 hover:border-foreground/30"
+              : "border-foreground/70 hover:border-foreground"
           )}
           onClick={onUploadClick}
         >
@@ -467,10 +499,7 @@ export default function FilesPage() {
             <p className="text-sm text-muted-foreground mt-1">
               Or click to upload. Encrypted at rest, only your password unlocks the vault.
             </p>
-            <div className="flex gap-2 mt-4" onClick={(e) => e.stopPropagation()}>
-              <Button variant="gradient" size="sm" onClick={onUploadClick}>
-                <Plus /> Upload
-              </Button>
+            <div className="flex flex-wrap justify-center gap-2 mt-4" onClick={(e) => e.stopPropagation()}>
               <Button variant="glass" size="sm" onClick={() => setNewFolderOpen(true)}>
                 <Folder /> New folder
               </Button>
@@ -502,14 +531,14 @@ export default function FilesPage() {
         </div>
 
         {/* Toolbar */}
-        <div className="mt-8 flex items-center gap-2">
-          <div className="relative flex-1 max-w-md">
+        <div className="mt-8 flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[180px] max-w-md">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Search files…"
-              className="pl-9"
+              className="pl-9 border-foreground/70 focus-visible:border-foreground"
             />
           </div>
           {/* View switcher — grid (Finder) vs list. */}
@@ -539,21 +568,17 @@ export default function FilesPage() {
               <List className="size-4" />
             </button>
           </div>
-          <div className="text-xs text-muted-foreground">
-            <span className="text-foreground">{formatBytes(usedBytes)}</span> used
-          </div>
         </div>
 
         {/* Tabs */}
-        <Tabs value={tab} onValueChange={setTab} className="mt-6">
-          <TabsList>
+        <Tabs value={tab} onValueChange={handleTabChange} className="mt-6">
+          <TabsList className="flex flex-wrap h-auto w-full justify-start gap-1 md:inline-flex md:h-10 md:w-auto">
             <TabsTrigger value="all">All files</TabsTrigger>
             <TabsTrigger value="starred">Starred</TabsTrigger>
             <TabsTrigger value="vault">
               <Lock className="size-3 mr-1" /> Vault
               {!unlocked && password && <span className="ml-1 text-[10px] opacity-70">locked</span>}
             </TabsTrigger>
-            <TabsTrigger value="recent">Recent</TabsTrigger>
           </TabsList>
 
           <TabsContent value="all" className="mt-5">
@@ -596,7 +621,7 @@ export default function FilesPage() {
               onStar={toggleStar}
               onVault={(id) => {
                 if (!password) {
-                  requirePassword();
+                  requirePassword(() => toggleVault(id));
                   return;
                 }
                 toggleVault(id);
@@ -624,7 +649,9 @@ export default function FilesPage() {
                 })
               }
               onStar={toggleStar}
-              onVault={(id) => password ? toggleVault(id) : requirePassword()}
+              onVault={(id) =>
+                password ? toggleVault(id) : requirePassword(() => toggleVault(id))
+              }
               onDelete={remove}
               emptyLabel="Nothing starred yet."
             />
@@ -676,30 +703,6 @@ export default function FilesPage() {
                 />
               </>
             )}
-          </TabsContent>
-
-          <TabsContent value="recent" className="mt-5">
-            {/* Always-present action row (fixed height) → no shift on select. */}
-            <div className="flex justify-end items-center mb-3 min-h-[34px]">
-              {selectionActions}
-            </div>
-            <NodeGrid
-              nodes={visibleNodes}
-              selectedIds={selected}
-              onToggleSelect={toggleSelect}
-              onSelectionChange={replaceSelection}
-              view={view}
-              onActivate={(n) =>
-                accessNode(n, () => {
-                  if (n.kind === "folder") setCurrentFolderId(n.id);
-                  else openPreview(n, visibleNodes);
-                })
-              }
-              onStar={toggleStar}
-              onVault={(id) => password ? toggleVault(id) : requirePassword()}
-              onDelete={remove}
-              emptyLabel="No recent uploads yet."
-            />
           </TabsContent>
         </Tabs>
       </div>
@@ -829,11 +832,20 @@ function NodeGrid({
   const draggedRef = React.useRef(false);
 
   const onPointerDown = (e: React.PointerEvent) => {
-    // Left button only, and only when starting on empty space — clicks that
-    // start on a card are handled by the card itself.
-    if (e.button !== 0) return;
-    if ((e.target as HTMLElement).closest("[data-node-card]")) return;
+    // Any fresh pointer-down clears stale drag state so a previous marquee
+    // can't leave `draggedRef` true and swallow later clicks (e.g. dropdown
+    // menu items, which bubble through this component via React portals).
     draggedRef.current = false;
+    if (e.button !== 0) return;
+    // React routes synthetic events (incl. pointer events) from portaled UI
+    // — dropdown menus, dialogs — up through this component tree. Those
+    // targets aren't real DOM descendants of the grid, so ignore them;
+    // otherwise we'd start a marquee + capture the pointer and steal the
+    // menu item's own pointer-up (breaking its onSelect).
+    if (!areaRef.current || !areaRef.current.contains(e.target as Node)) return;
+    // Only when starting on empty space — clicks that start on a card are
+    // handled by the card itself.
+    if ((e.target as HTMLElement).closest("[data-node-card]")) return;
     dragRef.current = {
       startX: e.clientX,
       startY: e.clientY,
@@ -885,12 +897,17 @@ function NodeGrid({
 
   // Swallow the click that follows a drag so the page-level
   // "click empties → clear selection" handler (and any card onClick) doesn't
-  // wipe the marquee result.
+  // wipe the marquee result. Crucially, only swallow clicks that land inside
+  // this grid's own DOM — dropdown-menu items live in a React portal (outside
+  // areaRef) and must keep working even if a stale drag flag lingers.
   const onClickCapture = (e: React.MouseEvent) => {
-    if (draggedRef.current) {
+    if (
+      draggedRef.current &&
+      areaRef.current?.contains(e.target as Node)
+    ) {
       e.stopPropagation();
-      draggedRef.current = false;
     }
+    draggedRef.current = false;
   };
 
   if (nodes.length === 0) {
@@ -1050,14 +1067,19 @@ function NodeItem({
           )}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium truncate">{truncateName(label, 52)}</p>
-          <p className="text-[11px] text-muted-foreground truncate">
+          {/* `line-clamp-1 break-all` (not `truncate`) so a long unbroken name
+              can't force the row wider than the screen inside Radix's
+              table-sized scroll viewport. */}
+          <p className="text-sm font-medium line-clamp-1 break-all">
+            {truncateName(label, 52)}
+          </p>
+          <p className="text-[11px] text-muted-foreground line-clamp-1 break-all">
             {isFolder
               ? "Folder"
               : `${formatBytes(node.size)} · ${new Date(node.createdAt).toLocaleDateString()}`}
           </p>
         </div>
-        {hoverActions}
+        <div className="shrink-0">{hoverActions}</div>
       </motion.div>
     );
   }

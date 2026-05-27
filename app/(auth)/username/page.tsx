@@ -41,7 +41,7 @@ export default function UsernamePage() {
           </div>
           <h1 className="mt-5 text-2xl font-semibold tracking-tight">Pick your username</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            This is how friends find you on Nova.
+            This is how friends find you on Obsidian.
           </p>
         </div>
 

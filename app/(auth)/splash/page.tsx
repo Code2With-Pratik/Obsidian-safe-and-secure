@@ -47,7 +47,7 @@ export default function SplashPage() {
         >
           <Button asChild size="xl" variant="gradient" className="group">
             <Link href="/onboarding">
-              Enter Nova
+              Enter Obsidian
               <ArrowRight className="transition-transform group-hover:translate-x-1" />
             </Link>
           </Button>
