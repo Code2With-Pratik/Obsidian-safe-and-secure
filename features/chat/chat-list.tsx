@@ -39,6 +39,7 @@ import { useChatStore } from "@/store/use-chat-store";
 import { useCommunityStore } from "@/store/use-community-store";
 import { users as allUsers } from "@/lib/mock-data";
 import { cn, formatRelative } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 import { CommunityGridCard, CommunityGridEmpty } from "@/features/community/community-grid-card";
 import { InterestMatchPopup } from "@/features/community/interest-match-popup";
 import { CreateCommunityDialog } from "@/features/community/create-community-dialog";
@@ -82,6 +83,7 @@ export function ChatList({
   onSelect?: (id: string) => void;
 }) {
   const router = useRouter();
+  const t = useT();
   // `?tab=community` lands the chat list on the Community tab — used by the
   // back button from the community detail page so users return to where they
   // came from.
@@ -228,8 +230,8 @@ export function ChatList({
                   onChange={(e) => setQ(e.target.value)}
                   placeholder={
                     view === "community"
-                      ? "Search communities, topics, tags"
-                      : "Search chats and people"
+                      ? t("Search communities, topics, tags")
+                      : t("Search chats and people")
                   }
                   className="flex-1 bg-transparent text-[15px] leading-none outline-none placeholder:text-muted-foreground/70 pr-2"
                 />
@@ -338,7 +340,7 @@ export function ChatList({
                   : "glass-subtle text-muted-foreground hover:text-foreground"
               )}
             >
-              {f.label}
+              {t(f.label)}
             </button>
           ))}
         </div>
@@ -356,7 +358,7 @@ export function ChatList({
                   : "glass-subtle text-muted-foreground hover:text-foreground"
               )}
             >
-              {f.label}
+              {t(f.label)}
             </button>
           ))}
         </div>
@@ -370,7 +372,7 @@ export function ChatList({
         <ScrollArea className="flex-1 px-3 scroll-fade-y">
           {filtered.length > 0 && (
             <>
-              <SectionLabel>Your chats</SectionLabel>
+              <SectionLabel>{t("Your chats")}</SectionLabel>
               {filtered.map((c) => (
                 <ChatRow
                   key={c.id}
@@ -383,7 +385,7 @@ export function ChatList({
           )}
 
           <SectionLabel>
-            {q.trim() === "" ? "Suggested people" : "People"}
+            {q.trim() === "" ? t("Suggested people") : t("People")}
           </SectionLabel>
           {userSuggestions.length > 0 ? (
             userSuggestions.map((u) => (
@@ -427,7 +429,7 @@ export function ChatList({
           <SectionLabel>
             <span className="inline-flex items-center gap-1.5">
               <Sparkles className="size-3 text-cyan-300" />
-              {q.trim() === "" ? "All communities" : "Communities"}
+              {q.trim() === "" ? t("All communities") : t("Communities")}
             </span>
           </SectionLabel>
           {filteredCommunities.length > 0 ? (
@@ -466,12 +468,12 @@ export function ChatList({
               section heading; on desktop the same toggle is fine too. */}
           <div className="px-5 pt-2 pb-1 flex items-baseline gap-5">
             <ViewTab
-              label="Messages"
+              label={t("Messages")}
               active={view === "messages"}
               onClick={() => setView("messages")}
             />
             <ViewTab
-              label="Community"
+              label={t("Community")}
               active={view === "community"}
               onClick={() => setView("community")}
             />
@@ -479,7 +481,7 @@ export function ChatList({
 
           {view === "messages" ? (
             <ScrollArea className="flex-1 px-3 scroll-fade-y">
-              {pinned.length > 0 && <SectionLabel>Pinned</SectionLabel>}
+              {pinned.length > 0 && <SectionLabel>{t("Pinned")}</SectionLabel>}
               {pinned.map((chat) => (
                 <ChatRow
                   key={chat.id}
@@ -489,7 +491,7 @@ export function ChatList({
                 />
               ))}
               {pinned.length > 0 && rest.length > 0 && (
-                <SectionLabel>All conversations</SectionLabel>
+                <SectionLabel>{t("All conversations")}</SectionLabel>
               )}
               {rest.map((chat) => (
                 <ChatRow
@@ -501,7 +503,7 @@ export function ChatList({
               ))}
               {filtered.length === 0 && (
                 <div className="grid place-items-center py-16 text-center text-sm text-muted-foreground">
-                  <p>No conversations match this filter.</p>
+                  <p>{t("No conversations match this filter.")}</p>
                 </div>
               )}
               <div className="h-4" />
@@ -712,46 +714,47 @@ function HintOrPreview({ chat }: { chat: Chat }) {
 }
 
 function HintBadge({ hint, unread }: { hint: ChatHint; unread?: boolean }) {
+  const t = useT();
   switch (hint.kind) {
     case "typing":
       return (
         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-300 text-[11px] font-medium">
           <TypingDots />
-          {hint.label ?? "Typing…"}
+          {hint.label ?? t("typing…")}
         </span>
       );
     case "photo":
       return (
         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-violet-500/15 text-violet-300 text-[11px] font-medium">
           <ImageIcon className="size-3" />
-          {hint.label ?? "Photo"}
+          {hint.label ?? t("Photo")}
         </span>
       );
     case "voice":
       return (
         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 text-[11px] font-medium">
           <Mic className="size-3" />
-          {hint.label ?? "Voice"}
+          {hint.label ?? t("Voice")}
         </span>
       );
     case "video":
       return (
         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-rose-500/15 text-rose-300 text-[11px] font-medium">
           <VideoIcon className="size-3" />
-          {hint.label ?? "Video"}
+          {hint.label ?? t("Video")}
         </span>
       );
     case "file":
       return (
         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-amber-500/15 text-amber-300 text-[11px] font-medium">
           <FileText className="size-3" />
-          {hint.label ?? "File"}
+          {hint.label ?? t("File")}
         </span>
       );
     case "draft":
       return (
         <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-foreground/10 text-foreground/70 text-[11px] font-medium">
-          {hint.label ?? "Draft"}
+          {hint.label ?? t("Draft")}
         </span>
       );
   }

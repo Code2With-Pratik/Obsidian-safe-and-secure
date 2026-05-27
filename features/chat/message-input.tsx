@@ -14,6 +14,7 @@ import {
 import { ExpressionsPicker, type ExpressionPick } from "./expressions-picker";
 import { useUIStore } from "@/store/use-ui-store";
 import { useMediaQuery } from "@/hooks/use-media-query";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 import type { Message, PollOption } from "@/types";
@@ -50,6 +51,7 @@ export function MessageInput({
   themeBubbleMe,
   themeAccent
 }: Props) {
+  const t = useT();
   const [text, setText] = React.useState("");
   const [showAi, setShowAi] = React.useState(false);
   const [attachOpen, setAttachOpen] = React.useState(false);
@@ -596,7 +598,7 @@ export function MessageInput({
               />
               {!hasText && (
                 <div className="pointer-events-none absolute inset-y-0 left-0 right-2 flex items-center text-[15px] leading-snug text-muted-foreground/60">
-                  <span className="truncate block">Message</span>
+                  <span className="truncate block">{t("Message")}</span>
                 </div>
               )}
             </>

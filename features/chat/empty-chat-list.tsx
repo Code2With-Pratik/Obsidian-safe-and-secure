@@ -4,12 +4,14 @@ import * as React from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { users } from "@/lib/mock-data";
+import { useT } from "@/lib/i18n";
 
 interface Props {
   onEnter: () => void;
 }
 
 export function EmptyChatList({ onEnter }: Props) {
+  const t = useT();
   // Up to 8 portraits around the ring so the rotation feels populated.
   const ring = users.filter((u) => u.id !== "me").slice(0, 8);
 
@@ -121,7 +123,7 @@ export function EmptyChatList({ onEnter }: Props) {
               color: "transparent"
             }}
           >
-            Hello
+            {t("Hello")}
           </span>
         </div>
       </motion.div>
@@ -133,10 +135,10 @@ export function EmptyChatList({ onEnter }: Props) {
         className="text-center mt-7 max-w-xs"
       >
         <h2 className="text-3xl font-display font-semibold tracking-tight">
-          Friend's <span className="neon-text">Contact</span>
+          {t("Friend's")} <span className="neon-text">{t("Contact")}</span>
         </h2>
         <p className="text-sm text-muted-foreground mt-1.5">
-          Enjoy the first AI-powered chat.
+          {t("Enjoy the first AI-powered chat.")}
         </p>
       </motion.div>
 
@@ -152,10 +154,10 @@ export function EmptyChatList({ onEnter }: Props) {
           onClick={onEnter}
           className="w-full !h-12 !rounded-full !text-base !bg-foreground !text-background hover:!bg-foreground/90"
         >
-          Enter
+          {t("Enter")}
         </Button>
         <p className="text-center text-[11px] text-muted-foreground mt-3">
-          Search a friend to start chatting
+          {t("Search a friend to start chatting")}
         </p>
       </motion.div>
     </div>

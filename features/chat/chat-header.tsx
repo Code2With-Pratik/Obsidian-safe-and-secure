@@ -46,6 +46,7 @@ import { useChatStore } from "@/store/use-chat-store";
 import { useChatThemeStore } from "@/store/use-chat-theme-store";
 import { useMessageSelectionStore } from "@/store/use-message-selection-store";
 import { copyText } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 import { UserProfileSheet } from "./user-profile-sheet";
 import { ChatThemeDialog } from "./chat-theme-dialog";
 import type { Chat } from "@/types";
@@ -63,6 +64,7 @@ export function ChatHeader({
   onCloseSearch?: () => void;
 }) {
   const router = useRouter();
+  const t = useT();
   const startCallStore = useUIStore((s) => s.startCall);
   const chats = useChatStore((s) => s.chats);
   const removeChat = useChatStore((s) => s.removeChat);
@@ -132,9 +134,9 @@ export function ChatHeader({
         </Button>
         <div className="flex-1 min-w-0">
           <p className="font-semibold text-[15px] truncate">
-            {selectionCount} selected
+            {selectionCount} {t("selected")}
           </p>
-          <p className="text-[11px] text-muted-foreground">Tap messages to add or remove</p>
+          <p className="text-[11px] text-muted-foreground">{t("Tap messages to add or remove")}</p>
         </div>
         <div className="flex items-center gap-1">
           <Button
@@ -196,7 +198,7 @@ export function ChatHeader({
               onKeyDown={(e) => {
                 if (e.key === "Escape") onCloseSearch?.();
               }}
-              placeholder={`Search in ${chat.name}…`}
+              placeholder={`${t("Search in chat")} · ${chat.name}…`}
               className="w-full h-10 pl-9 pr-9 rounded-full glass-subtle border border-border/60 bg-transparent text-sm outline-none focus:ring-2 focus:ring-cyan-400/60 placeholder:text-muted-foreground/70"
             />
             {search && search.length > 0 && (
@@ -244,10 +246,10 @@ export function ChatHeader({
               </div>
               <div className="text-[11px] text-muted-foreground truncate">
                 {chat.type === "group" || chat.type === "channel"
-                  ? `${chat.membersCount} members · ${Math.floor((chat.membersCount ?? 0) / 5)} online`
+                  ? `${chat.membersCount} ${t("members")} · ${Math.floor((chat.membersCount ?? 0) / 5)} ${t("online")}`
                   : chat.online
-                  ? "online · typing…"
-                  : "last seen 2h ago"}
+                  ? `${t("online")} · ${t("typing…")}`
+                  : t("last seen 2h ago")}
               </div>
             </div>
           </button>
@@ -259,7 +261,7 @@ export function ChatHeader({
           variant="ghost"
           size="icon"
           onClick={() => startCall(false)}
-          title="Voice call"
+          title={t("Voice call")}
           className="[&_svg]:size-[22px] dark:text-white dark:hover:text-white"
         >
           <Phone />
@@ -268,7 +270,7 @@ export function ChatHeader({
           variant="ghost"
           size="icon"
           onClick={() => startCall(true)}
-          title="Video call"
+          title={t("Video call")}
           className="[&_svg]:size-[22px] dark:text-white dark:hover:text-white"
         >
           <Video />
@@ -277,8 +279,8 @@ export function ChatHeader({
           variant="ghost"
           size="icon"
           onClick={() => onSearchChange?.("")}
-          title="Search in chat"
-          aria-label="Search messages"
+          title={t("Search in chat")}
+          aria-label={t("Search in chat")}
           className="[&_svg]:size-[22px] dark:text-white dark:hover:text-white"
         >
           <Search />
@@ -304,57 +306,57 @@ export function ChatHeader({
 
             <DropdownMenuItem onSelect={() => setProfileOpen(true)}>
               <Users />
-              View profile
+              {t("View profile")}
               <DropdownMenuShortcut>⌘P</DropdownMenuShortcut>
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={() => setThemeOpen(true)}>
               <Palette />
-              Chat theme
+              {t("Chat theme")}
               <Badge variant="cyan" className="ml-auto !text-[9px] !px-1.5">
                 <Sparkles className="size-2" /> new
               </Badge>
             </DropdownMenuItem>
             <DropdownMenuItem>
               <CalendarClock />
-              Schedule message
+              {t("Schedule message")}
             </DropdownMenuItem>
             <DropdownMenuItem
               onSelect={() => updateChat(chat.id, { pinned: !chat.pinned })}
             >
               <Pin />
-              {chat.pinned ? "Unpin chat" : "Pin chat"}
+              {chat.pinned ? t("Unpin chat") : t("Pin chat")}
             </DropdownMenuItem>
             <DropdownMenuItem
               onSelect={() => updateChat(chat.id, { muted: !chat.muted })}
             >
               {chat.muted ? <Bell /> : <BellOff />}
-              {chat.muted ? "Unmute" : "Mute notifications"}
+              {chat.muted ? t("Unmute") : t("Mute notifications")}
             </DropdownMenuItem>
             <DropdownMenuItem>
               <Star />
-              Add to favorites
+              {t("Add to favorites")}
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />
 
             <DropdownMenuItem>
               <Download />
-              Export chat
+              {t("Export chat")}
             </DropdownMenuItem>
             <DropdownMenuItem>
               <Eraser />
-              Clear chat
+              {t("Clear chat")}
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />
 
             <DropdownMenuItem className="text-rose-600 focus:text-rose-400">
               <Ban />
-              Block contact
+              {t("Block contact")}
             </DropdownMenuItem>
             <DropdownMenuItem className="text-rose-600 focus:text-rose-400">
               <Flag />
-              Report
+              {t("Report")}
             </DropdownMenuItem>
             <DropdownMenuItem
               className="text-rose-600 focus:text-rose-400"
@@ -364,7 +366,7 @@ export function ChatHeader({
               }}
             >
               <Trash2 />
-              Delete chat
+              {t("Delete chat")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
