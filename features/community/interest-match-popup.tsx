@@ -36,7 +36,7 @@ export function InterestMatchPopup({ open, count, communityName, onClose }: Prop
       {open && (
         <>
           {/* dimming layer */}
-          {/* Stacked above every other surface — including the Nova AI panel
+          {/* Stacked above every other surface — including the Obsidian AI panel
               and its dropdowns, which top out at z-[9999]. Inline style is
               used so nothing in @layer utilities can override it. */}
           <motion.div

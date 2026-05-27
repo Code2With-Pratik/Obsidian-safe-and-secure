@@ -27,7 +27,7 @@ export const currentUser: User = {
 export const users: User[] = [
   currentUser,
   { id: "u1", name: "Kai Nakamura", username: "kai", avatar: avatar("kai"), status: "online", bio: "Music producer" },
-  { id: "u2", name: "Nova Patel", username: "nova", avatar: avatar("nova"), status: "online", bio: "AI researcher" },
+  { id: "u2", name: "Obsidian Patel", username: "nova", avatar: avatar("nova"), status: "online", bio: "AI researcher" },
   { id: "u3", name: "Zane Ortega", username: "zane", avatar: avatar("zane"), status: "away", bio: "Cinematographer" },
   { id: "u4", name: "Lyra Chen", username: "lyra", avatar: avatar("lyra"), status: "busy", bio: "Creative dev" },
   { id: "u5", name: "Orion West", username: "orion", avatar: avatar("orion"), status: "offline", bio: "Spaceflight engineer" },
@@ -65,7 +65,7 @@ export const chats: Chat[] = [
   {
     id: "c3",
     type: "secret",
-    name: "Nova Patel",
+    name: "Obsidian Patel",
     avatar: avatar("nova"),
     lastMessage: "message hidden",
     lastMessageAt: new Date(Date.now() - 1000 * 60 * 45).toISOString(),
@@ -340,7 +340,7 @@ export const stories: Story[] = [
 export const callParticipants: CallParticipant[] = [
   { id: "me", name: "Aria", avatar: avatar("aria"), muted: false, cameraOn: true, isMe: true, speaking: true, isHost: true },
   { id: "u1", name: "Kai", avatar: avatar("kai"), muted: false, cameraOn: true },
-  { id: "u2", name: "Nova", avatar: avatar("nova"), muted: true, cameraOn: true, speaking: false },
+  { id: "u2", name: "Obsidian", avatar: avatar("nova"), muted: true, cameraOn: true, speaking: false },
   { id: "u4", name: "Lyra", avatar: avatar("lyra"), muted: false, cameraOn: false },
   { id: "u6", name: "Iris", avatar: avatar("iris"), muted: false, cameraOn: true, speaking: true },
   { id: "u7", name: "Atlas", avatar: avatar("atlas"), muted: true, cameraOn: false }

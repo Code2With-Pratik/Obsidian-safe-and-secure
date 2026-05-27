@@ -56,7 +56,7 @@ const seed: Notification[] = [
   {
     id: "n3",
     kind: "call",
-    title: "Missed call from Nova Patel",
+    title: "Missed call from Obsidian Patel",
     body: "She called twice. Probably about the AI dataset review you scheduled for tomorrow.",
     time: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
     avatar: "https://api.dicebear.com/9.x/notionists/svg?backgroundType=gradientLinear&backgroundColor=8b5cf6,ec4899,22d3ee,a3e635,fbbf24,fb923c,60a5fa,f472b6&radius=18&seed=nova"
@@ -82,7 +82,7 @@ const seed: Notification[] = [
   {
     id: "n6",
     kind: "system",
-    title: "Nova AI · weekly digest",
+    title: "Obsidian AI · weekly digest",
     body:
       "You spent 4h 12m in conversations this week, joined 3 ghost rooms, and finished 12 thread replies. Your most-mentioned topic was 'motion design'. Want me to summarize the week into a story you can post?",
     time: new Date(Date.now() - 1000 * 60 * 60 * 18).toISOString(),

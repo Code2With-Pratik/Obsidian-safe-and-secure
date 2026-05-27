@@ -78,7 +78,7 @@ export function EditProfileDialog({ open, onOpenChange }: Props) {
             <DialogHeader>
               <DialogTitle className="text-xl font-display">Edit profile</DialogTitle>
               <DialogDescription>
-                Update how the rest of Nova sees you.
+                Update how the rest of Obsidian sees you.
               </DialogDescription>
             </DialogHeader>
           </div>

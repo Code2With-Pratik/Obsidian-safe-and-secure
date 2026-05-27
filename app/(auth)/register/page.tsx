@@ -50,7 +50,7 @@ export default function RegisterPage() {
       >
         <div className="flex flex-col items-center text-center mb-7">
           <NovaLogo className="h-14 w-14" />
-          <h1 className="mt-5 text-2xl font-semibold tracking-tight">Create your Nova</h1>
+          <h1 className="mt-5 text-2xl font-semibold tracking-tight">Create your Obsidian</h1>
           <p className="text-sm text-muted-foreground mt-1">
             One identity. Infinite ways to connect.
           </p>

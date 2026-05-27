@@ -29,7 +29,7 @@ export default function ChatsIndex() {
             Select a conversation
           </h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Or start a new one. Nova chats are private by default and encrypted edge to edge.
+            Or start a new one. Obsidian chats are private by default and encrypted edge to edge.
           </p>
           <div className="mt-6 flex items-center justify-center gap-4 text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5">

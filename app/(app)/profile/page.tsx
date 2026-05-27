@@ -103,7 +103,7 @@ export default function ProfilePage() {
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-3xl font-display font-semibold tracking-tight">{name}</h1>
                 <Badge variant="cyan">
-                  <Sparkles className="size-3" /> Nova Plus
+                  <Sparkles className="size-3" /> Obsidian Plus
                 </Badge>
               </div>
               <p className="text-muted-foreground text-sm">
@@ -111,7 +111,7 @@ export default function ProfilePage() {
                 {user?.pronouns ? ` · ${user.pronouns}` : " · she/her"}
               </p>
               <p className="mt-2 max-w-xl">
-                {user?.bio ?? "Designing the future, one pixel at a time. Currently building Nova ✨"}
+                {user?.bio ?? "Designing the future, one pixel at a time. Currently building Obsidian ✨"}
               </p>
               <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                 <span className="inline-flex items-center gap-1.5">
@@ -159,7 +159,7 @@ export default function ProfilePage() {
                   <h3 className="font-semibold text-sm mb-3">Bio card</h3>
                   <p className="text-sm text-muted-foreground">
                     Senior product designer, ex-Linear, ex-Arc. I care deeply about the texture of digital
-                    experiences. Currently architecting Nova — a futuristic OS for communication.
+                    experiences. Currently architecting Obsidian — a futuristic OS for communication.
                   </p>
                   <div className="mt-4 flex flex-wrap gap-2">
                     {["#design", "#motion", "#typography", "#systems", "#synthwave"].map((t) => (

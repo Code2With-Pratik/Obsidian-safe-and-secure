@@ -73,7 +73,7 @@ export function CommandPalette() {
               <div className="flex items-center gap-3 px-4 py-3.5 border-b border-border/50">
                 <Search className="size-4 text-muted-foreground" />
                 <Command.Input
-                  placeholder="Search chats, people, files, actions… or ask Nova AI"
+                  placeholder="Search chats, people, files, actions… or ask Obsidian AI"
                   className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
                   autoFocus
                 />
@@ -93,7 +93,7 @@ export function CommandPalette() {
                     className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer aria-selected:bg-foreground/5 data-[selected=true]:bg-foreground/5"
                   >
                     <Sparkles className="size-4 text-violet-400" />
-                    <span className="text-sm">Ask Nova AI…</span>
+                    <span className="text-sm">Ask Obsidian AI…</span>
                     <kbd className="ml-auto text-[10px] glass px-1.5 py-0.5 rounded">⌘J</kbd>
                   </Command.Item>
                 </Command.Group>

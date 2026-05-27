@@ -33,6 +33,10 @@
     --font-sans: "Inter", "Segoe UI", system-ui, sans-serif;
     --font-display: "Inter", "Segoe UI", system-ui, sans-serif;
     --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+    /* Glass blur multiplier — driven by the "Glass intensity" setting.
+       1 = default; SettingsEffects rewrites it live. */
+    --glass-scale: 1;
   }
 
   .dark {
@@ -98,8 +102,8 @@
   /* Glassmorphism surfaces — iOS / VisionOS-inspired vibrancy */
   .glass {
     background: hsl(var(--glass-bg));
-    backdrop-filter: blur(28px) saturate(180%) contrast(110%);
-    -webkit-backdrop-filter: blur(28px) saturate(180%) contrast(110%);
+    backdrop-filter: blur(calc(28px * var(--glass-scale, 1))) saturate(180%) contrast(110%);
+    -webkit-backdrop-filter: blur(calc(28px * var(--glass-scale, 1))) saturate(180%) contrast(110%);
     border: 1px solid hsl(var(--glass-border));
     box-shadow:
       0 10px 40px -8px rgba(0, 0, 0, 0.22),
@@ -110,8 +114,8 @@
 
   .glass-strong {
     background: hsl(var(--card) / 0.72);
-    backdrop-filter: blur(40px) saturate(190%) contrast(115%);
-    -webkit-backdrop-filter: blur(40px) saturate(190%) contrast(115%);
+    backdrop-filter: blur(calc(40px * var(--glass-scale, 1))) saturate(190%) contrast(115%);
+    -webkit-backdrop-filter: blur(calc(40px * var(--glass-scale, 1))) saturate(190%) contrast(115%);
     border: 1px solid hsl(var(--glass-stroke));
     box-shadow:
       0 24px 60px -16px rgba(0, 0, 0, 0.45),
@@ -121,8 +125,8 @@
 
   .glass-subtle {
     background: hsl(var(--card) / 0.45);
-    backdrop-filter: blur(20px) saturate(160%);
-    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    backdrop-filter: blur(calc(20px * var(--glass-scale, 1))) saturate(160%);
+    -webkit-backdrop-filter: blur(calc(20px * var(--glass-scale, 1))) saturate(160%);
     border: 1px solid hsl(var(--border) / 0.5);
     box-shadow:
       inset 0 1px 0 0 rgba(255, 255, 255, 0.06);
@@ -255,6 +259,21 @@
 @layer utilities {
   .text-balance { text-wrap: balance; }
   .text-pretty { text-wrap: pretty; }
+
+  /* Reduce-motion — driven by the appearance setting. Dampens CSS
+     animations + transitions globally (framer-motion is handled separately
+     via MotionConfig). */
+  .reduce-motion *,
+  .reduce-motion *::before,
+  .reduce-motion *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .reduce-motion .aurora-bg::before {
+    animation: none !important;
+  }
 
   .gradient-border {
     position: relative;

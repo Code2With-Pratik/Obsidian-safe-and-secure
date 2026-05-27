@@ -51,11 +51,11 @@ const shadowsIntoLight = Shadows_Into_Light({
 });
 
 export const metadata: Metadata = {
-  title: "Nova · The Future of Communication",
+  title: "Obsidian · The Future of Communication",
   description:
-    "Nova is a next-generation communication ecosystem — chats, ghost rooms, calls, stories, whiteboards and an internal browser, all in one futuristic OS for talking, building and connecting.",
-  applicationName: "Nova",
-  authors: [{ name: "Nova Labs" }]
+    "Obsidian is a next-generation communication ecosystem — chats, ghost rooms, calls, stories, whiteboards and an internal browser, all in one futuristic OS for talking, building and connecting.",
+  applicationName: "Obsidian",
+  authors: [{ name: "Obsidian Labs" }]
 };
 
 export const viewport: Viewport = {

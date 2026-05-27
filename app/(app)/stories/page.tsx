@@ -21,9 +21,11 @@ import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { stories, users, currentUser } from "@/lib/mock-data";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export default function StoriesPage() {
+  const t = useT();
   const [active, setActive] = React.useState<number | null>(null);
 
   return (
@@ -32,7 +34,7 @@ export default function StoriesPage() {
         <div className="flex items-end justify-between gap-3">
           <div>
             <h1 className="text-4xl md:text-5xl font-display font-semibold tracking-tight">
-              Stories
+              {t("Stories")}
             </h1>
             <p className="text-muted-foreground mt-2">
               Fragments of the day from the people you follow. Tap to dive in.

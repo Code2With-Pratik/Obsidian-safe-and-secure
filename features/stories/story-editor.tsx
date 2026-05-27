@@ -110,7 +110,7 @@ const STOCK_IMAGES: string[] = [
 
 const FILTERS: { id: string; label: string; filter: string }[] = [
   { id: "none", label: "Original", filter: "none" },
-  { id: "nova", label: "Nova", filter: "saturate(1.4) contrast(1.05) brightness(1.05)" },
+  { id: "nova", label: "Obsidian", filter: "saturate(1.4) contrast(1.05) brightness(1.05)" },
   { id: "mono", label: "Mono", filter: "grayscale(1) contrast(1.05)" },
   { id: "vivid", label: "Vivid", filter: "saturate(1.8) contrast(1.1)" },
   { id: "fade", label: "Fade", filter: "saturate(0.7) brightness(1.05) contrast(0.92)" },
@@ -148,7 +148,7 @@ const TEXT_COLORS = ["#ffffff", "#000000", "#8B5CF6", "#22D3EE", "#EC4899", "#FB
 // Each track carries a root frequency (Hz) + waveform so the preview synth
 // generates a recognisable, distinct ambient pad per track.
 const MUSIC_TRACKS = [
-  { id: "m1", title: "Glass Cathedrals", artist: "Nova FM",       duration: "3:24", root: 220.00, wave: "sine"     as OscillatorType },
+  { id: "m1", title: "Glass Cathedrals", artist: "Obsidian FM",       duration: "3:24", root: 220.00, wave: "sine"     as OscillatorType },
   { id: "m2", title: "Aurora Drift",     artist: "Synth Citizens", duration: "2:51", root: 261.63, wave: "triangle" as OscillatorType },
   { id: "m3", title: "Midnight Lounge",  artist: "Kai Nakamura",  duration: "4:08", root: 174.61, wave: "sine"     as OscillatorType },
   { id: "m4", title: "Neon Pulse",       artist: "Lyra Chen",     duration: "3:12", root: 329.63, wave: "sawtooth" as OscillatorType },

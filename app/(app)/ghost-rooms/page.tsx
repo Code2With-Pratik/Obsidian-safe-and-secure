@@ -11,9 +11,11 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useGhostStore } from "@/store/use-ghost-store";
+import { useT } from "@/lib/i18n";
 import type { GhostRoom } from "@/types";
 
 export default function GhostRoomsPage() {
+  const t = useT();
   const [q, setQ] = React.useState("");
   const rooms = useGhostStore((s) => s.rooms);
   const joinedIds = useGhostStore((s) => s.joinedIds);
@@ -60,7 +62,7 @@ export default function GhostRoomsPage() {
                 <span>Anonymous · ephemeral · safe</span>
               </div>
               <h1 className="text-4xl md:text-5xl font-display font-semibold tracking-tight">
-                Ghost <span className="neon-text">Rooms</span>
+                <span className="neon-text">{t("Ghost Rooms")}</span>
               </h1>
               <p className="text-muted-foreground mt-2 max-w-xl">
                 Step into temporary spaces where identity vanishes and conversation gets real.

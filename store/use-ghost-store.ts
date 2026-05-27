@@ -150,7 +150,7 @@ const GHOST_NAMES = [
   "Hush",
   "Specter",
   "Ember",
-  "Nova",
+  "Obsidian",
   "Cipher",
   "Halo",
   "Pulse",
