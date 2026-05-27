@@ -19,11 +19,13 @@ import {
   Star,
   Share2,
   MoreHorizontal,
-  Filter,
   ChevronRight,
   Home,
   Trash2,
-  ShieldCheck
+  ShieldCheck,
+  LayoutGrid,
+  List,
+  CheckCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -52,22 +54,27 @@ const iconFor: Record<VaultFileKind, React.ReactNode> = {
   other: <File />
 };
 
-const colorFor: Record<VaultFileKind, string> = {
-  image: "from-emerald-400 to-cyan-400",
-  video: "from-pink-500 to-rose-500",
-  audio: "from-violet-500 to-fuchsia-500",
-  doc: "from-blue-500 to-cyan-400",
-  archive: "from-amber-400 to-orange-500",
-  code: "from-slate-400 to-slate-600",
-  other: "from-zinc-400 to-zinc-600"
-};
-
 function formatBytes(b?: number) {
   if (b == null) return "";
   if (b > 1e9) return (b / 1e9).toFixed(1) + " GB";
   if (b > 1e6) return (b / 1e6).toFixed(1) + " MB";
   if (b > 1e3) return (b / 1e3).toFixed(0) + " KB";
   return b + " B";
+}
+
+/** Shorten a long file name while preserving its extension, e.g.
+ *  "my-very-long-report-final.pdf" → "my-very-long-re….pdf". Folders and
+ *  extension-less names are simply clipped with an ellipsis. */
+function truncateName(name: string, max: number): string {
+  if (name.length <= max) return name;
+  const dot = name.lastIndexOf(".");
+  // Treat as having an extension only if the dot is near the end (≤6 chars).
+  if (dot > 0 && name.length - dot <= 6) {
+    const ext = name.slice(dot); // includes the dot, e.g. ".pdf"
+    const keep = Math.max(1, max - ext.length - 1);
+    return name.slice(0, keep) + "…" + ext;
+  }
+  return name.slice(0, Math.max(1, max - 1)) + "…";
 }
 
 export default function FilesPage() {
@@ -90,6 +97,8 @@ export default function FilesPage() {
   const [currentFolderId, setCurrentFolderId] = React.useState<string | null>(null);
   const [tab, setTab] = React.useState("all");
   const [q, setQ] = React.useState("");
+  /** Icon grid (Finder-style) vs. compact list view. */
+  const [view, setView] = React.useState<"grid" | "list">("grid");
   const [drag, setDrag] = React.useState(false);
   const [newFolderOpen, setNewFolderOpen] = React.useState(false);
   const [pwOpen, setPwOpen] = React.useState(false);
@@ -117,6 +126,25 @@ export default function FilesPage() {
     });
   }, []);
   const clearSelection = React.useCallback(() => setSelected(new Set()), []);
+  /** Replace the whole selection (used by marquee drag-select + select-all). */
+  const replaceSelection = React.useCallback(
+    (ids: string[]) => setSelected(new Set(ids)),
+    []
+  );
+
+  /* ---- bulk actions on the current selection ---- */
+  const bulkStar = React.useCallback(() => {
+    const all = useVaultStore.getState().nodes;
+    selected.forEach((id) => {
+      const n = all.find((x) => x.id === id);
+      if (n && !n.starred) toggleStar(id);
+    });
+  }, [selected, toggleStar]);
+
+  const bulkDelete = React.useCallback(() => {
+    selected.forEach((id) => remove(id));
+    clearSelection();
+  }, [selected, remove, clearSelection]);
 
   /** Run `fn` if the node is accessible. If it's a vault item and the
    *  vault is still locked, queue the action behind the password dialog. */
@@ -155,6 +183,38 @@ export default function FilesPage() {
     },
     [openPwDialog]
   );
+
+  /** True when every selected item already lives in the vault — flips the
+   *  bulk button between "Move to vault" and "Remove from vault". */
+  const allSelectedVaulted = React.useMemo(() => {
+    if (selected.size === 0) return false;
+    return nodes.filter((n) => selected.has(n.id)).every((n) => n.vault);
+  }, [selected, nodes]);
+
+  /** Toggle the whole selection in/out of the vault. If they're all already
+   *  vaulted, remove them; otherwise move the un-vaulted ones in (prompting
+   *  to set a password first if there isn't one yet). */
+  const bulkVault = React.useCallback(() => {
+    const all = useVaultStore.getState().nodes;
+    const sel = all.filter((n) => selected.has(n.id));
+    const everyVaulted = sel.length > 0 && sel.every((n) => n.vault);
+    if (everyVaulted) {
+      sel.forEach((n) => {
+        if (n.vault) toggleVault(n.id);
+      });
+      return;
+    }
+    const doMove = () => {
+      sel.forEach((n) => {
+        if (!n.vault) toggleVault(n.id);
+      });
+    };
+    if (!password) {
+      requirePassword(doMove);
+      return;
+    }
+    doMove();
+  }, [selected, password, toggleVault, requirePassword]);
 
   /** Open the preview dialog at `node`. The navigable list = every FILE
    *  currently visible (folders excluded) — so the user can swipe through
@@ -246,6 +306,109 @@ export default function FilesPage() {
     [nodes, unlocked]
   );
 
+  /** Select-all toggle over the currently-visible nodes. */
+  const allVisibleSelected =
+    visibleNodes.length > 0 && visibleNodes.every((n) => selected.has(n.id));
+  const toggleSelectAll = () => {
+    if (allVisibleSelected) clearSelection();
+    else setSelected(new Set(visibleNodes.map((n) => n.id)));
+  };
+
+  /** Right-aligned action buttons shown next to the path when items are
+   *  selected. Reused across tabs. stopPropagation so clicking an action
+   *  doesn't bubble up to the click-outside-clears handler. */
+  const selectionActions = selectionActive ? (
+    <div
+      className="ml-auto flex items-center gap-1"
+      onClick={(e) => e.stopPropagation()}
+    >
+      <button
+        onClick={toggleSelectAll}
+        title={allVisibleSelected ? "Deselect all" : "Select all"}
+        aria-label={allVisibleSelected ? "Deselect all" : "Select all"}
+        className={cn(
+          "size-8 grid place-items-center rounded-full transition mr-0.5",
+          allVisibleSelected
+            ? "text-cyan-400 bg-cyan-400/15"
+            : "text-muted-foreground hover:text-foreground hover:bg-foreground/10"
+        )}
+      >
+        <CheckCheck className="size-4" />
+      </button>
+      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums mr-1 shrink-0">
+        <span className="size-1.5 rounded-full bg-cyan-400" />
+        {selected.size} selected
+      </span>
+
+      {/* Desktop: full inline action buttons. */}
+      <div className="hidden md:flex items-center gap-1">
+        <button
+          onClick={bulkStar}
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium glass-subtle hover:bg-foreground/10 transition"
+        >
+          <Star className="size-3.5" /> Star
+        </button>
+        <button
+          onClick={bulkVault}
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium glass-subtle hover:bg-foreground/10 transition"
+        >
+          {allSelectedVaulted ? (
+            <>
+              <Unlock className="size-3.5" /> Remove from vault
+            </>
+          ) : (
+            <>
+              <Lock className="size-3.5" /> Move to vault
+            </>
+          )}
+        </button>
+        <button
+          onClick={bulkDelete}
+          className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium text-rose-300 hover:bg-rose-500/15 transition"
+        >
+          <Trash2 className="size-3.5" /> Delete
+        </button>
+      </div>
+
+      {/* Mobile: collapse the actions into a three-dots overflow menu. */}
+      <div className="md:hidden">
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              aria-label="Selection actions"
+              className="size-8 grid place-items-center rounded-full glass-subtle hover:bg-foreground/10 transition"
+            >
+              <MoreHorizontal className="size-4" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="!w-auto !min-w-[10rem]">
+            <DropdownMenuItem onSelect={bulkStar}>
+              <Star /> Star
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={bulkVault}>
+              {allSelectedVaulted ? (
+                <>
+                  <Unlock /> Remove from vault
+                </>
+              ) : (
+                <>
+                  <Lock /> Move to vault
+                </>
+              )}
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onSelect={bulkDelete}
+              className="!text-rose-400 focus:!text-rose-300"
+            >
+              <Trash2 /> Delete
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+    </div>
+  ) : null;
+
   return (
     <ScrollArea className="h-[calc(100dvh-4rem)]">
       <input
@@ -256,7 +419,14 @@ export default function FilesPage() {
         onChange={onFileInput}
       />
 
-      <div className="max-w-7xl mx-auto px-4 md:px-8 py-8 md:py-12">
+      {/* Clicking anywhere that isn't a card clears the selection. Cards
+          stopPropagation on their own click so they don't trigger this. */}
+      <div
+        className="max-w-7xl mx-auto px-4 md:px-8 py-8 md:py-12"
+        onClick={() => {
+          if (selectionActive) clearSelection();
+        }}
+      >
         <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }}>
           <h1 className="text-4xl md:text-5xl font-display font-semibold tracking-tight">
             Files & <span className="neon-text">Vault</span>
@@ -342,11 +512,34 @@ export default function FilesPage() {
               className="pl-9"
             />
           </div>
-          <Button variant="glass" size="default">
-            <Filter />
-            Filter
-          </Button>
-          <div className="ml-auto text-xs text-muted-foreground">
+          {/* View switcher — grid (Finder) vs list. */}
+          <div className="ml-auto inline-flex items-center rounded-xl glass-subtle p-0.5 border border-border/60">
+            <button
+              onClick={() => setView("grid")}
+              aria-label="Grid view"
+              className={cn(
+                "size-8 grid place-items-center rounded-lg transition",
+                view === "grid"
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <LayoutGrid className="size-4" />
+            </button>
+            <button
+              onClick={() => setView("list")}
+              aria-label="List view"
+              className={cn(
+                "size-8 grid place-items-center rounded-lg transition",
+                view === "list"
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <List className="size-4" />
+            </button>
+          </div>
+          <div className="text-xs text-muted-foreground">
             <span className="text-foreground">{formatBytes(usedBytes)}</span> used
           </div>
         </div>
@@ -364,28 +557,36 @@ export default function FilesPage() {
           </TabsList>
 
           <TabsContent value="all" className="mt-5">
-            {/* Breadcrumb only relevant to All files (folder browsing). */}
-            <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-3 overflow-x-auto no-scrollbar">
-              <button
-                onClick={() => setCurrentFolderId(null)}
-                className="inline-flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-foreground/5 hover:text-foreground transition"
-              >
-                <Home className="size-3.5" /> Vault root
-              </button>
-              {breadcrumb.map((b) => (
-                <React.Fragment key={b.id}>
-                  <ChevronRight className="size-3.5 opacity-60" />
-                  <button
-                    onClick={() => setCurrentFolderId(b.id)}
-                    className="px-2 py-1 rounded-lg hover:bg-foreground/5 hover:text-foreground transition truncate max-w-[180px]"
-                  >
-                    {b.name}
-                  </button>
-                </React.Fragment>
-              ))}
+            {/* Breadcrumb (left) + selection actions (right). Fixed min-height
+                so the actions appearing on select never shift the grid down. */}
+            <div className="flex items-center gap-2 mb-3 min-h-[34px]">
+              <div className="flex items-center gap-1.5 text-sm text-muted-foreground overflow-x-auto no-scrollbar flex-1 min-w-0">
+                <button
+                  onClick={() => setCurrentFolderId(null)}
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-foreground/5 hover:text-foreground transition shrink-0"
+                >
+                  <Home className="size-3.5" /> Vault root
+                </button>
+                {breadcrumb.map((b) => (
+                  <React.Fragment key={b.id}>
+                    <ChevronRight className="size-3.5 opacity-60 shrink-0" />
+                    <button
+                      onClick={() => setCurrentFolderId(b.id)}
+                      className="px-2 py-1 rounded-lg hover:bg-foreground/5 hover:text-foreground transition truncate max-w-[180px] shrink-0"
+                    >
+                      {b.name}
+                    </button>
+                  </React.Fragment>
+                ))}
+              </div>
+              {selectionActions}
             </div>
             <NodeGrid
               nodes={visibleNodes}
+              selectedIds={selected}
+              onToggleSelect={toggleSelect}
+              onSelectionChange={replaceSelection}
+              view={view}
               onActivate={(n) =>
                 accessNode(n, () => {
                   if (n.kind === "folder") setCurrentFolderId(n.id);
@@ -406,8 +607,16 @@ export default function FilesPage() {
           </TabsContent>
 
           <TabsContent value="starred" className="mt-5">
+            {/* Always-present action row (fixed height) → no shift on select. */}
+            <div className="flex justify-end items-center mb-3 min-h-[34px]">
+              {selectionActions}
+            </div>
             <NodeGrid
               nodes={visibleNodes}
+              selectedIds={selected}
+              onToggleSelect={toggleSelect}
+              onSelectionChange={replaceSelection}
+              view={view}
               onActivate={(n) =>
                 accessNode(n, () => {
                   if (n.kind === "folder") setCurrentFolderId(n.id);
@@ -426,28 +635,36 @@ export default function FilesPage() {
               <VaultLockedState onUnlock={requestVaultAccess} hasPassword={!!password} />
             ) : (
               <>
-                {/* Vault breadcrumb so the user can navigate into vault folders. */}
-                <div className="flex items-center gap-1.5 text-sm text-muted-foreground mb-3 overflow-x-auto no-scrollbar">
-                  <button
-                    onClick={() => setCurrentFolderId(null)}
-                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-foreground/5 hover:text-foreground transition"
-                  >
-                    <Lock className="size-3.5" /> Vault root
-                  </button>
-                  {breadcrumb.map((b) => (
-                    <React.Fragment key={b.id}>
-                      <ChevronRight className="size-3.5 opacity-60" />
-                      <button
-                        onClick={() => setCurrentFolderId(b.id)}
-                        className="px-2 py-1 rounded-lg hover:bg-foreground/5 hover:text-foreground transition truncate max-w-[180px]"
-                      >
-                        {b.name}
-                      </button>
-                    </React.Fragment>
-                  ))}
+                {/* Vault breadcrumb (left) + selection actions (right). Fixed
+                    min-height so selecting never shifts the grid down. */}
+                <div className="flex items-center gap-2 mb-3 min-h-[34px]">
+                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground overflow-x-auto no-scrollbar flex-1 min-w-0">
+                    <button
+                      onClick={() => setCurrentFolderId(null)}
+                      className="inline-flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-foreground/5 hover:text-foreground transition shrink-0"
+                    >
+                      <Lock className="size-3.5" /> Vault root
+                    </button>
+                    {breadcrumb.map((b) => (
+                      <React.Fragment key={b.id}>
+                        <ChevronRight className="size-3.5 opacity-60 shrink-0" />
+                        <button
+                          onClick={() => setCurrentFolderId(b.id)}
+                          className="px-2 py-1 rounded-lg hover:bg-foreground/5 hover:text-foreground transition truncate max-w-[180px] shrink-0"
+                        >
+                          {b.name}
+                        </button>
+                      </React.Fragment>
+                    ))}
+                  </div>
+                  {selectionActions}
                 </div>
                 <NodeGrid
                   nodes={visibleNodes}
+                  selectedIds={selected}
+                  onToggleSelect={toggleSelect}
+                  onSelectionChange={replaceSelection}
+                  view={view}
                   onActivate={(n) => {
                     if (n.kind === "folder") setCurrentFolderId(n.id);
                     else openPreview(n, visibleNodes);
@@ -462,8 +679,16 @@ export default function FilesPage() {
           </TabsContent>
 
           <TabsContent value="recent" className="mt-5">
+            {/* Always-present action row (fixed height) → no shift on select. */}
+            <div className="flex justify-end items-center mb-3 min-h-[34px]">
+              {selectionActions}
+            </div>
             <NodeGrid
               nodes={visibleNodes}
+              selectedIds={selected}
+              onToggleSelect={toggleSelect}
+              onSelectionChange={replaceSelection}
+              view={view}
               onActivate={(n) =>
                 accessNode(n, () => {
                   if (n.kind === "folder") setCurrentFolderId(n.id);
@@ -565,16 +790,109 @@ function NodeGrid({
   onStar,
   onVault,
   onDelete,
-  emptyLabel
+  emptyLabel,
+  selectedIds,
+  onToggleSelect,
+  onSelectionChange,
+  view
 }: {
   nodes: VaultNode[];
-  /** Single click handler — page wraps it in the password gate for vault items. */
+  /** Fired on double-click — page wraps it in the password gate for vault items. */
   onActivate: (node: VaultNode) => void;
   onStar: (id: string) => void;
   onVault: (id: string) => void;
   onDelete: (id: string) => void;
   emptyLabel: string;
+  /** Ids currently selected (single-click toggles membership). */
+  selectedIds: Set<string>;
+  onToggleSelect: (id: string) => void;
+  /** Replace the whole selection — used by the marquee drag-select. */
+  onSelectionChange: (ids: string[]) => void;
+  view: "grid" | "list";
 }) {
+  const areaRef = React.useRef<HTMLDivElement>(null);
+  // Marquee (rubber-band) selection rectangle, in area-local coordinates.
+  const [marquee, setMarquee] = React.useState<{
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+  } | null>(null);
+  const dragRef = React.useRef<{
+    startX: number;
+    startY: number;
+    base: Set<string>;
+    moved: boolean;
+  } | null>(null);
+  // Set when a marquee drag actually moved, so we can swallow the click that
+  // fires on pointer-up (otherwise the page-level click-outside clears it).
+  const draggedRef = React.useRef(false);
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    // Left button only, and only when starting on empty space — clicks that
+    // start on a card are handled by the card itself.
+    if (e.button !== 0) return;
+    if ((e.target as HTMLElement).closest("[data-node-card]")) return;
+    draggedRef.current = false;
+    dragRef.current = {
+      startX: e.clientX,
+      startY: e.clientY,
+      // Shift extends the current selection; otherwise the drag replaces it.
+      base: e.shiftKey ? new Set(selectedIds) : new Set(),
+      moved: false
+    };
+    (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+  };
+
+  const onPointerMove = (e: React.PointerEvent) => {
+    const d = dragRef.current;
+    if (!d || !areaRef.current) return;
+    const left = Math.min(d.startX, e.clientX);
+    const top = Math.min(d.startY, e.clientY);
+    const w = Math.abs(e.clientX - d.startX);
+    const h = Math.abs(e.clientY - d.startY);
+    // Ignore tiny movements so a normal click on empty space still clears.
+    if (!d.moved && w < 5 && h < 5) return;
+    d.moved = true;
+    draggedRef.current = true;
+
+    const areaRect = areaRef.current.getBoundingClientRect();
+    setMarquee({ x: left - areaRect.left, y: top - areaRect.top, w, h });
+
+    // Hit-test every card against the marquee rect (screen coords).
+    const next = new Set(d.base);
+    areaRef.current
+      .querySelectorAll<HTMLElement>("[data-node-card]")
+      .forEach((el) => {
+        const r = el.getBoundingClientRect();
+        const hit =
+          r.right >= left &&
+          r.left <= left + w &&
+          r.bottom >= top &&
+          r.top <= top + h;
+        if (hit && el.dataset.nodeId) next.add(el.dataset.nodeId);
+      });
+    onSelectionChange(Array.from(next));
+  };
+
+  const endDrag = (e: React.PointerEvent) => {
+    if (dragRef.current) {
+      (e.currentTarget as HTMLElement).releasePointerCapture?.(e.pointerId);
+    }
+    dragRef.current = null;
+    setMarquee(null);
+  };
+
+  // Swallow the click that follows a drag so the page-level
+  // "click empties → clear selection" handler (and any card onClick) doesn't
+  // wipe the marquee result.
+  const onClickCapture = (e: React.MouseEvent) => {
+    if (draggedRef.current) {
+      e.stopPropagation();
+      draggedRef.current = false;
+    }
+  };
+
   if (nodes.length === 0) {
     return (
       <div className="rounded-3xl glass border border-border/60 px-6 py-12 text-center text-sm text-muted-foreground">
@@ -582,197 +900,281 @@ function NodeGrid({
       </div>
     );
   }
+
   return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-      <AnimatePresence initial={false}>
-        {nodes.map((n) =>
-          n.kind === "folder" ? (
-            <FolderCard
+    <div
+      ref={areaRef}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={endDrag}
+      onPointerCancel={endDrag}
+      onClickCapture={onClickCapture}
+      // min-height gives a comfortable empty area to start a drag-select in.
+      className="relative min-h-[45vh]"
+    >
+      <div
+        className={
+          view === "grid"
+            ? "grid gap-3 grid-cols-[repeat(auto-fill,minmax(124px,1fr))] justify-items-center"
+            : "flex flex-col gap-1"
+        }
+      >
+        <AnimatePresence initial={false}>
+          {nodes.map((n) => (
+            <NodeItem
               key={n.id}
               node={n}
+              view={view}
+              selected={selectedIds.has(n.id)}
+              onSelect={() => onToggleSelect(n.id)}
               onOpen={() => onActivate(n)}
               onStar={() => onStar(n.id)}
               onVault={() => onVault(n.id)}
               onDelete={() => onDelete(n.id)}
             />
-          ) : (
-            <FileCard
-              key={n.id}
-              node={n}
-              onOpen={() => onActivate(n)}
-              onStar={() => onStar(n.id)}
-              onVault={() => onVault(n.id)}
-              onDelete={() => onDelete(n.id)}
-            />
-          )
-        )}
-      </AnimatePresence>
+          ))}
+        </AnimatePresence>
+      </div>
+
+      {/* Rubber-band rectangle. */}
+      {marquee && (
+        <div
+          className="absolute z-10 rounded-md border border-cyan-400/80 bg-cyan-400/10 pointer-events-none"
+          style={{
+            left: marquee.x,
+            top: marquee.y,
+            width: marquee.w,
+            height: marquee.h
+          }}
+        />
+      )}
     </div>
   );
 }
 
-/* ───────────── Single folder card ───────────── */
-function FolderCard({
+/* ───────────── Single file / folder item (grid + list) ───────────── */
+function NodeItem({
   node,
+  view,
+  selected,
+  onSelect,
   onOpen,
   onStar,
   onVault,
   onDelete
 }: {
   node: VaultNode;
+  view: "grid" | "list";
+  selected: boolean;
+  onSelect: () => void;
   onOpen: () => void;
   onStar: () => void;
   onVault: () => void;
   onDelete: () => void;
 }) {
-  return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.96 }}
-      whileHover={{ y: -3 }}
-      className="group relative rounded-2xl glass border border-border/60 overflow-hidden cursor-pointer"
-      onClick={onOpen}
-    >
-      <div className="relative h-32 overflow-hidden bg-gradient-to-br from-amber-400/50 to-orange-500/50 grid place-items-center">
-        <Folder className="size-12 text-white drop-shadow" />
-        {node.vault && (
-          <Badge variant="warning" className="absolute top-2 left-2">
-            <Lock className="size-2.5" /> vault
-          </Badge>
-        )}
-        <CardOverlayActions
-          onStar={onStar}
-          starred={node.starred}
-          extra={
-            <CardMoreMenu
-              onVault={onVault}
-              isVault={!!node.vault}
-              onDelete={onDelete}
-            />
-          }
-        />
-      </div>
-      <div className="p-3">
-        <div className="flex items-center gap-2">
-          <Folder className="size-4 text-amber-500 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{node.name}</p>
-            <p className="text-[10px] text-muted-foreground">Folder</p>
-          </div>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
-
-/* ───────────── Single file card ───────────── */
-function FileCard({
-  node,
-  onOpen,
-  onStar,
-  onVault,
-  onDelete
-}: {
-  node: VaultNode;
-  onOpen: () => void;
-  onStar: () => void;
-  onVault: () => void;
-  onDelete: () => void;
-}) {
+  const unlocked = useVaultStore((s) => s.unlocked);
+  const isFolder = node.kind === "folder";
   const kind = node.fileKind ?? "other";
-  const isImage = kind === "image" && (node.preview || node.url);
-  const openFile = onOpen;
-  return (
-    <motion.div
-      layout
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.96 }}
-      whileHover={{ y: -3 }}
-      className="group relative rounded-2xl glass border border-border/60 overflow-hidden cursor-pointer"
-      onClick={openFile}
-    >
-      <div className="relative h-32 overflow-hidden">
-        {isImage ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={node.preview ?? node.url}
-            alt=""
-            className="absolute inset-0 w-full h-full object-cover"
-          />
-        ) : (
-          <div className={`absolute inset-0 bg-gradient-to-br ${colorFor[kind]} opacity-90`} />
-        )}
-        {!isImage && (
-          <div className="absolute inset-0 grid place-items-center text-white text-4xl">
-            <span className="[&_svg]:size-10">{iconFor[kind]}</span>
-          </div>
-        )}
-        {node.vault && (
-          <Badge variant="warning" className="absolute top-2 left-2">
-            <Lock className="size-2.5" /> vault
-          </Badge>
-        )}
-        <CardOverlayActions
-          onStar={onStar}
-          starred={node.starred}
-          extra={
-            <CardMoreMenu
-              onVault={onVault}
-              isVault={!!node.vault}
-              onDelete={onDelete}
-              downloadHref={node.url}
-              downloadName={node.name}
-            />
-          }
-        />
-      </div>
-      <div className="p-3">
-        <div className="flex items-center gap-2">
-          <span
-            className={`size-7 rounded-lg bg-gradient-to-br ${colorFor[kind]} grid place-items-center text-white [&_svg]:size-3.5 shrink-0`}
-          >
-            {iconFor[kind]}
-          </span>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{node.name}</p>
-            <p className="text-[10px] text-muted-foreground">
-              {formatBytes(node.size)} · {new Date(node.createdAt).toLocaleDateString()}
-            </p>
-          </div>
-        </div>
-      </div>
-    </motion.div>
-  );
-}
+  // Locked vault files never reveal their thumbnail until unlocked.
+  const locked = !!node.vault && !unlocked;
+  const showThumb = !isFolder && kind === "image" && (node.preview || node.url) && !locked;
+  const label = locked ? "Locked file" : node.name;
 
-/* ───────────── Hover overlay (star + menu) ───────────── */
-function CardOverlayActions({
-  onStar,
-  starred,
-  extra
-}: {
-  onStar: () => void;
-  starred?: boolean;
-  extra?: React.ReactNode;
-}) {
-  return (
+  const glyph = (sizeClass: string, thumbClass: string) =>
+    isFolder ? (
+      <MacFolder className={cn(sizeClass, "drop-shadow-sm")} />
+    ) : showThumb ? (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={node.preview ?? node.url}
+        alt=""
+        className={cn(thumbClass, "rounded-md object-cover shadow-md ring-1 ring-black/10")}
+        draggable={false}
+      />
+    ) : (
+      <MacDoc kind={locked ? "locked" : kind} className={sizeClass} />
+    );
+
+  const hoverActions = (
     <div
-      className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition"
+      className="flex items-center gap-1.5 opacity-0 group-hover:opacity-100 transition"
       onClick={(e) => e.stopPropagation()}
     >
       <button
         onClick={onStar}
+        className="grid place-items-center transition hover:scale-110"
+        aria-label="Star"
+      >
+        <Star
+          className={cn(
+            "size-[19px] drop-shadow-[0_1px_2px_rgba(0,0,0,0.55)]",
+            node.starred ? "text-amber-400 fill-amber-400" : "text-white"
+          )}
+        />
+      </button>
+      <CardMoreMenu
+        onVault={onVault}
+        isVault={!!node.vault}
+        onDelete={onDelete}
+        downloadHref={locked ? undefined : node.url}
+        downloadName={node.name}
+      />
+    </div>
+  );
+
+  /* ---- LIST VIEW: a compact horizontal row ---- */
+  if (view === "list") {
+    return (
+      <motion.div
+        data-node-card
+        data-node-id={node.id}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
         className={cn(
-          "size-7 rounded-full backdrop-blur grid place-items-center text-white transition",
-          starred ? "bg-amber-400/80 hover:bg-amber-400" : "bg-black/40 hover:bg-black/60"
+          "group relative flex items-center gap-3 px-3 py-2 rounded-xl cursor-pointer select-none transition",
+          selected ? "bg-cyan-400/15 ring-1 ring-cyan-400/40" : "hover:bg-foreground/[0.05]"
+        )}
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelect();
+        }}
+        onDoubleClick={onOpen}
+        title={node.name}
+      >
+        <div className="relative w-10 h-10 grid place-items-center shrink-0">
+          {glyph("w-9 h-9", "max-w-[36px] max-h-[36px]")}
+          {/* Lock indicator — hover only, no fill. */}
+          {node.vault && (
+            <Lock className="absolute -bottom-0.5 -right-0.5 size-3.5 text-foreground opacity-0 group-hover:opacity-100 transition drop-shadow-[0_1px_1.5px_rgba(0,0,0,0.45)]" />
+          )}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium truncate">{truncateName(label, 52)}</p>
+          <p className="text-[11px] text-muted-foreground truncate">
+            {isFolder
+              ? "Folder"
+              : `${formatBytes(node.size)} · ${new Date(node.createdAt).toLocaleDateString()}`}
+          </p>
+        </div>
+        {hoverActions}
+      </motion.div>
+    );
+  }
+
+  /* ---- GRID VIEW: Finder-style icon + label, tight selection ---- */
+  return (
+    <motion.div
+      data-node-card
+      data-node-id={node.id}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      // Fixed width so the selection highlight hugs the icon/label instead of
+      // stretching across the whole grid cell.
+      className={cn(
+        "group relative w-[108px] flex flex-col items-center gap-1 px-1.5 py-2 rounded-2xl cursor-pointer select-none transition",
+        selected ? "bg-cyan-400/15 ring-1 ring-cyan-400/40" : "hover:bg-foreground/[0.05]"
+      )}
+      onClick={(e) => {
+        e.stopPropagation();
+        onSelect();
+      }}
+      onDoubleClick={onOpen}
+      title={node.name}
+    >
+      <div className="relative w-[84px] h-[84px] grid place-items-center">
+        {glyph("w-20 h-20", "max-w-[76px] max-h-[76px]")}
+
+        {/* Lock indicator — only on hover (star state lives on the hover
+            star button, so no separate star badge here). */}
+        {node.vault && (
+          <Lock className="absolute bottom-0.5 right-1.5 size-[18px] text-foreground opacity-0 group-hover:opacity-100 transition drop-shadow-[0_1px_1.5px_rgba(0,0,0,0.45)]" />
+        )}
+
+        <div className="absolute -top-1 -right-1">{hoverActions}</div>
+      </div>
+
+      <p
+        className={cn(
+          "text-[11.5px] leading-tight text-center line-clamp-2 px-1.5 py-0.5 rounded-md max-w-full break-words",
+          selected ? "bg-cyan-500 text-white" : "text-foreground/90"
         )}
       >
-        <Star className={cn("size-3.5", starred && "fill-current")} />
-      </button>
-      {extra}
+        {truncateName(label, 24)}
+      </p>
+    </motion.div>
+  );
+}
+
+/* ───────────── macOS-style glyphs ───────────── */
+
+/** A blue Big Sur–style folder. */
+function MacFolder({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 56 44" fill="none" className={className} aria-hidden>
+      <defs>
+        <linearGradient id="mf-back" x1="28" y1="2" x2="28" y2="42" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#3DA8F5" />
+          <stop offset="1" stopColor="#2C8FE6" />
+        </linearGradient>
+        <linearGradient id="mf-front" x1="28" y1="12" x2="28" y2="42" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#86CCFB" />
+          <stop offset="1" stopColor="#3F9BEE" />
+        </linearGradient>
+      </defs>
+      {/* Back panel with the tab. */}
+      <path
+        d="M4 8C4 5.79 5.79 4 8 4h12.69c1.06 0 2.08.42 2.83 1.17l3.31 3.31c.75.75 1.77 1.17 2.83 1.17H48c2.21 0 4 1.79 4 4V36c0 2.21-1.79 4-4 4H8c-2.21 0-4-1.79-4-4V8Z"
+        fill="url(#mf-back)"
+      />
+      {/* Front panel. */}
+      <path
+        d="M4 16c0-2.21 1.79-4 4-4h40c2.21 0 4 1.79 4 4v20c0 2.21-1.79 4-4 4H8c-2.21 0-4-1.79-4-4V16Z"
+        fill="url(#mf-front)"
+      />
+    </svg>
+  );
+}
+
+/** A white document glyph with a folded corner + a tinted type icon. The
+ *  inner icon scales with the box so it works at any size. */
+function MacDoc({
+  kind,
+  className
+}: {
+  kind: VaultFileKind | "locked";
+  className?: string;
+}) {
+  const tint: Record<string, string> = {
+    image: "text-emerald-500",
+    video: "text-rose-500",
+    audio: "text-violet-500",
+    doc: "text-blue-500",
+    archive: "text-amber-500",
+    code: "text-slate-500",
+    other: "text-zinc-400",
+    locked: "text-amber-500"
+  };
+  const glyph =
+    kind === "locked" ? <Lock /> : iconFor[kind as VaultFileKind] ?? <File />;
+  return (
+    <div className={cn("relative grid place-items-center", className ?? "w-[58px] h-[70px]")}>
+      <svg viewBox="0 0 58 70" fill="none" className="w-[82%] h-full drop-shadow-sm" aria-hidden>
+        <path
+          d="M8 5c0-1.66 1.34-3 3-3h27l14 14v49c0 1.66-1.34 3-3 3H11c-1.66 0-3-1.34-3-3V5Z"
+          fill="white"
+        />
+        <path d="M38 2l14 14H41c-1.66 0-3-1.34-3-3V2Z" fill="#CBD5E1" />
+      </svg>
+      <span
+        className={cn(
+          "absolute inset-0 grid place-items-center [&_svg]:w-2/5 [&_svg]:h-2/5",
+          tint[kind] ?? "text-zinc-400"
+        )}
+      >
+        {glyph}
+      </span>
     </div>
   );
 }
@@ -796,12 +1198,13 @@ function CardMoreMenu({
       <DropdownMenuTrigger asChild>
         <button
           onClick={(e) => e.stopPropagation()}
-          className="size-7 rounded-full bg-black/40 backdrop-blur grid place-items-center text-white hover:bg-black/60"
+          className="grid place-items-center text-white hover:scale-110 transition"
+          aria-label="More"
         >
-          <MoreHorizontal className="size-3.5" />
+          <MoreHorizontal className="size-[19px] drop-shadow-[0_1px_2px_rgba(0,0,0,0.55)]" />
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="!w-48">
+      <DropdownMenuContent align="end" className="!w-auto !min-w-[9rem]">
         <DropdownMenuItem onSelect={onVault}>
           {isVault ? (
             <>

@@ -9,9 +9,11 @@ import {
   ExternalLink,
   FileText,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  Lock,
+  KeyRound
 } from "lucide-react";
-import type { VaultNode } from "@/store/use-vault-store";
+import { useVaultStore, type VaultNode } from "@/store/use-vault-store";
 
 /** Centered preview modal for files in the vault. Accepts a list so the
  *  user can swipe / arrow-key through every file in the current view.
@@ -38,6 +40,10 @@ export function FilePreviewDialog({
   const [index, setIndex] = React.useState(0);
   React.useEffect(() => setMounted(true), []);
 
+  // Vault state — a file flagged `vault` stays hidden until the vault is
+  // unlocked, even mid-navigation inside this dialog.
+  const unlocked = useVaultStore((s) => s.unlocked);
+
   // Whenever the dialog opens, jump to the clicked file.
   React.useEffect(() => {
     if (startIndex == null) return;
@@ -48,6 +54,8 @@ export function FilePreviewDialog({
   const node = items[index] ?? null;
   const count = items.length;
   const hasNav = count > 1;
+  // A locked node is one flagged for the vault while the vault is locked.
+  const locked = !!node?.vault && !unlocked;
 
   const prev = React.useCallback(
     () => setIndex((i) => (count === 0 ? 0 : (i - 1 + count) % count)),
@@ -94,9 +102,14 @@ export function FilePreviewDialog({
               {/* Header */}
               <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border/40 shrink-0">
                 <div className="min-w-0 flex-1">
-                  <p className="text-sm font-medium truncate">{node.name}</p>
+                  <p className="text-sm font-medium truncate flex items-center gap-1.5">
+                    {locked && <Lock className="size-3.5 text-amber-400 shrink-0" />}
+                    {locked ? "Locked file" : node.name}
+                  </p>
                   <p className="text-[11px] text-muted-foreground truncate">
-                    {node.mime || node.fileKind} {node.size ? `· ${formatBytes(node.size)}` : ""}
+                    {locked
+                      ? "Protected — enter your vault password to view"
+                      : `${node.mime || node.fileKind}${node.size ? ` · ${formatBytes(node.size)}` : ""}`}
                     {hasNav && (
                       <>
                         {" "}
@@ -109,7 +122,9 @@ export function FilePreviewDialog({
                   </p>
                 </div>
                 <div className="flex items-center gap-1 shrink-0">
-                  {node.url && (
+                  {/* Download / open-in-tab are hidden while locked so a
+                      protected file can't be exfiltrated without the password. */}
+                  {node.url && !locked && (
                     <a
                       href={node.url}
                       download={node.name}
@@ -121,7 +136,7 @@ export function FilePreviewDialog({
                       <Download className="size-4" />
                     </a>
                   )}
-                  {node.url && (
+                  {node.url && !locked && (
                     <a
                       href={node.url}
                       target="_blank"
@@ -145,8 +160,14 @@ export function FilePreviewDialog({
               {/* Body */}
               <div className="relative flex-1 min-h-0 overflow-hidden bg-black/20 grid place-items-center">
                 {/* `key` on the stage so swapping items remounts the
-                    <video>/<audio> element instead of mid-play state leaking. */}
-                <PreviewStage key={node.id} node={node} />
+                    <video>/<audio> element instead of mid-play state leaking.
+                    Locked vault files show an unlock prompt instead of content
+                    — so scrolling onto a locked neighbour never reveals it. */}
+                {locked ? (
+                  <LockedStage key={node.id} />
+                ) : (
+                  <PreviewStage key={node.id} node={node} />
+                )}
 
                 {/* Prev / Next chevrons — only when there's more than one item */}
                 {hasNav && (
@@ -168,41 +189,81 @@ export function FilePreviewDialog({
                   </>
                 )}
               </div>
-
-              {/* Thumbnail strip — desktop only, when navigable */}
-              {hasNav && (
-                <div className="hidden md:flex justify-center gap-2 px-4 py-3 overflow-x-auto no-scrollbar border-t border-border/40 shrink-0">
-                  {items.map((it, i) => (
-                    <button
-                      key={it.id}
-                      onClick={() => setIndex(i)}
-                      className={
-                        "size-12 rounded-lg overflow-hidden shrink-0 ring-2 transition bg-foreground/5 grid place-items-center " +
-                        (i === index ? "ring-cyan-400" : "ring-transparent hover:ring-white/30")
-                      }
-                      aria-label={`Jump to ${it.name}`}
-                    >
-                      {it.fileKind === "image" && (it.preview || it.url) ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img
-                          src={it.preview ?? it.url}
-                          alt=""
-                          className="w-full h-full object-cover"
-                          draggable={false}
-                        />
-                      ) : (
-                        <FileText className="size-4 text-muted-foreground" />
-                      )}
-                    </button>
-                  ))}
-                </div>
-              )}
             </motion.div>
           </div>
         </>
       )}
     </AnimatePresence>,
     document.body
+  );
+}
+
+/** Shown in place of the content when the current file belongs to a locked
+ *  vault. Has an inline password field so the user can unlock right here —
+ *  on success the parent re-renders (it reads `unlocked` from the store) and
+ *  swaps in the real preview. Self-contained so it works above the preview's
+ *  high z-index without fighting the page's password modal. */
+function LockedStage() {
+  const unlock = useVaultStore((s) => s.unlock);
+  const hasPassword = useVaultStore((s) => s.password != null);
+  const [pw, setPw] = React.useState("");
+  const [err, setErr] = React.useState(false);
+
+  const submit = () => {
+    if (!pw) return;
+    const ok = unlock(pw);
+    if (!ok) {
+      setErr(true);
+      setPw("");
+    }
+    // On success there's nothing else to do — the store flips `unlocked`,
+    // the dialog re-renders and shows the file.
+  };
+
+  return (
+    <div className="grid place-items-center gap-4 text-center px-6 py-12 max-w-sm">
+      <div className="size-20 rounded-3xl bg-gradient-to-br from-violet-500 to-cyan-400 grid place-items-center shadow-glow">
+        <Lock className="size-9 text-white" />
+      </div>
+      <div>
+        <p className="text-base font-semibold">This file is in your vault</p>
+        <p className="text-[12px] text-muted-foreground mt-1">
+          {hasPassword
+            ? "Enter your vault password to preview it."
+            : "Set a vault password from the Files page first."}
+        </p>
+      </div>
+      {hasPassword && (
+        <div className="w-full max-w-[260px]">
+          <div className="relative">
+            <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+            <input
+              type="password"
+              value={pw}
+              autoFocus
+              placeholder="Vault password"
+              onChange={(e) => {
+                setPw(e.target.value);
+                setErr(false);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submit();
+              }}
+              className="w-full h-11 pl-9 pr-3 rounded-xl glass-subtle bg-transparent text-sm outline-none focus:ring-2 focus:ring-cyan-400/60"
+            />
+          </div>
+          {err && (
+            <p className="text-[12px] text-rose-400 mt-2">Wrong password. Try again.</p>
+          )}
+          <button
+            onClick={submit}
+            className="mt-3 w-full h-11 rounded-xl bg-gradient-to-br from-violet-500 to-cyan-400 text-white text-sm font-medium shadow-glow hover:brightness-110 transition"
+          >
+            Unlock
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 
