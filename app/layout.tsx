@@ -94,13 +94,15 @@ export const metadata: Metadata = {
     description: SITE_DESCRIPTION,
     url: "/",
     locale: "en_US",
-    images: [{ url: "/Background.jpg", alt: "Obsidian — the future of communication" }]
+    images: [
+      { url: "/og-default.jpg", width: 800, height: 393, alt: "Obsidian — the future of communication" }
+    ]
   },
   twitter: {
     card: "summary_large_image",
     title: SITE_TITLE,
     description: SITE_DESCRIPTION,
-    images: ["/Background.jpg"]
+    images: ["/og-default.jpg"]
   },
   robots: {
     index: true,

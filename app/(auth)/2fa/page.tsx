@@ -25,12 +25,30 @@ export default function TwoFactorPage() {
     if (digit && idx < 5) inputs.current[idx + 1]?.focus();
   };
 
+  // Allow pasting a whole code into any box (each <input> is maxLength=1, so a
+  // raw paste would otherwise only keep one digit).
+  const onPaste = (e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData("text").replace(/\D/g, "").slice(0, 6);
+    if (!text) return;
+    e.preventDefault();
+    setCode((c) => {
+      const next = [...c];
+      for (let i = 0; i < 6; i++) next[i] = text[i] ?? next[i];
+      return next;
+    });
+    inputs.current[Math.min(text.length, 5)]?.focus();
+  };
+
   const filled = code.every((c) => c.length === 1);
 
-  const handleVerify = () => {
+  // Guard so pressing Enter and clicking Verify can't both fire (double-nav).
+  const verifiedRef = React.useRef(false);
+  const handleVerify = React.useCallback(() => {
+    if (verifiedRef.current) return;
+    verifiedRef.current = true;
     login();
     router.push("/chats");
-  };
+  }, [login, router]);
 
   return (
     <div className="grid min-h-dvh place-items-center px-6 py-10">
@@ -62,8 +80,10 @@ export default function TwoFactorPage() {
               }}
               value={c}
               onChange={(e) => onChange(i, e.target.value)}
+              onPaste={onPaste}
               onKeyDown={(e) => {
                 if (e.key === "Backspace" && !code[i] && i > 0) inputs.current[i - 1]?.focus();
+                if (e.key === "Enter" && filled) handleVerify();
               }}
               maxLength={1}
               inputMode="numeric"

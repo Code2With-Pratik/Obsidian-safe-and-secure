@@ -47,7 +47,10 @@
       "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} | type=%{content_type} | bytes=%{size_download}\\\\n\" http://localhost:3000/Logo.ico)",
       "Bash(curl -s http://localhost:3000/login)",
       "Bash(curl -s -o /dev/null -w \"/Favicon.ico: HTTP %{http_code} | %{content_type} | %{size_download}b\\\\n\" http://localhost:3000/Favicon.ico)",
-      "Bash(curl -s -o /dev/null -w \"/register: HTTP %{http_code}\\\\n\" http://localhost:3000/register)"
+      "Bash(curl -s -o /dev/null -w \"/register: HTTP %{http_code}\\\\n\" http://localhost:3000/register)",
+      "Bash(curl -s -o /dev/null -w \"/2fa: HTTP %{http_code}\\\\n\" http://localhost:3000/2fa)",
+      "Bash(node -e \"const fs=require\\('fs'\\);const b=fs.readFileSync\\('public/og-default.jpg'\\);let i=2;while\\(i<b.length\\){if\\(b[i]!==0xFF\\){i++;continue;}const m=b[i+1];if\\(m>=0xC0&&m<=0xCF&&m!==0xC4&&m!==0xC8&&m!==0xCC\\){const h=b.readUInt16BE\\(i+5\\);const w=b.readUInt16BE\\(i+7\\);console.log\\('width:',w,'height:',h\\);break;}i+=2+b.readUInt16BE\\(i+2\\);}\")",
+      "Bash(curl -s -o /dev/null -w \"/og-default.jpg: HTTP %{http_code} | %{content_type}\\\\n\" http://localhost:3000/og-default.jpg)"
     ]
   }
 }
