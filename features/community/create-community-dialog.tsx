@@ -19,6 +19,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useCommunityStore } from "@/store/use-community-store";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 const CATEGORIES = [
   "Design",
@@ -70,6 +71,7 @@ export function CreateCommunityDialog({
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
+  const t = useT();
   const router = useRouter();
   const createCommunity = useCommunityStore((s) => s.createCommunity);
   const [internalOpen, setInternalOpen] = React.useState(false);
@@ -132,15 +134,15 @@ export function CreateCommunityDialog({
           <div className="size-12 rounded-2xl bg-gradient-to-br from-violet-500 to-cyan-400 grid place-items-center shadow-glow mb-2">
             <Users className="text-white" />
           </div>
-          <DialogTitle className="text-xl">Start a community</DialogTitle>
+          <DialogTitle className="text-xl">{t("Start a community")}</DialogTitle>
           <DialogDescription>
-            You're the host. Only you can post — everyone else reacts and joins the vibe.
+            {t("You're the host. Only you can post — everyone else reacts and joins the vibe.")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-2 space-y-4">
           <div className="space-y-1.5">
-            <Label>Name</Label>
+            <Label>{t("Name")}</Label>
             <Input
               placeholder="e.g. Glass UI Lab"
               value={name}
@@ -150,9 +152,9 @@ export function CreateCommunityDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label>Description</Label>
+            <Label>{t("Description")}</Label>
             <Input
-              placeholder="What is this community about?"
+              placeholder={t("What is this community about?")}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               maxLength={160}
@@ -160,7 +162,7 @@ export function CreateCommunityDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label>Category</Label>
+            <Label>{t("Category")}</Label>
             <div className="flex flex-wrap gap-1.5">
               {CATEGORIES.map((c) => {
                 const active = category === c;
@@ -184,9 +186,9 @@ export function CreateCommunityDialog({
           </div>
 
           <div className="space-y-1.5">
-            <Label>Interest tags</Label>
+            <Label>{t("Interest tags")}</Label>
             <p className="text-[11px] text-muted-foreground -mt-1">
-              Members with these in their profile will see "X people match your interest" when they join.
+              {t("Members with these in their profile will see \"X people match your interest\" when they join.")}
             </p>
             <div className="flex flex-wrap gap-1.5">
               {interests.map((t) => (
@@ -218,7 +220,7 @@ export function CreateCommunityDialog({
                       removeInterest(interests[interests.length - 1]);
                     }
                   }}
-                  placeholder={interests.length === 0 ? "design, music, ai…" : "+ add"}
+                  placeholder={interests.length === 0 ? "design, music, ai…" : t("+ add")}
                   className="h-7 min-w-24 px-2 rounded-full bg-foreground/5 text-xs outline-none border border-transparent focus:border-foreground/20"
                 />
               )}
@@ -241,7 +243,7 @@ export function CreateCommunityDialog({
 
           <div className="space-y-1.5">
             <Label className="flex items-center gap-1.5">
-              <ImageIcon className="size-3" /> Cover
+              <ImageIcon className="size-3" /> {t("Cover")}
             </Label>
             <input
               ref={fileInputRef}
@@ -274,7 +276,7 @@ export function CreateCommunityDialog({
                     : "ring-white/10 hover:ring-white/30",
                   !customCover && "bg-gradient-to-br from-white/10 to-white/[0.02]"
                 )}
-                aria-label="Upload cover from device"
+                aria-label={t("Upload cover from device")}
               >
                 {customCover ? (
                   <>
@@ -286,7 +288,7 @@ export function CreateCommunityDialog({
                     />
                     <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/40" />
                     <span className="absolute bottom-1.5 left-1.5 inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-black/55 backdrop-blur text-[9px] text-white">
-                      <Check className="size-2.5" /> custom
+                      <Check className="size-2.5" /> {t("custom")}
                     </span>
                   </>
                 ) : (
@@ -295,7 +297,7 @@ export function CreateCommunityDialog({
                       <ImagePlus className="size-4 text-white" />
                     </div>
                     <span className="text-[10px] font-semibold text-white/80">
-                      Upload
+                      {t("Upload")}
                     </span>
                   </div>
                 )}
@@ -327,10 +329,10 @@ export function CreateCommunityDialog({
 
         <DialogFooter className="!justify-between px-6 py-4 border-t border-border/40 bg-background/30 backdrop-blur-md">
           <Button variant="ghost" onClick={() => setOpen(false)}>
-            Cancel
+            {t("Cancel")}
           </Button>
           <Button variant="gradient" onClick={handleSubmit} disabled={!name.trim()}>
-            <Sparkles /> Launch community
+            <Sparkles /> {t("Launch community")}
           </Button>
         </DialogFooter>
       </DialogContent>

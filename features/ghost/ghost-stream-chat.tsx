@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { ArrowUp, MessageCircle, Smile, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EMPTY_LIST, useGhostStore } from "@/store/use-ghost-store";
+import { useT } from "@/lib/i18n";
 
 type StreamMsg = { id: string; authorId: string; authorHue: number; content: string; createdAt: string };
 const EMPTY_STREAM = EMPTY_LIST as readonly StreamMsg[];
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export function GhostStreamChat({ roomId, open, onOpenChange }: Props) {
+  const t = useT();
   const messages = useGhostStore((s) => s.streamChatByRoom[roomId] ?? EMPTY_STREAM);
   const myIdentity = useGhostStore((s) => s.myIdentityByRoom[roomId]);
   const send = useGhostStore((s) => s.sendStreamChat);
@@ -27,9 +29,9 @@ export function GhostStreamChat({ roomId, open, onOpenChange }: Props) {
   }, [open, messages.length]);
 
   const handleSend = () => {
-    const t = text.trim();
-    if (!t) return;
-    send(roomId, t);
+    const trimmed = text.trim();
+    if (!trimmed) return;
+    send(roomId, trimmed);
     setText("");
   };
 
@@ -49,14 +51,14 @@ export function GhostStreamChat({ roomId, open, onOpenChange }: Props) {
         >
           <header className="h-12 px-3 flex items-center gap-2 border-b border-border/40">
             <MessageCircle className="size-4 text-violet-400" />
-            <p className="text-sm font-semibold">Live chat</p>
+            <p className="text-sm font-semibold">{t("Live chat")}</p>
             <span className="text-[10px] text-muted-foreground">
-              · {messages.length} {messages.length === 1 ? "message" : "messages"}
+              · {messages.length} {messages.length === 1 ? t("message") : t("messages")}
             </span>
             <button
               onClick={() => onOpenChange(false)}
               className="ml-auto size-7 grid place-items-center rounded-md hover:bg-foreground/10 text-muted-foreground"
-              aria-label="Close chat"
+              aria-label={t("Close chat")}
             >
               <X className="size-4" />
             </button>
@@ -69,9 +71,9 @@ export function GhostStreamChat({ roomId, open, onOpenChange }: Props) {
                   <div className="size-12 mx-auto rounded-2xl bg-foreground/10 grid place-items-center">
                     <MessageCircle className="size-5 text-muted-foreground" />
                   </div>
-                  <p className="text-sm font-medium mt-3">Stream chat is empty</p>
+                  <p className="text-sm font-medium mt-3">{t("Stream chat is empty")}</p>
                   <p className="text-[11px] text-muted-foreground mt-1 max-w-[220px] mx-auto">
-                    Messages show up live for everyone — names stay hidden.
+                    {t("Messages show up live for everyone — names stay hidden.")}
                   </p>
                 </div>
               </div>
@@ -94,11 +96,11 @@ export function GhostStreamChat({ roomId, open, onOpenChange }: Props) {
                     handleSend();
                   }
                 }}
-                placeholder="Say something anonymously"
+                placeholder={t("Say something anonymously")}
                 className="flex-1 min-w-0 bg-transparent text-sm outline-none py-2"
               />
               <button
-                aria-label="Emoji"
+                aria-label={t("Emoji")}
                 className="size-8 grid place-items-center rounded-full hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition"
               >
                 <Smile className="size-4" />
@@ -106,7 +108,7 @@ export function GhostStreamChat({ roomId, open, onOpenChange }: Props) {
               <button
                 onClick={handleSend}
                 disabled={!text.trim()}
-                aria-label="Send"
+                aria-label={t("Send")}
                 className={cn(
                   "size-8 grid place-items-center rounded-full transition",
                   text.trim()
@@ -133,6 +135,7 @@ function StreamRow({
   content: string;
   isMe: boolean;
 }) {
+  const t = useT();
   return (
     <motion.div
       initial={{ opacity: 0, y: 4 }}
@@ -153,7 +156,7 @@ function StreamRow({
             className="font-semibold"
             style={{ color: `hsl(${hue} 70% 70%)` }}
           >
-            {isMe ? "You" : `Ghost #${(hue % 360).toString().padStart(3, "0")}`}
+            {isMe ? t("You") : `Ghost #${(hue % 360).toString().padStart(3, "0")}`}
           </span>
         </p>
         <p className="text-[13px] leading-snug text-foreground/90 break-words">

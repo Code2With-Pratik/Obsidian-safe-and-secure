@@ -38,8 +38,10 @@ import {
 import { EMPTY_POSTS, useCommunityStore } from "@/store/use-community-store";
 import { users } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 export default function CommunityDetailPage() {
+  const t = useT();
   const params = useParams<{ id: string }>();
   const router = useRouter();
   // ?from=chats means the user navigated here from the chat-list Community
@@ -50,7 +52,7 @@ export default function CommunityDetailPage() {
   // When coming from the chats Community tab, send the user back to that
   // exact tab — not the default Messages tab.
   const backHref = from === "chats" ? "/chats?tab=community" : "/discover";
-  const backLabel = from === "chats" ? "Community" : "Discover";
+  const backLabel = from === "chats" ? t("Community") : t("Discover");
   const community = useCommunityStore((s) =>
     s.communities.find((c) => c.id === params.id)
   );
@@ -100,12 +102,12 @@ export default function CommunityDetailPage() {
       <div className="h-[calc(100dvh-4rem)] grid place-items-center">
         <div className="glass rounded-3xl p-10 text-center max-w-md">
           <Users className="size-12 mx-auto text-muted-foreground" />
-          <h2 className="font-semibold mt-3 text-lg">Community not found</h2>
+          <h2 className="font-semibold mt-3 text-lg">{t("Community not found")}</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            It may have been removed by its host.
+            {t("It may have been removed by its host.")}
           </p>
           <Button variant="gradient" className="mt-4" onClick={() => router.push("/discover")}>
-            Back to Discover
+            {t("Back to Discover")}
           </Button>
         </div>
       </div>
@@ -152,7 +154,7 @@ export default function CommunityDetailPage() {
           </div>
           {community.trending && (
             <Badge variant="danger" className="absolute top-4 right-4">
-              <Sparkles className="size-3" /> trending
+              <Sparkles className="size-3" /> {t("trending")}
             </Badge>
           )}
         </div>
@@ -178,7 +180,7 @@ export default function CommunityDetailPage() {
                   )}
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  hosted by{" "}
+                  {t("hosted by")}{" "}
                   <span className="text-foreground inline-flex items-center gap-1">
                     <Crown className="size-3 text-amber-400" />
                     {host.name}
@@ -213,42 +215,42 @@ export default function CommunityDetailPage() {
                   <span className="font-semibold tabular-nums">
                     {community.members.toLocaleString()}
                   </span>{" "}
-                  <span className="text-muted-foreground">members</span>
+                  <span className="text-muted-foreground">{t("members")}</span>
                   <span className="mx-2 text-muted-foreground/40">·</span>
                   <span className="text-emerald-400 font-semibold tabular-nums">
                     {community.online.toLocaleString()}
                   </span>{" "}
-                  <span className="text-muted-foreground">online</span>
+                  <span className="text-muted-foreground">{t("online")}</span>
                 </p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Member identities are private — only reaction counts are shown.
+                  {t("Member identities are private — only reaction counts are shown.")}
                 </p>
               </div>
               <div className="flex gap-2">
                 {isHost ? (
                   <>
                     <Button variant="gradient" onClick={() => setPostDialogOpen(true)}>
-                      <Plus /> New post
+                      <Plus /> {t("New post")}
                     </Button>
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="glass" size="icon" aria-label="Host menu">
+                        <Button variant="glass" size="icon" aria-label={t("Host menu")}>
                           <Crown />
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="!w-56">
                         <DropdownMenuLabel className="!text-[10px]">
-                          Host actions
+                          {t("Host actions")}
                         </DropdownMenuLabel>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onSelect={() => setThemeDialogOpen(true)}>
-                          <Palette /> Community theme
+                          <Palette /> {t("Community theme")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onSelect={handleDelete}
                           className="!text-rose-400 focus:!text-rose-300"
                         >
-                          <Trash2 /> Delete community
+                          <Trash2 /> {t("Delete community")}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -258,11 +260,11 @@ export default function CommunityDetailPage() {
                     variant="glass"
                     onClick={() => leaveCommunity(community.id)}
                   >
-                    <CheckCircle2 /> Joined
+                    <CheckCircle2 /> {t("Joined")}
                   </Button>
                 ) : (
                   <Button variant="gradient" onClick={handleJoin}>
-                    <Sparkles /> Join community
+                    <Sparkles /> {t("Join community")}
                   </Button>
                 )}
               </div>
@@ -333,20 +335,21 @@ function EmptyFeed({
   isHost: boolean;
   onCreate: () => void;
 }) {
+  const t = useT();
   return (
     <div className="glass rounded-3xl border border-border/60 p-10 text-center">
       <div className="size-12 rounded-2xl bg-gradient-to-br from-violet-500 to-cyan-400 grid place-items-center text-white mx-auto shadow-glow">
         <Sparkles />
       </div>
-      <h3 className="font-semibold mt-3">No posts yet</h3>
+      <h3 className="font-semibold mt-3">{t("No posts yet")}</h3>
       <p className="text-sm text-muted-foreground mt-1 max-w-sm mx-auto">
         {isHost
-          ? "Drop the first post — text, song, image, or a poll. Members can only react."
-          : "The host hasn't dropped anything yet. Check back soon."}
+          ? t("Drop the first post — text, song, image, or a poll. Members can only react.")
+          : t("The host hasn't dropped anything yet. Check back soon.")}
       </p>
       {isHost && (
         <Button variant="gradient" className="mt-4" onClick={onCreate}>
-          <Plus /> Create first post
+          <Plus /> {t("Create first post")}
         </Button>
       )}
     </div>

@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { useGhostStore, type GhostIdentity } from "@/store/use-ghost-store";
+import { useT } from "@/lib/i18n";
 
 interface Props {
   roomId: string;
@@ -43,6 +44,7 @@ export function GhostCallTile({
   iAmHost,
   variant
 }: Props) {
+  const t = useT();
   const state = useGhostStore(
     (s) => s.callByRoom[roomId]?.participants[identity.id]
   );
@@ -56,7 +58,7 @@ export function GhostCallTile({
   const pinned = pinnedId === identity.id;
   // Anonymous display — the host UI can see *their own* tag for accountability,
   // but every other tile shows "Ghost · <hue tag>" with no real identity.
-  const label = isMe ? "You · anonymous" : `Ghost #${(identity.hue % 360).toString().padStart(3, "0")}`;
+  const label = isMe ? `${t("You")} · ${t("anonymous")}` : `Ghost #${(identity.hue % 360).toString().padStart(3, "0")}`;
 
   return (
     <motion.div
@@ -126,17 +128,17 @@ export function GhostCallTile({
       )}>
         {isHost && (
           <span className="text-[10px] inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/30 backdrop-blur text-amber-100">
-            <Crown className="size-2.5" /> host
+            <Crown className="size-2.5" /> {t("host")}
           </span>
         )}
         {isMe && (
           <span className="text-[10px] inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-cyan-500/30 backdrop-blur text-cyan-100">
-            you
+            {t("you")}
           </span>
         )}
         {state.raisedHand && (
           <span className="text-[10px] inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-violet-500/30 backdrop-blur text-violet-100">
-            <Hand className="size-2.5" /> hand
+            <Hand className="size-2.5" /> {t("hand")}
           </span>
         )}
       </div>
@@ -149,7 +151,7 @@ export function GhostCallTile({
         <button
           onClick={() => setPinned(roomId, pinned ? null : identity.id)}
           className="size-7 grid place-items-center rounded-md bg-black/40 backdrop-blur hover:bg-black/60 text-white"
-          aria-label={pinned ? "Unpin" : "Pin"}
+          aria-label={pinned ? t("Unpin") : t("Pin")}
         >
           {pinned ? <PinOff className="size-3.5" /> : <Pin className="size-3.5" />}
         </button>
@@ -158,21 +160,21 @@ export function GhostCallTile({
             <DropdownMenuTrigger asChild>
               <button
                 className="size-7 grid place-items-center rounded-md bg-black/40 backdrop-blur hover:bg-black/60 text-white"
-                aria-label="Host controls"
+                aria-label={t("Host controls")}
               >
                 <MoreVertical className="size-3.5" />
               </button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="!w-56">
               <DropdownMenuLabel className="!text-[10px]">
-                Host controls
+                {t("Host controls")}
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem
                 onSelect={() => setParticipant(roomId, identity.id, { muted: !state.muted })}
               >
                 {state.muted ? <Mic /> : <MicOff />}
-                {state.muted ? "Unmute participant" : "Mute participant"}
+                {state.muted ? t("Unmute participant") : t("Mute participant")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() =>
@@ -180,7 +182,7 @@ export function GhostCallTile({
                 }
               >
                 <ShieldOff />
-                {state.canSpeak ? "Revoke speaking" : "Allow to speak"}
+                {state.canSpeak ? t("Revoke speaking") : t("Allow to speak")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() =>
@@ -191,7 +193,7 @@ export function GhostCallTile({
                 }
               >
                 {state.canCamera ? <VideoOff /> : <VideoIcon />}
-                {state.canCamera ? "Disable camera" : "Allow camera"}
+                {state.canCamera ? t("Disable camera") : t("Allow camera")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -199,7 +201,7 @@ export function GhostCallTile({
                 className="!text-rose-400 focus:!text-rose-300"
               >
                 <UserMinus />
-                Remove from room
+                {t("Remove from room")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

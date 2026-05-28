@@ -5,6 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { CheckCircle2, Flame, Sparkles, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 import type { Community } from "@/types";
 
 interface Props {
@@ -26,6 +27,7 @@ export function CommunityGridCard({
   size = "default",
   from
 }: Props) {
+  const t = useT();
   const href = from
     ? `/discover/community/${community.id}?from=${from}`
     : `/discover/community/${community.id}`;
@@ -69,13 +71,13 @@ export function CommunityGridCard({
               : "bg-white text-black hover:bg-white/90"
           )}
         >
-          {joined ? "Joined" : "Join"}
+          {joined ? t("Joined") : t("Join")}
         </button>
 
         {/* Trending tag tucked under the member count when applicable */}
         {community.trending && (
           <div className="absolute top-12 left-3 inline-flex items-center gap-1 px-2 h-6 rounded-full bg-rose-500/80 backdrop-blur text-white text-[10px] font-semibold">
-            <Flame className="size-2.5" /> trending
+            <Flame className="size-2.5" /> {t("trending")}
           </div>
         )}
 

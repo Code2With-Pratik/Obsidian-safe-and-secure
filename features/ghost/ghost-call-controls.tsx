@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { CALL_FILTERS } from "@/features/calls/call-controls";
 import { useGhostStore } from "@/store/use-ghost-store";
+import { useT } from "@/lib/i18n";
 
 interface Props {
   roomId: string;
@@ -41,6 +42,7 @@ export function GhostCallControls({
   onToggleParticipants,
   onEnd
 }: Props) {
+  const t = useT();
   const myIdentity = useGhostStore((s) => s.myIdentityByRoom[roomId]);
   const myState = useGhostStore((s) =>
     myIdentity ? s.callByRoom[roomId]?.participants[myIdentity.id] : undefined
@@ -137,7 +139,7 @@ export function GhostCallControls({
         className="mx-auto inline-flex items-center gap-2 px-3 py-2.5 md:gap-1.5 md:rounded-full md:glass-strong md:border md:border-border/60 md:shadow-floating"
       >
         <Btn
-          tooltip={!canSpeak ? "Host revoked speaking" : muted ? "Unmute" : "Mute"}
+          tooltip={!canSpeak ? t("Host revoked speaking") : muted ? t("Unmute") : t("Mute")}
           disabled={!canSpeak}
           danger={muted}
           onClick={toggleMic}
@@ -145,7 +147,7 @@ export function GhostCallControls({
           {muted || !canSpeak ? <MicOff /> : <Mic />}
         </Btn>
         <Btn
-          tooltip={!canCamera ? "Host disabled camera" : camOff ? "Camera on" : "Camera off"}
+          tooltip={!canCamera ? t("Host disabled camera") : camOff ? t("Camera on") : t("Camera off")}
           disabled={!canCamera}
           danger={camOff}
           onClick={toggleCam}
@@ -154,7 +156,7 @@ export function GhostCallControls({
         </Btn>
         <span className="hidden md:contents">
           <Btn
-            tooltip={share ? "Stop sharing" : "Share screen"}
+            tooltip={share ? t("Stop sharing") : t("Share screen")}
             toggled={share}
             onClick={() => setShare((s) => !s)}
           >
@@ -162,7 +164,7 @@ export function GhostCallControls({
           </Btn>
         </span>
         <Btn
-          tooltip="Effects"
+          tooltip={t("Effects")}
           toggled={filtersOpen || filterId !== "none"}
           onClick={() => setFiltersOpen((v) => !v)}
         >
@@ -170,14 +172,14 @@ export function GhostCallControls({
         </Btn>
         <span className="hidden md:contents">
           <Btn
-            tooltip={handRaised ? "Lower hand" : "Raise hand"}
+            tooltip={handRaised ? t("Lower hand") : t("Raise hand")}
             toggled={handRaised}
             onClick={toggleHand}
           >
             <Hand />
           </Btn>
           <Btn
-            tooltip={participantsOpen ? "Hide participants" : "Participants"}
+            tooltip={participantsOpen ? t("Hide participants") : t("Participants")}
             toggled={participantsOpen}
             onClick={onToggleParticipants}
           >
@@ -185,7 +187,7 @@ export function GhostCallControls({
           </Btn>
         </span>
         <Btn
-          tooltip={chatOpen ? "Hide chat" : "Live chat"}
+          tooltip={chatOpen ? t("Hide chat") : t("Live chat")}
           toggled={chatOpen}
           onClick={onToggleChat}
         >
@@ -196,7 +198,7 @@ export function GhostCallControls({
           onClick={onEnd}
           className="ml-1 h-10 px-4 rounded-full bg-rose-500 hover:bg-rose-600 text-white flex items-center gap-1.5 text-sm font-medium transition shadow-glow-pink"
         >
-          <PhoneOff className="size-4" /> Leave
+          <PhoneOff className="size-4" /> {t("Leave")}
         </button>
       </motion.div>
     </div>

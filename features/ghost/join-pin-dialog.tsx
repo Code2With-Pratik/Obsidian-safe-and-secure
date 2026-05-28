@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { useGhostStore } from "@/store/use-ghost-store";
+import { useT } from "@/lib/i18n";
 import type { GhostRoom } from "@/types";
 import { PinInput } from "./pin-input";
 
@@ -27,6 +28,7 @@ interface Props {
 }
 
 export function JoinPinDialog({ open, onOpenChange, room, onJoined }: Props) {
+  const t = useT();
   const router = useRouter();
   const findByPin = useGhostStore((s) => s.findByPin);
   const joinRoom = useGhostStore((s) => s.joinRoom);
@@ -54,8 +56,8 @@ export function JoinPinDialog({ open, onOpenChange, room, onJoined }: Props) {
     if (!target) {
       setError(
         room
-          ? "That PIN doesn't match this room."
-          : "No ghost room matches that PIN."
+          ? t("That PIN doesn't match this room.")
+          : t("No ghost room matches that PIN.")
       );
       return;
     }
@@ -80,15 +82,15 @@ export function JoinPinDialog({ open, onOpenChange, room, onJoined }: Props) {
           </div>
           <DialogTitle className="text-xl">
             {joinedRoom
-              ? `You're in · ${joinedRoom.name}`
+              ? `${t("You're in")} · ${joinedRoom.name}`
               : room
-                ? `Enter PIN for ${room.name}`
-                : "Join with PIN"}
+                ? `${t("Enter PIN for")} ${room.name}`
+                : t("Join with PIN")}
           </DialogTitle>
           <DialogDescription>
             {joinedRoom
-              ? "You're now ghosting alongside the others. Be kind."
-              : "Type the 6-digit PIN someone shared with you."}
+              ? t("You're now ghosting alongside the others. Be kind.")
+              : t("Type the 6-digit PIN someone shared with you.")}
           </DialogDescription>
         </DialogHeader>
 
@@ -119,7 +121,7 @@ export function JoinPinDialog({ open, onOpenChange, room, onJoined }: Props) {
 
         <DialogFooter className="!justify-between">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            {joinedRoom ? "Close" : "Cancel"}
+            {joinedRoom ? t("Close") : t("Cancel")}
           </Button>
           {!joinedRoom && (
             <Button
@@ -127,7 +129,7 @@ export function JoinPinDialog({ open, onOpenChange, room, onJoined }: Props) {
               disabled={pin.length !== 6}
               onClick={() => tryJoin(pin)}
             >
-              <Sparkles /> Join room
+              <Sparkles /> {t("Join room")}
             </Button>
           )}
         </DialogFooter>

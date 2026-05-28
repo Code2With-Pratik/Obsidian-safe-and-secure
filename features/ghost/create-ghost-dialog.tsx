@@ -20,6 +20,7 @@ import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
 import { copyText, cn } from "@/lib/utils";
 import { generatePin, useGhostStore } from "@/store/use-ghost-store";
+import { useT } from "@/lib/i18n";
 import type { GhostRoom } from "@/types";
 
 const AUTO_CLOSE_OPTIONS: { label: string; hours: number }[] = [
@@ -38,6 +39,7 @@ interface Props {
 }
 
 export function CreateGhostDialog({ children, open, onOpenChange, onCreated }: Props) {
+  const t = useT();
   const [uncontrolledOpen, setUncontrolledOpen] = React.useState(false);
   const isControlled = open !== undefined;
   const isOpen = isControlled ? open : uncontrolledOpen;
@@ -107,15 +109,15 @@ export function CreateGhostDialog({ children, open, onOpenChange, onCreated }: P
           <div className="size-12 rounded-2xl bg-gradient-to-br from-violet-500 to-cyan-400 grid place-items-center shadow-glow mb-2">
             <Ghost className="text-white" />
           </div>
-          <DialogTitle className="text-xl">Conjure a ghost room</DialogTitle>
+          <DialogTitle className="text-xl">{t("Conjure a ghost room")}</DialogTitle>
           <DialogDescription>
-            Identities will be hidden. Messages disappear when the room closes.
+            {t("Identities will be hidden. Messages disappear when the room closes.")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
           <div className="space-y-1.5">
-            <Label>Room name</Label>
+            <Label>{t("Room name")}</Label>
             <Input
               placeholder="Midnight Lounge"
               value={name}
@@ -125,9 +127,9 @@ export function CreateGhostDialog({ children, open, onOpenChange, onCreated }: P
           </div>
 
           <div className="space-y-1.5">
-            <Label>Topic</Label>
+            <Label>{t("Topic")}</Label>
             <Input
-              placeholder="What's the vibe?"
+              placeholder={t("What's the vibe?")}
               value={topic}
               onChange={(e) => setTopic(e.target.value)}
               maxLength={120}
@@ -137,15 +139,15 @@ export function CreateGhostDialog({ children, open, onOpenChange, onCreated }: P
           <div className="grid grid-cols-2 gap-3">
             <SettingTile
               icon={<Lock className="size-4" />}
-              title="Lock with PIN"
-              subtitle={locked ? "Only PIN holders can enter" : "Open to anyone"}
+              title={t("Lock with PIN")}
+              subtitle={locked ? t("Only PIN holders can enter") : t("Open to anyone")}
             >
               <Switch checked={locked} onCheckedChange={setLocked} />
             </SettingTile>
             <SettingTile
               icon={<Timer className="size-4" />}
-              title="Auto-close"
-              subtitle={autoClose ? `In ${autoCloseHours}h` : "Stays open"}
+              title={t("Auto-close")}
+              subtitle={autoClose ? `${t("In")} ${autoCloseHours}h` : t("Stays open")}
             >
               <Switch checked={autoClose} onCheckedChange={setAutoClose} />
             </SettingTile>
@@ -164,7 +166,7 @@ export function CreateGhostDialog({ children, open, onOpenChange, onCreated }: P
                 <div className="rounded-xl border border-border/60 bg-background/30 p-3">
                   <div className="flex items-center justify-between mb-2">
                     <Label className="!text-[11px] uppercase tracking-wider text-muted-foreground">
-                      Room PIN
+                      {t("Room PIN")}
                     </Label>
                     <div className="flex items-center gap-1">
                       <button
@@ -172,7 +174,7 @@ export function CreateGhostDialog({ children, open, onOpenChange, onCreated }: P
                         onClick={regeneratePin}
                         className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground transition px-2 py-1 rounded-md hover:bg-foreground/5"
                       >
-                        <RefreshCcw className="size-3" /> New
+                        <RefreshCcw className="size-3" /> {t("New")}
                       </button>
                       <button
                         type="button"
@@ -181,11 +183,11 @@ export function CreateGhostDialog({ children, open, onOpenChange, onCreated }: P
                       >
                         {pinCopied ? (
                           <>
-                            <Check className="size-3 text-emerald-400" /> Copied
+                            <Check className="size-3 text-emerald-400" /> {t("Copied")}
                           </>
                         ) : (
                           <>
-                            <Copy className="size-3" /> Copy
+                            <Copy className="size-3" /> {t("Copy")}
                           </>
                         )}
                       </button>
@@ -219,7 +221,7 @@ export function CreateGhostDialog({ children, open, onOpenChange, onCreated }: P
                 <div className="rounded-xl border border-border/60 bg-background/30 p-3 space-y-2">
                   <div className="flex items-center justify-between">
                     <Label className="!text-[11px] uppercase tracking-wider text-muted-foreground">
-                      Auto-close after
+                      {t("Auto-close after")}
                     </Label>
                     <span className="text-[11px] text-muted-foreground">
                       {autoCloseHours}h
@@ -260,9 +262,9 @@ export function CreateGhostDialog({ children, open, onOpenChange, onCreated }: P
           <div className="space-y-2">
             <div className="flex justify-between text-xs">
               <Label className="flex items-center gap-1.5">
-                <Users className="size-3" /> Capacity
+                <Users className="size-3" /> {t("Capacity")}
               </Label>
-              <span className="text-muted-foreground">{capacity[0]} ghosts</span>
+              <span className="text-muted-foreground">{capacity[0]} {t("ghosts")}</span>
             </div>
             <Slider value={capacity} onValueChange={setCapacity} min={5} max={200} step={5} />
           </div>
@@ -270,10 +272,10 @@ export function CreateGhostDialog({ children, open, onOpenChange, onCreated }: P
 
         <DialogFooter className="!justify-between">
           <Button variant="ghost" onClick={() => setOpen(false)}>
-            Cancel
+            {t("Cancel")}
           </Button>
           <Button variant="gradient" onClick={handleSubmit}>
-            <Sparkles /> Open room
+            <Sparkles /> {t("Open room")}
           </Button>
         </DialogFooter>
       </DialogContent>

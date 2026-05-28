@@ -33,6 +33,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useCommunityStore } from "@/store/use-community-store";
+import { useT } from "@/lib/i18n";
 import { users } from "@/lib/mock-data";
 import type { CommunityPostKind, CommunitySong } from "@/types";
 
@@ -81,6 +82,7 @@ interface Props {
 }
 
 export function CreatePostDialog({ open, onOpenChange, communityId }: Props) {
+  const t = useT();
   const createPost = useCommunityStore((s) => s.createPost);
   const [tab, setTab] = React.useState<Tab>("text");
   const [content, setContent] = React.useState("");
@@ -170,9 +172,9 @@ export function CreatePostDialog({ open, onOpenChange, communityId }: Props) {
           <div className="size-12 rounded-2xl bg-gradient-to-br from-violet-500 to-cyan-400 grid place-items-center shadow-glow mb-2">
             <Sparkles className="text-white" />
           </div>
-          <DialogTitle className="text-xl">Post to your community</DialogTitle>
+          <DialogTitle className="text-xl">{t("Post to your community")}</DialogTitle>
           <DialogDescription>
-            Only the host (you) can post. Members react and share the vibe.
+            {t("Only the host (you) can post. Members react and share the vibe.")}
           </DialogDescription>
         </DialogHeader>
 
@@ -180,19 +182,19 @@ export function CreatePostDialog({ open, onOpenChange, communityId }: Props) {
         <div className="px-6 mt-2">
           <div className="flex items-center gap-1 p-1 rounded-2xl glass-subtle">
             <TypeTab tab="text" active={tab === "text"} onClick={() => setTab("text")} icon={<Type className="size-3.5" />}>
-              Text
+              {t("Text")}
             </TypeTab>
             <TypeTab tab="image" active={tab === "image"} onClick={() => setTab("image")} icon={<ImageIcon className="size-3.5" />}>
-              Image
+              {t("Image")}
             </TypeTab>
             <TypeTab tab="video" active={tab === "video"} onClick={() => setTab("video")} icon={<Video className="size-3.5" />}>
-              Video
+              {t("Video")}
             </TypeTab>
             <TypeTab tab="song" active={tab === "song"} onClick={() => setTab("song")} icon={<Music className="size-3.5" />}>
-              Song
+              {t("Song")}
             </TypeTab>
             <TypeTab tab="poll" active={tab === "poll"} onClick={() => setTab("poll")} icon={<BarChart3 className="size-3.5" />}>
-              Poll
+              {t("Poll")}
             </TypeTab>
           </div>
         </div>
@@ -200,15 +202,15 @@ export function CreatePostDialog({ open, onOpenChange, communityId }: Props) {
         <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-2 pt-4 space-y-4">
           <div className="space-y-1.5">
             <Label className="!text-[11px] uppercase tracking-wider text-muted-foreground">
-              What's on your mind?
+              {t("What's on your mind?")}
             </Label>
             <textarea
               value={content}
               onChange={(e) => setContent(e.target.value)}
               placeholder={
                 tab === "poll"
-                  ? "Add a short intro (optional)"
-                  : "Write something to share with your community…"
+                  ? t("Add a short intro (optional)")
+                  : t("Write something to share with your community…")
               }
               rows={3}
               className="w-full rounded-xl bg-background/40 border border-border/60 p-3 text-sm outline-none resize-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
@@ -218,7 +220,7 @@ export function CreatePostDialog({ open, onOpenChange, communityId }: Props) {
           {tab === "image" && (
             <div className="space-y-1.5">
               <Label className="!text-[11px] uppercase tracking-wider text-muted-foreground">
-                Pick image(s) — up to 4
+                {t("Pick image(s) — up to 4")}
               </Label>
               <div className="grid grid-cols-3 gap-2">
                 {STOCK_IMAGES.map((url) => {
@@ -258,10 +260,10 @@ export function CreatePostDialog({ open, onOpenChange, communityId }: Props) {
           {tab === "video" && (
             <div className="space-y-1.5">
               <Label className="!text-[11px] uppercase tracking-wider text-muted-foreground">
-                Pick a video thumbnail
+                {t("Pick a video thumbnail")}
               </Label>
               <p className="text-[11px] text-muted-foreground -mt-1">
-                Demo only — the first thumbnail you select will play as the post's video.
+                {t("Demo only — the first thumbnail you select will play as the post's video.")}
               </p>
               <div className="grid grid-cols-3 gap-2">
                 {STOCK_IMAGES.map((url) => {
@@ -291,7 +293,7 @@ export function CreatePostDialog({ open, onOpenChange, communityId }: Props) {
           {tab === "song" && (
             <div className="space-y-1.5">
               <Label className="!text-[11px] uppercase tracking-wider text-muted-foreground">
-                Pick a track
+                {t("Pick a track")}
               </Label>
               <div className="space-y-1.5">
                 {SONG_LIBRARY.map((s, i) => {
@@ -326,17 +328,17 @@ export function CreatePostDialog({ open, onOpenChange, communityId }: Props) {
             <div className="space-y-2">
               <div>
                 <Label className="!text-[11px] uppercase tracking-wider text-muted-foreground">
-                  Question
+                  {t("Question")}
                 </Label>
                 <Input
                   value={pollQuestion}
                   onChange={(e) => setPollQuestion(e.target.value)}
-                  placeholder="What do you want to ask?"
+                  placeholder={t("What do you want to ask?")}
                 />
               </div>
               <div className="space-y-1.5">
                 <Label className="!text-[11px] uppercase tracking-wider text-muted-foreground">
-                  Options (2–4)
+                  {t("Options (2–4)")}
                 </Label>
                 {pollOptions.map((o, i) => (
                   <div key={i} className="flex items-center gap-2">
@@ -347,7 +349,7 @@ export function CreatePostDialog({ open, onOpenChange, communityId }: Props) {
                           cur.map((v, idx) => (idx === i ? e.target.value : v))
                         )
                       }
-                      placeholder={`Option ${i + 1}`}
+                      placeholder={`${t("Option")} ${i + 1}`}
                     />
                     {pollOptions.length > 2 && (
                       <button
@@ -368,7 +370,7 @@ export function CreatePostDialog({ open, onOpenChange, communityId }: Props) {
                     onClick={() => setPollOptions((cur) => [...cur, ""])}
                     className="text-xs text-cyan-300 hover:text-cyan-200 inline-flex items-center gap-1"
                   >
-                    <Plus className="size-3" /> Add option
+                    <Plus className="size-3" /> {t("Add option")}
                   </button>
                 )}
               </div>
@@ -377,7 +379,7 @@ export function CreatePostDialog({ open, onOpenChange, communityId }: Props) {
 
           <div className="space-y-1.5">
             <Label className="!text-[11px] uppercase tracking-wider text-muted-foreground">
-              Tag people
+              {t("Tag people")}
             </Label>
             <MentionPicker mentions={mentions} setMentions={setMentions} />
           </div>
@@ -385,10 +387,10 @@ export function CreatePostDialog({ open, onOpenChange, communityId }: Props) {
 
         <DialogFooter className="!justify-between px-6 py-4 border-t border-border/40 bg-background/30 backdrop-blur-md">
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t("Cancel")}
           </Button>
           <Button variant="gradient" onClick={handleSubmit} disabled={!canSubmit}>
-            <Sparkles /> Publish
+            <Sparkles /> {t("Publish")}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -432,6 +434,7 @@ function MentionPicker({
   mentions: string[];
   setMentions: (next: string[]) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = React.useState(false);
   const [q, setQ] = React.useState("");
   const choices = users
@@ -467,7 +470,7 @@ function MentionPicker({
             type="button"
             className="inline-flex items-center gap-1 h-7 px-2 rounded-full bg-foreground/10 text-xs text-muted-foreground hover:text-foreground hover:bg-foreground/15 transition"
           >
-            <AtSign className="size-3" /> Mention
+            <AtSign className="size-3" /> {t("Mention")}
           </button>
         </PopoverTrigger>
         <PopoverContent align="start" className="!w-72 !p-0">
@@ -476,7 +479,7 @@ function MentionPicker({
               autoFocus
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search by name or @username"
+              placeholder={t("Search by name or @username")}
               className="h-9"
             />
           </div>
