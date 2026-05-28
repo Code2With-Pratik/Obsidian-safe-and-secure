@@ -16,6 +16,7 @@ import { JoinPinDialog } from "@/features/ghost/join-pin-dialog";
 import { CALL_FILTERS } from "@/features/calls/call-controls";
 import { useGhostStore } from "@/store/use-ghost-store";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 function LiveTimer() {
   const [s, setS] = React.useState(0);
@@ -33,6 +34,7 @@ function LiveTimer() {
 }
 
 export default function GhostRoomPage() {
+  const t = useT();
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const room = useGhostStore((s) => s.rooms.find((r) => r.id === params.id));
@@ -74,16 +76,16 @@ export default function GhostRoomPage() {
           className="glass rounded-3xl p-10 text-center max-w-md"
         >
           <Ghost className="size-12 mx-auto text-muted-foreground" />
-          <h2 className="font-semibold mt-3 text-lg">Room not found</h2>
+          <h2 className="font-semibold mt-3 text-lg">{t("Room not found")}</h2>
           <p className="text-sm text-muted-foreground mt-1">
-            It may have auto-closed. Try a different PIN or browse open rooms.
+            {t("It may have auto-closed. Try a different PIN or browse open rooms.")}
           </p>
           <Button
             variant="gradient"
             className="mt-4"
             onClick={() => router.push("/ghost-rooms")}
           >
-            Back to rooms
+            {t("Back to rooms")}
           </Button>
         </motion.div>
       </div>
@@ -116,14 +118,14 @@ export default function GhostRoomPage() {
             </p>
             <div className="mt-5 flex flex-col gap-2 max-w-xs mx-auto">
               <Button variant="gradient" size="lg" onClick={() => setPinOpen(true)}>
-                <KeyRound /> Enter PIN to join
+                <KeyRound /> {t("Enter PIN to join")}
               </Button>
               <Button
                 variant="ghost"
                 size="lg"
                 onClick={() => router.push("/ghost-rooms")}
               >
-                Back to rooms
+                {t("Back to rooms")}
               </Button>
             </div>
           </motion.div>
@@ -162,7 +164,7 @@ export default function GhostRoomPage() {
           onClick={() => router.push("/ghost-rooms")}
           className="pointer-events-auto"
         >
-          <ChevronLeft /> Rooms
+          <ChevronLeft /> {t("Rooms")}
         </Button>
 
         <motion.div
@@ -175,7 +177,7 @@ export default function GhostRoomPage() {
           <span className="text-muted-foreground/60 hidden md:inline">·</span>
           <div className="hidden md:flex items-center gap-1.5">
             <span className="size-2 rounded-full bg-rose-500 animate-pulse" />
-            <span className="text-xs">LIVE</span>
+            <span className="text-xs">{t("LIVE")}</span>
           </div>
           <span className="text-muted-foreground/60 hidden md:inline">·</span>
           <LiveTimer />
@@ -188,11 +190,11 @@ export default function GhostRoomPage() {
         <div className="pointer-events-auto flex items-center gap-2">
           {iAmHost && (
             <Badge variant="warning" className="hidden sm:inline-flex">
-              <Sparkles className="size-3" /> host
+              <Sparkles className="size-3" /> {t("host")}
             </Badge>
           )}
           <Badge variant="success" className="hidden md:inline-flex">
-            <Radio className="size-3" /> {memberCount} in
+            <Radio className="size-3" /> {memberCount} {t("inside")}
           </Badge>
         </div>
       </div>

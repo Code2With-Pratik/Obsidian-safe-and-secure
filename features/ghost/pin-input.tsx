@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 interface Props {
   value: string;
@@ -25,6 +26,7 @@ export function PinInput({
   onComplete,
   mask = false
 }: Props) {
+  const t = useT();
   const refs = React.useRef<(HTMLInputElement | null)[]>([]);
 
   React.useEffect(() => {
@@ -98,7 +100,7 @@ export function PinInput({
           onChange={(e) => handleChange(i, e.target.value)}
           onKeyDown={(e) => handleKeyDown(i, e)}
           onFocus={(e) => e.target.select()}
-          aria-label={`Digit ${i + 1}`}
+          aria-label={`${t("Digit")} ${i + 1}`}
           className={cn(
             "size-11 sm:size-12 text-center text-lg font-semibold rounded-xl bg-background/40 border outline-none transition",
             "focus-visible:ring-2 focus-visible:ring-cyan-400/60",

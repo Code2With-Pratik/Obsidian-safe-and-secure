@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useRouter } from "next/navigation";
 import { useUIStore } from "@/store/use-ui-store";
+import { useT } from "@/lib/i18n";
 import { cn, copyText, formatTime, initials } from "@/lib/utils";
 import { ReactionPicker } from "./reaction-picker";
 import { useImageLightbox } from "./image-lightbox";
@@ -901,6 +902,7 @@ function FileBubble({ me, bubbleMe, meStyle, message }: SubProps) {
 
 /** Interactive poll — WhatsApp-style with progress bars + tap-to-vote. */
 function PollBubble({ me, bubbleMe, meStyle, message }: SubProps) {
+  const t = useT();
   const vote = useChatStore((s) => s.votePoll);
   const poll = message.poll!;
   const total = poll.options.reduce((acc, o) => acc + o.voters.length, 0);
@@ -924,7 +926,7 @@ function PollBubble({ me, bubbleMe, meStyle, message }: SubProps) {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold leading-tight">{poll.question}</p>
           <p className="text-[11px] opacity-70">
-            Poll · {poll.multi ? "Select one or more" : "Select one"}
+            {t("Poll")} · {poll.multi ? t("Select one or more") : t("Select one")}
           </p>
         </div>
       </div>
@@ -975,7 +977,7 @@ function PollBubble({ me, bubbleMe, meStyle, message }: SubProps) {
         })}
       </div>
       <p className="text-[11px] opacity-60 text-right">
-        {total} {total === 1 ? "vote" : "votes"}
+        {total} {total === 1 ? t("vote") : t("votes")}
       </p>
     </div>
   );
@@ -1013,6 +1015,7 @@ function ContactsBubble({ me, bubbleMe, meStyle, message }: SubProps) {
 
 /** Location card — static map thumbnail + open-in-Maps link. */
 function LocationBubble({ me, bubbleMe, meStyle, message }: SubProps) {
+  const t = useT();
   const loc = message.location!;
   const href = `https://www.google.com/maps?q=${loc.lat},${loc.lng}`;
   const embed = `https://maps.google.com/maps?q=${loc.lat},${loc.lng}&z=15&output=embed`;
@@ -1045,7 +1048,7 @@ function LocationBubble({ me, bubbleMe, meStyle, message }: SubProps) {
         )}
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium">
-            {loc.live ? "Live location" : "Location"}
+            {loc.live ? t("Live location") : t("Location")}
           </p>
           <p className="text-[11px] opacity-75 truncate">
             {loc.lat.toFixed(5)}, {loc.lng.toFixed(5)}
@@ -1059,6 +1062,7 @@ function LocationBubble({ me, bubbleMe, meStyle, message }: SubProps) {
 /** Scheduled message receipt. Renders a call-invite countdown + Join button
  *  when `schedule.callInvite` is set, otherwise the plain scheduled note. */
 function ScheduleBubble({ me, bubbleMe, meStyle, message }: SubProps) {
+  const t = useT();
   const sch = message.schedule!;
   const when = new Date(sch.whenIso);
   if (sch.callInvite) {
@@ -1076,7 +1080,7 @@ function ScheduleBubble({ me, bubbleMe, meStyle, message }: SubProps) {
     >
       <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider opacity-80">
         <CalendarClock className="size-3.5" />
-        Scheduled for{" "}
+        {t("Scheduled for")}{" "}
         {when.toLocaleString(undefined, {
           weekday: "short",
           month: "short",
@@ -1099,6 +1103,7 @@ function ScheduledCallBubble({
   bubbleMe,
   meStyle
 }: SubProps) {
+  const t = useT();
   const sch = message.schedule!;
   const invite = sch.callInvite!;
   const router = useRouter();
@@ -1157,11 +1162,11 @@ function ScheduledCallBubble({
     >
       <div className="flex items-center gap-2 text-[11px] uppercase tracking-wider opacity-80">
         {invite.video ? <VideoIcon className="size-3.5" /> : <Phone className="size-3.5" />}
-        {isLive ? "Live now" : "Scheduled call"}
+        {isLive ? t("Live now") : t("Scheduled call")}
       </div>
       <p className="text-sm font-semibold break-words">{invite.title}</p>
       <div className="text-[11px] opacity-80">
-        Starts{" "}
+        {t("Starts")}{" "}
         {new Date(sch.whenIso).toLocaleString(undefined, {
           weekday: "short",
           month: "short",
@@ -1197,12 +1202,12 @@ function ScheduledCallBubble({
           {requesting ? (
             <>
               <Clock className="size-3.5 animate-spin" />
-              Asking host…
+              {t("Asking host…")}
             </>
           ) : (
             <>
               {invite.video ? <VideoIcon className="size-3.5" /> : <Phone className="size-3.5" />}
-              Join call
+              {t("Join call")}
             </>
           )}
         </motion.button>

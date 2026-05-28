@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn, formatTime } from "@/lib/utils";
 import { useCommunityStore } from "@/store/use-community-store";
+import { useT } from "@/lib/i18n";
 import { users } from "@/lib/mock-data";
 import type { CommunityPost as Post } from "@/types";
 
@@ -34,6 +35,7 @@ interface Props {
 }
 
 export function CommunityPost({ post, themeBubble, themeAccent }: Props) {
+  const t = useT();
   const isHost = useCommunityStore((s) => s.isHost(post.communityId));
   const reactToPost = useCommunityStore((s) => s.reactToPost);
   const deletePost = useCommunityStore((s) => s.deletePost);
@@ -57,11 +59,11 @@ export function CommunityPost({ post, themeBubble, themeAccent }: Props) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1.5">
             <p className="font-semibold text-sm truncate">
-              {author?.name ?? "Host"}
+              {author?.name ?? t("Host")}
             </p>
             <CheckCircle2 className="size-3.5 text-cyan-400" />
             <Badge variant="cyan" className="!text-[9px] !py-0 !px-1.5">
-              host
+              {t("host")}
             </Badge>
           </div>
           <p className="text-[11px] text-muted-foreground" suppressHydrationWarning>
@@ -77,13 +79,13 @@ export function CommunityPost({ post, themeBubble, themeAccent }: Props) {
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="!w-44">
               <DropdownMenuItem>
-                <Pin /> Pin post
+                <Pin /> {t("Pin post")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => deletePost(post.communityId, post.id)}
                 className="!text-rose-400 focus:!text-rose-300"
               >
-                <Trash2 /> Delete post
+                <Trash2 /> {t("Delete post")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -130,7 +132,7 @@ export function CommunityPost({ post, themeBubble, themeAccent }: Props) {
         />
         {totalReactions > 0 && (
           <span className="text-[11px] text-muted-foreground ml-1">
-            {totalReactions.toLocaleString()} reacted
+            {totalReactions.toLocaleString()} {t("reacted")}
           </span>
         )}
         <QuickReactButton
@@ -212,6 +214,7 @@ function SongCard({
   song: { title: string; artist: string; cover: string; durationSec: number };
   themeBubble?: string;
 }) {
+  const t = useT();
   const [playing, setPlaying] = React.useState(false);
   const minutes = Math.floor(song.durationSec / 60);
   const seconds = (song.durationSec % 60).toString().padStart(2, "0");
@@ -242,7 +245,7 @@ function SongCard({
         </div>
         <button
           onClick={() => setPlaying((v) => !v)}
-          aria-label={playing ? "Pause" : "Play"}
+          aria-label={playing ? t("Pause") : t("Play")}
           className="size-10 rounded-full bg-white/15 hover:bg-white/25 backdrop-blur grid place-items-center text-white transition"
         >
           {playing ? <Pause className="size-4" /> : <Play className="size-4" />}
@@ -264,6 +267,7 @@ function PollCard({
   themeAccent?: string;
   onVote: (optionId: string) => void;
 }) {
+  const t = useT();
   const [voted, setVoted] = React.useState<string | null>(null);
   const total = poll.options.reduce((acc, o) => acc + o.votes, 0);
   return (
@@ -318,7 +322,7 @@ function PollCard({
         })}
       </div>
       <p className="text-[11px] text-muted-foreground mt-2">
-        {(total + (voted ? 1 : 0)).toLocaleString()} votes · anonymous
+        {(total + (voted ? 1 : 0)).toLocaleString()} {t("votes")} · {t("anonymous")}
       </p>
     </div>
   );
@@ -356,13 +360,14 @@ function ReactionRow({
 }
 
 function QuickReactButton({ onPick }: { onPick: (emoji: string) => void }) {
+  const t = useT();
   const [open, setOpen] = React.useState(false);
   return (
     <div className="ml-auto relative">
       <button
         onClick={() => setOpen((v) => !v)}
         className="size-8 rounded-full grid place-items-center hover:bg-foreground/10 text-muted-foreground hover:text-foreground transition"
-        aria-label="React"
+        aria-label={t("React")}
       >
         <Smile className="size-4" />
       </button>

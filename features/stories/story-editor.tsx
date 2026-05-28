@@ -33,6 +33,7 @@ import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 /* ----------------------------- types ----------------------------- */
 
@@ -313,6 +314,7 @@ function roundedRect(
 /* ----------------------------- component ----------------------------- */
 
 export function StoryEditor() {
+  const t = useT();
   const router = useRouter();
   const [bg, setBg] = React.useState<Background>({ kind: "gradient", value: GRADIENTS[0] });
   const [filter, setFilter] = React.useState<string>("none");
@@ -701,7 +703,7 @@ export function StoryEditor() {
           <Button variant="ghost" size="icon-sm" onClick={() => router.back()}>
             <ArrowLeft />
           </Button>
-          <h2 className="font-display font-semibold tracking-tight">New story</h2>
+          <h2 className="font-display font-semibold tracking-tight">{t("New story")}</h2>
           <Button variant="ghost" size="icon-sm" onClick={() => setShowLayers((v) => !v)}>
             <Layers />
           </Button>
@@ -709,14 +711,14 @@ export function StoryEditor() {
 
         <Tabs value={tool} onValueChange={(v) => setTool(v as typeof tool)} className="px-3">
           <TabsList className="w-full grid grid-cols-3 gap-1">
-            <TabsTrigger value="media">Media</TabsTrigger>
-            <TabsTrigger value="text">Text</TabsTrigger>
-            <TabsTrigger value="stickers">Stickers</TabsTrigger>
+            <TabsTrigger value="media">{t("Media")}</TabsTrigger>
+            <TabsTrigger value="text">{t("Text")}</TabsTrigger>
+            <TabsTrigger value="stickers">{t("Stickers")}</TabsTrigger>
           </TabsList>
           <TabsList className="w-full grid grid-cols-3 gap-1 mt-1">
-            <TabsTrigger value="filters">Filters</TabsTrigger>
-            <TabsTrigger value="draw">Draw</TabsTrigger>
-            <TabsTrigger value="music">Music</TabsTrigger>
+            <TabsTrigger value="filters">{t("Filters")}</TabsTrigger>
+            <TabsTrigger value="draw">{t("Draw")}</TabsTrigger>
+            <TabsTrigger value="music">{t("Music")}</TabsTrigger>
           </TabsList>
         </Tabs>
 
@@ -763,7 +765,7 @@ export function StoryEditor() {
             variant="glass"
             size="icon"
             onClick={() => setSheet("layers")}
-            aria-label="Layers"
+            aria-label={t("Layers")}
             className="relative"
           >
             <Layers />
@@ -775,7 +777,7 @@ export function StoryEditor() {
           </Button>
         </div>
         <div className="absolute top-4 right-4 flex gap-2 z-10">
-          <Button variant="glass" size="icon" onClick={downloadStory} disabled={downloading} aria-label="Download story">
+          <Button variant="glass" size="icon" onClick={downloadStory} disabled={downloading} aria-label={t("Download story")}>
             {downloading ? (
               <motion.span
                 animate={{ rotate: 360 }}
@@ -787,7 +789,7 @@ export function StoryEditor() {
             )}
           </Button>
           <Button variant="gradient">
-            <Send /> Share
+            <Send /> {t("Share")}
           </Button>
         </div>
 
@@ -886,7 +888,7 @@ export function StoryEditor() {
           >
             <div className="glass-strong rounded-2xl border border-border/40 p-2">
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 mb-1.5">
-                {selectedImageLayer ? "Filter overlay" : "Filter background"}
+                {selectedImageLayer ? t("Filter overlay") : t("Filter background")}
               </p>
               <div className="flex gap-2 overflow-x-auto no-scrollbar py-1.5 -mx-1 px-1">
                 {FILTERS.map((f) => {
@@ -933,8 +935,8 @@ export function StoryEditor() {
       {/* ───── Right rail (desktop only) ───── */}
       <aside className="hidden lg:flex flex-col glass-strong glass-specular border-l border-white/10 h-full overflow-hidden">
         <div className="p-4 flex items-center justify-between">
-          <h3 className="text-sm font-semibold">Inspector</h3>
-          <span className="text-[10px] text-muted-foreground">{layers.length} layers</span>
+          <h3 className="text-sm font-semibold">{t("Inspector")}</h3>
+          <span className="text-[10px] text-muted-foreground">{layers.length} {t("layers")}</span>
         </div>
 
         <div className="px-3 flex-1 overflow-y-auto no-scrollbar pb-6">
@@ -947,14 +949,14 @@ export function StoryEditor() {
           ) : (
             <div className="text-center text-xs text-muted-foreground py-12 px-4">
               <Sparkles className="size-6 mx-auto mb-2 text-violet-400" />
-              Tap a layer on the canvas to fine-tune position, font, color, and rotation.
+              {t("Tap a layer on the canvas to fine-tune position, font, color, and rotation.")}
             </div>
           )}
 
           <div className="mt-6">
-            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Layers</h4>
+            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">{t("Layers")}</h4>
             {layers.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No layers yet.</p>
+              <p className="text-xs text-muted-foreground">{t("No layers yet.")}</p>
             ) : (
               <Reorder.Group
                 axis="y"
@@ -1089,6 +1091,7 @@ function MobileSheetWrapper({
   children: React.ReactNode;
   height?: string;
 }) {
+  const t = useT();
   return (
     <motion.div
       className="fixed inset-0 z-[200] lg:hidden"
@@ -1126,7 +1129,7 @@ function MobileSheetWrapper({
             <button
               onClick={onClose}
               className="size-8 rounded-full grid place-items-center hover:bg-foreground/10 transition text-foreground"
-              aria-label="Close"
+              aria-label={t("Close")}
             >
               <X className="size-4" />
             </button>
@@ -1157,23 +1160,24 @@ function MobileMediaSheet({
   onCamera: () => void;
   onPickOverlay: (src: string) => void;
 }) {
+  const t = useT();
   const [tab, setTab] = React.useState<"images" | "gradients">("images");
   const [mode, setMode] = React.useState<"background" | "overlay">("background");
 
   return (
-    <MobileSheetWrapper title="Media" onClose={onClose} height="78vh">
+    <MobileSheetWrapper title={t("Media")} onClose={onClose} height="78vh">
       {/* Tab toggle (images / gradients) */}
       <div className="flex p-1 mb-3 rounded-full glass-subtle">
-        {(["images", "gradients"] as const).map((t) => (
+        {(["images", "gradients"] as const).map((tb) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={tb}
+            onClick={() => setTab(tb)}
             className={cn(
               "flex-1 py-2 rounded-full text-sm font-medium capitalize transition",
-              tab === t ? "bg-foreground text-background" : "text-muted-foreground"
+              tab === tb ? "bg-foreground text-background" : "text-muted-foreground"
             )}
           >
-            {t}
+            {t(tb === "images" ? "Images" : "Gradients")}
           </button>
         ))}
       </div>
@@ -1197,7 +1201,7 @@ function MobileMediaSheet({
                   : "glass-subtle text-muted-foreground"
               )}
             >
-              {m.label}
+              {t(m.label)}
             </button>
           ))}
         </div>
@@ -1222,7 +1226,7 @@ function MobileMediaSheet({
                 <div className="size-12 rounded-full bg-white/25 backdrop-blur grid place-items-center ring-2 ring-white/50">
                   <Camera className="size-5 text-white" />
                 </div>
-                <span className="text-xs font-semibold text-white">Camera</span>
+                <span className="text-xs font-semibold text-white">{t("Camera")}</span>
               </div>
               <div className="absolute inset-0 bg-black/0 group-active:bg-black/20 transition" />
             </button>
@@ -1236,7 +1240,7 @@ function MobileMediaSheet({
                 <div className="size-12 rounded-full bg-foreground/10 grid place-items-center">
                   <Folder className="size-5 text-foreground" />
                 </div>
-                <span className="text-xs font-semibold text-foreground">Browse</span>
+                <span className="text-xs font-semibold text-foreground">{t("Browse")}</span>
               </div>
             </button>
 
@@ -1294,6 +1298,7 @@ function DesktopLayerRow({
   isActive: boolean;
   onSelect: () => void;
 }) {
+  const t = useT();
   const controls = useDragControls();
   return (
     <Reorder.Item
@@ -1312,7 +1317,7 @@ function DesktopLayerRow({
         onPointerDown={(e) => controls.start(e)}
         style={{ touchAction: "none" }}
         className="grid place-items-center text-muted-foreground shrink-0 px-1 py-1 cursor-grab active:cursor-grabbing"
-        aria-label="Drag to reorder"
+        aria-label={t("Drag to reorder")}
         role="button"
       >
         <svg width="12" height="12" viewBox="0 0 14 14" fill="currentColor">
@@ -1332,7 +1337,7 @@ function DesktopLayerRow({
           {layer.type === "text" ? "T" : layer.type === "sticker" ? (layer as StickerLayer).emoji : "♪"}
         </span>
         <span className="text-xs truncate flex-1">
-          {layer.type === "text" ? (layer as TextLayer).text : layer.type === "music" ? (layer as MusicLayer).title : "Sticker"}
+          {layer.type === "text" ? (layer as TextLayer).text : layer.type === "music" ? (layer as MusicLayer).title : t("Sticker")}
         </span>
       </button>
     </Reorder.Item>
@@ -1350,6 +1355,7 @@ function MobileLayerRow({
   onSelect: () => void;
   onDelete: () => void;
 }) {
+  const t = useT();
   return (
     <Reorder.Item
       value={layer}
@@ -1398,12 +1404,12 @@ function MobileLayerRow({
       <div className="min-w-0 flex-1 pointer-events-none">
         <p className="text-sm font-medium text-foreground truncate">
           {layer.type === "text"
-            ? (layer as TextLayer).text || "Text layer"
+            ? (layer as TextLayer).text || t("Text layer")
             : layer.type === "sticker"
-              ? `Sticker · ${(layer as StickerLayer).emoji}`
+              ? `${t("Sticker")} · ${(layer as StickerLayer).emoji}`
               : layer.type === "image"
-                ? "Image overlay"
-                : `Music · ${(layer as MusicLayer).title}`}
+                ? t("Image overlay")
+                : `${t("Music")} · ${(layer as MusicLayer).title}`}
         </p>
         <p className="text-[11px] text-muted-foreground">
           {Math.round(layer.scale * 100)}% · {layer.rotate}°
@@ -1417,7 +1423,7 @@ function MobileLayerRow({
           onDelete();
         }}
         className="size-8 rounded-lg grid place-items-center text-rose-400 hover:bg-rose-400/15 shrink-0"
-        aria-label="Delete layer"
+        aria-label={t("Delete layer")}
       >
         <Trash2 className="size-3.5" />
       </button>
@@ -1440,18 +1446,19 @@ function MobileLayersSheet({
   onDelete: (id: string) => void;
   onReorder: (next: Layer[]) => void;
 }) {
+  const t = useT();
   // Top of the visual list = front-most. Internal layers[] order: last item = front-most.
   // Reorder operates on the *reversed* array so dragging up = bring forward.
   const reversed = layers.slice().reverse();
 
   return (
-    <MobileSheetWrapper title="Layers" onClose={onClose} height="62vh">
+    <MobileSheetWrapper title={t("Layers")} onClose={onClose} height="62vh">
       {layers.length === 0 ? (
         <div className="text-center py-12">
           <Layers className="size-10 mx-auto text-muted-foreground/60 mb-3" />
-          <p className="text-sm text-muted-foreground">No layers yet.</p>
+          <p className="text-sm text-muted-foreground">{t("No layers yet.")}</p>
           <p className="text-xs text-muted-foreground/70 mt-1">
-            Add text, stickers, images, or music to your story.
+            {t("Add text, stickers, images, or music to your story.")}
           </p>
         </div>
       ) : (
@@ -1490,14 +1497,15 @@ function MobileTextSheet({
   update: (p: Partial<TextLayer>) => void;
   onAdd: () => void;
 }) {
+  const t = useT();
   return (
-    <MobileSheetWrapper title="Text" onClose={onClose} height="68vh">
+    <MobileSheetWrapper title={t("Text")} onClose={onClose} height="68vh">
       {!selected ? (
         <div className="text-center py-12">
           <TypeIcon className="size-10 mx-auto text-muted-foreground mb-3" />
-          <p className="text-sm text-muted-foreground mb-4">No text layer selected.</p>
+          <p className="text-sm text-muted-foreground mb-4">{t("No text layer selected.")}</p>
           <Button onClick={onAdd} variant="gradient">
-            <TypeIcon /> Add text
+            <TypeIcon /> {t("Add text")}
           </Button>
         </div>
       ) : (
@@ -1508,12 +1516,12 @@ function MobileTextSheet({
             rows={3}
             autoFocus
             className="block w-full min-h-[7rem] rounded-2xl glass-subtle px-4 py-3.5 text-base leading-relaxed text-foreground placeholder:text-muted-foreground outline-none resize-none focus:ring-2 focus:ring-cyan-400/60"
-            placeholder="Type your story…"
+            placeholder={t("Type your story…")}
             style={{ fontFamily: FONT_FAMILIES[selected.font] }}
           />
 
           <div>
-            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Alignment</h4>
+            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">{t("Alignment")}</h4>
             <div className="flex gap-2">
               {(
                 [
@@ -1550,7 +1558,7 @@ function MobileTextSheet({
           </div>
 
           <div>
-            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Font</h4>
+            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">{t("Font")}</h4>
             <div className="grid grid-cols-4 gap-2">
               {(["sans", "display", "serif", "mono"] as const).map((f) => (
                 <button
@@ -1571,7 +1579,7 @@ function MobileTextSheet({
           </div>
 
           <div>
-            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Color</h4>
+            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">{t("Color")}</h4>
             <div className="flex flex-wrap gap-2">
               {TEXT_COLORS.map((c) => (
                 <button
@@ -1588,7 +1596,7 @@ function MobileTextSheet({
           </div>
 
           <div>
-            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Background</h4>
+            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">{t("Background")}</h4>
             <div className="grid grid-cols-5 gap-2">
               {TEXT_BGS.map((b) => {
                 const isTransparent = b.value === "transparent";
@@ -1628,6 +1636,7 @@ function MobileStickersSheet({
   onClose: () => void;
   onPick: (s: string) => void;
 }) {
+  const t = useT();
   const [q, setQ] = React.useState("");
   const all = React.useMemo(() => STICKER_PACKS.flatMap((p) => p.items.map((i) => ({ pack: p.name, emoji: i }))), []);
   const filtered = q.trim()
@@ -1635,13 +1644,13 @@ function MobileStickersSheet({
     : null;
 
   return (
-    <MobileSheetWrapper title="Stickers" onClose={onClose} height="72vh">
+    <MobileSheetWrapper title={t("Stickers")} onClose={onClose} height="72vh">
       <div className="relative mb-4">
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search stickers"
+          placeholder={t("Search stickers")}
           className="pl-10 h-11 glass-subtle text-foreground placeholder:text-muted-foreground border-border/40"
         />
       </div>
@@ -1650,7 +1659,7 @@ function MobileStickersSheet({
         <div className="grid grid-cols-6 gap-2">
           {filtered.length === 0 ? (
             <p className="col-span-6 text-center text-sm text-muted-foreground py-8">
-              No matches for &quot;{q}&quot;.
+              {t("No matches")} · &quot;{q}&quot;
             </p>
           ) : (
             filtered.map((x, i) => (
@@ -1707,12 +1716,13 @@ function MobileDrawSheet({
   setSize: (v: number[]) => void;
   clear: () => void;
 }) {
+  const t = useT();
   return (
-    <MobileSheetWrapper title="Draw" onClose={onClose} height="58vh">
+    <MobileSheetWrapper title={t("Draw")} onClose={onClose} height="58vh">
       <div className="space-y-6">
         <div>
           <div className="flex justify-between text-sm mb-3 text-foreground">
-            <span>Brush size</span>
+            <span>{t("Brush size")}</span>
             <span className="text-muted-foreground">{size[0]}px</span>
           </div>
           <div className="flex items-center gap-4">
@@ -1731,7 +1741,7 @@ function MobileDrawSheet({
         </div>
 
         <div>
-          <h4 className="text-[11px] uppercase tracking-wider text-muted-foreground mb-3">Color</h4>
+          <h4 className="text-[11px] uppercase tracking-wider text-muted-foreground mb-3">{t("Color")}</h4>
           <div className="grid grid-cols-8 gap-2">
             {TEXT_COLORS.map((c) => (
               <button
@@ -1749,15 +1759,15 @@ function MobileDrawSheet({
 
         <div className="flex gap-2 pt-2">
           <Button onClick={clear} variant="glass" className="flex-1">
-            <Eraser /> Clear
+            <Eraser /> {t("Clear")}
           </Button>
           <Button onClick={onClose} variant="gradient" className="flex-1">
-            Done
+            {t("Done")}
           </Button>
         </div>
 
         <p className="text-[12px] text-muted-foreground text-center">
-          Close the sheet and drag on the canvas to draw.
+          {t("Close the sheet and drag on the canvas to draw.")}
         </p>
       </div>
     </MobileSheetWrapper>
@@ -1773,25 +1783,26 @@ function MobileMusicSheet({
   tracks: typeof MUSIC_TRACKS;
   onPick: (t: Track) => void;
 }) {
+  const t = useT();
   const [q, setQ] = React.useState("");
   const { playingId, play, stop } = useAudioPreview();
   const filtered = tracks.filter(
-    (t) =>
-      t.title.toLowerCase().includes(q.toLowerCase()) ||
-      t.artist.toLowerCase().includes(q.toLowerCase())
+    (tr) =>
+      tr.title.toLowerCase().includes(q.toLowerCase()) ||
+      tr.artist.toLowerCase().includes(q.toLowerCase())
   );
 
   // stop audio when sheet unmounts
   React.useEffect(() => () => stop(), [stop]);
 
   return (
-    <MobileSheetWrapper title="Music" onClose={onClose} height="72vh">
+    <MobileSheetWrapper title={t("Music")} onClose={onClose} height="72vh">
       <div className="relative mb-4">
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
         <Input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search artists, tracks"
+          placeholder={t("Search artists, tracks")}
           className="pl-10 h-11 glass-subtle text-foreground placeholder:text-muted-foreground border-border/40"
         />
       </div>
@@ -1799,17 +1810,17 @@ function MobileMusicSheet({
       <div className="space-y-2">
         {filtered.length === 0 ? (
           <p className="text-center text-sm text-muted-foreground py-8">
-            No tracks match &quot;{q}&quot;.
+            {t("No tracks match")} &quot;{q}&quot;
           </p>
         ) : (
-          filtered.map((t) => {
-            const isPlaying = playingId === t.id;
+          filtered.map((tr) => {
+            const isPlaying = playingId === tr.id;
             return (
               <div
-                key={t.id}
+                key={tr.id}
                 onClick={() => {
                   stop();
-                  onPick(t);
+                  onPick(tr);
                 }}
                 role="button"
                 tabIndex={0}
@@ -1819,15 +1830,15 @@ function MobileMusicSheet({
                   <Music className="size-5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold text-foreground truncate">{t.title}</p>
+                  <p className="text-sm font-semibold text-foreground truncate">{tr.title}</p>
                   <p className="text-xs text-muted-foreground truncate">
-                    {t.artist} · {t.duration}
+                    {tr.artist} · {tr.duration}
                   </p>
                 </div>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    play(t);
+                    play(tr);
                   }}
                   className={cn(
                     "size-9 rounded-full grid place-items-center transition-colors",
@@ -1835,7 +1846,7 @@ function MobileMusicSheet({
                       ? "bg-foreground text-background"
                       : "bg-foreground/10 text-foreground hover:bg-foreground/20"
                   )}
-                  aria-label={isPlaying ? "Stop preview" : "Play 30s preview"}
+                  aria-label={isPlaying ? t("Stop preview") : t("Play 30s preview")}
                 >
                   {isPlaying ? <Pause className="size-3.5" /> : <Play className="size-3.5 ml-0.5" />}
                 </button>
@@ -1846,7 +1857,7 @@ function MobileMusicSheet({
       </div>
 
       <p className="text-[11px] text-muted-foreground text-center mt-4 pb-4">
-        Tap a track to add it to your story. Tap play for a 30-second preview.
+        {t("Tap a track to add it to your story. Tap play for a 30-second preview.")}
       </p>
     </MobileSheetWrapper>
   );
@@ -1865,6 +1876,7 @@ function DesktopMediaPanel({
   onPickOverlay: (src: string) => void;
   onUpload: () => void;
 }) {
+  const t = useT();
   const [tab, setTab] = React.useState<"images" | "gradients">("images");
   const [mode, setMode] = React.useState<"background" | "overlay">("background");
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
@@ -1892,16 +1904,16 @@ function DesktopMediaPanel({
     <div className="space-y-4">
       {/* Tabs: Images / Gradients */}
       <div className="flex p-1 rounded-full glass-subtle">
-        {(["images", "gradients"] as const).map((t) => (
+        {(["images", "gradients"] as const).map((tb) => (
           <button
-            key={t}
-            onClick={() => setTab(t)}
+            key={tb}
+            onClick={() => setTab(tb)}
             className={cn(
               "flex-1 py-1.5 rounded-full text-xs font-semibold capitalize transition-colors",
-              tab === t ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
+              tab === tb ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"
             )}
           >
-            {t}
+            {t(tb === "images" ? "Images" : "Gradients")}
           </button>
         ))}
       </div>
@@ -1943,10 +1955,10 @@ function DesktopMediaPanel({
                 Multi-select toggles in overlay mode. */}
             <div>
               <div className="flex items-center justify-between mb-2">
-                <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground">Library</h4>
+                <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("Library")}</h4>
                 {mode === "overlay" && (
                   <span className="text-[10px] text-muted-foreground">
-                    {selected.size > 0 ? `${selected.size} selected` : "Tap to multi-select"}
+                    {selected.size > 0 ? `${selected.size} ${t("selected")}` : t("Tap to multi-select")}
                   </span>
                 )}
               </div>
@@ -1955,13 +1967,13 @@ function DesktopMediaPanel({
                 <button
                   onClick={onUpload}
                   className="relative aspect-square rounded-xl border-2 border-dashed border-border/60 grid place-items-center hover:border-foreground/40 transition-colors group"
-                  aria-label="Upload an image"
+                  aria-label={t("Upload an image")}
                 >
                   <div className="text-center px-1">
                     <div className="size-8 mx-auto rounded-lg bg-gradient-to-br from-violet-500 to-cyan-400 grid place-items-center shadow-glow group-hover:scale-110 transition-transform">
                       <ImageIcon className="size-4 text-white" />
                     </div>
-                    <p className="text-[10px] mt-1 text-muted-foreground leading-tight">Upload</p>
+                    <p className="text-[10px] mt-1 text-muted-foreground leading-tight">{t("Upload")}</p>
                   </div>
                 </button>
 
@@ -2001,7 +2013,7 @@ function DesktopMediaPanel({
 
               {mode === "overlay" && selected.size > 0 && (
                 <Button onClick={addSelected} variant="gradient" className="w-full mt-3">
-                  Add {selected.size} {selected.size === 1 ? "image" : "images"}
+                  {t("Add")} {selected.size} {selected.size === 1 ? t("image") : t("images")}
                 </Button>
               )}
             </div>
@@ -2040,10 +2052,11 @@ function TextPanel({
   selected: TextLayer | null;
   updateSelected: (p: Partial<TextLayer>) => void;
 }) {
+  const t = useT();
   return (
     <div className="space-y-4">
       <Button onClick={addText} variant="gradient" className="w-full">
-        <TypeIcon /> Add text layer
+        <TypeIcon /> {t("Add text layer")}
       </Button>
 
       {selected && (
@@ -2053,11 +2066,11 @@ function TextPanel({
             onChange={(e) => updateSelected({ text: e.target.value })}
             rows={3}
             className="w-full rounded-xl glass-subtle px-3 py-2 text-sm outline-none resize-none"
-            placeholder="Your story…"
+            placeholder={t("Your story…")}
           />
 
           <div>
-            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Font</h4>
+            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">{t("Font")}</h4>
             <div className="grid grid-cols-4 gap-1">
               {(["sans", "display", "serif", "mono"] as const).map((f) => (
                 <button
@@ -2078,7 +2091,7 @@ function TextPanel({
           </div>
 
           <div>
-            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Color</h4>
+            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">{t("Color")}</h4>
             <div className="flex flex-wrap gap-1.5">
               {TEXT_COLORS.map((c) => (
                 <button
@@ -2095,7 +2108,7 @@ function TextPanel({
           </div>
 
           <div>
-            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Background</h4>
+            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">{t("Background")}</h4>
             <div className="grid grid-cols-5 gap-1.5">
               {TEXT_BGS.map((b) => (
                 <button
@@ -2226,10 +2239,11 @@ function DrawPanel({
   setSize: (v: number[]) => void;
   clear: () => void;
 }) {
+  const t = useT();
   return (
     <div className="space-y-4">
       <div>
-        <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Color</h4>
+        <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">{t("Color")}</h4>
         <div className="flex flex-wrap gap-1.5">
           {TEXT_COLORS.map((c) => (
             <button
@@ -2246,16 +2260,16 @@ function DrawPanel({
       </div>
       <div>
         <div className="flex justify-between text-xs mb-2">
-          <span>Brush size</span>
+          <span>{t("Brush size")}</span>
           <span className="text-muted-foreground">{size[0]}px</span>
         </div>
         <Slider value={size} onValueChange={setSize} min={1} max={32} step={1} />
       </div>
       <Button onClick={clear} variant="glass" className="w-full">
-        <Eraser /> Clear strokes
+        <Eraser /> {t("Clear strokes")}
       </Button>
       <p className="text-[11px] text-muted-foreground">
-        Tap and drag on the canvas to draw.
+        {t("Tap and drag on the canvas to draw.")}
       </p>
     </div>
   );
@@ -2268,19 +2282,20 @@ function MusicPanel({
   tracks: typeof MUSIC_TRACKS;
   onPick: (t: Track) => void;
 }) {
+  const t = useT();
   const { playingId, play, stop } = useAudioPreview();
   React.useEffect(() => () => stop(), [stop]);
 
   return (
     <div className="space-y-2">
-      {tracks.map((t) => {
-        const isPlaying = playingId === t.id;
+      {tracks.map((tr) => {
+        const isPlaying = playingId === tr.id;
         return (
           <div
-            key={t.id}
+            key={tr.id}
             onClick={() => {
               stop();
-              onPick(t);
+              onPick(tr);
             }}
             role="button"
             tabIndex={0}
@@ -2290,15 +2305,15 @@ function MusicPanel({
               <Music className="size-4" />
             </div>
             <div className="flex-1 min-w-0 text-left">
-              <p className="text-sm font-medium truncate">{t.title}</p>
+              <p className="text-sm font-medium truncate">{tr.title}</p>
               <p className="text-[10px] text-muted-foreground truncate">
-                {t.artist} · {t.duration}
+                {tr.artist} · {tr.duration}
               </p>
             </div>
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                play(t);
+                play(tr);
               }}
               className={cn(
                 "size-8 rounded-full grid place-items-center transition-colors shrink-0",
@@ -2306,7 +2321,7 @@ function MusicPanel({
                   ? "bg-foreground text-background"
                   : "bg-foreground/10 text-foreground hover:bg-foreground/20"
               )}
-              aria-label={isPlaying ? "Stop preview" : "Play 30s preview"}
+              aria-label={isPlaying ? t("Stop preview") : t("Play 30s preview")}
             >
               {isPlaying ? <Pause className="size-3" /> : <Play className="size-3 ml-0.5" />}
             </button>
@@ -2326,11 +2341,12 @@ function Inspector({
   update: (p: Partial<Layer>) => void;
   remove: () => void;
 }) {
+  const t = useT();
   return (
     <div className="space-y-4">
       <div>
         <div className="flex justify-between text-xs mb-1.5">
-          <span>Scale</span>
+          <span>{t("Scale")}</span>
           <span className="text-muted-foreground">{Math.round(layer.scale * 100)}%</span>
         </div>
         <Slider
@@ -2343,7 +2359,7 @@ function Inspector({
       </div>
       <div>
         <div className="flex justify-between text-xs mb-1.5">
-          <span>Rotate</span>
+          <span>{t("Rotate")}</span>
           <span className="text-muted-foreground">{layer.rotate}°</span>
         </div>
         <Slider
@@ -2355,7 +2371,7 @@ function Inspector({
         />
       </div>
       <Button variant="glass" className="w-full text-rose-400" onClick={remove}>
-        <Trash2 /> Delete layer
+        <Trash2 /> {t("Delete layer")}
       </Button>
     </div>
   );
@@ -2476,6 +2492,7 @@ function MobileToolbar({
   onToggleFilters: () => void;
   onBack: () => void;
 }) {
+  const t = useT();
   const sheets: { id: Exclude<MobileSheet, null>; icon: React.ReactNode; label: string }[] = [
     { id: "media", icon: <ImageIcon className="size-[18px]" />, label: "Media" },
     { id: "text", icon: <TypeIcon className="size-[18px]" />, label: "Text" },
@@ -2497,7 +2514,7 @@ function MobileToolbar({
           )}
         >
           {it.icon}
-          {it.label}
+          {t(it.label)}
         </button>
       ))}
       <button
@@ -2511,7 +2528,7 @@ function MobileToolbar({
         )}
       >
         <Palette className="size-[18px]" />
-        Filter
+        {t("Filter")}
       </button>
     </div>
   );

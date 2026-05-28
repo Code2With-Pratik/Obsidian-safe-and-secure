@@ -47,7 +47,6 @@ import { useChatThemeStore } from "@/store/use-chat-theme-store";
 import { useMessageSelectionStore } from "@/store/use-message-selection-store";
 import { copyText } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
-import { UserProfileSheet } from "./user-profile-sheet";
 import { ChatThemeDialog } from "./chat-theme-dialog";
 import type { Chat } from "@/types";
 
@@ -80,7 +79,12 @@ export function ChatHeader({
   const clearSelection = useMessageSelectionStore((s) => s.clear);
   const removeMessages = useChatStore((s) => s.removeMessages);
   const selectionActive = selectionCount > 0;
-  const [profileOpen, setProfileOpen] = React.useState(false);
+  const rightPanel = useUIStore((s) => s.rightPanel);
+  const setRightPanel = useUIStore((s) => s.setRightPanel);
+  // Clicking the header name/avatar (or "View profile") toggles the docked
+  // details panel — the single profile surface. The old full-screen overlay
+  // sheet has been removed to avoid two competing profile UIs.
+  const openProfile = () => setRightPanel(rightPanel === "details" ? null : "details");
   const [themeOpen, setThemeOpen] = React.useState(false);
 
   const startCall = (video: boolean) => {
@@ -221,7 +225,7 @@ export function ChatHeader({
           </Link>
 
           <button
-            onClick={() => setProfileOpen(true)}
+            onClick={openProfile}
             className="flex items-center gap-3 flex-1 min-w-0 hover:bg-foreground/[0.03] -ml-2 pl-2 py-1.5 rounded-xl transition group"
           >
             <AnimatedAvatar
@@ -304,7 +308,7 @@ export function ChatHeader({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
 
-            <DropdownMenuItem onSelect={() => setProfileOpen(true)}>
+            <DropdownMenuItem onSelect={() => setRightPanel("details")}>
               <Users />
               {t("View profile")}
               <DropdownMenuShortcut>⌘P</DropdownMenuShortcut>
@@ -372,7 +376,6 @@ export function ChatHeader({
         </DropdownMenu>
       </div>
 
-      <UserProfileSheet chat={chat} open={profileOpen} onOpenChange={setProfileOpen} />
       <ChatThemeDialog chatId={chat.id} open={themeOpen} onOpenChange={setThemeOpen} />
     </div>
   );

@@ -4,6 +4,7 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { Sparkles, Users } from "lucide-react";
+import { useT } from "@/lib/i18n";
 
 interface Props {
   open: boolean;
@@ -17,6 +18,7 @@ interface Props {
  * interests overlap with theirs. Auto-dismisses after a few seconds.
  */
 export function InterestMatchPopup({ open, count, communityName, onClose }: Props) {
+  const t = useT();
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
 
@@ -84,7 +86,7 @@ export function InterestMatchPopup({ open, count, communityName, onClose }: Prop
                   transition={{ delay: 0.15 }}
                   className="font-display text-2xl font-semibold mt-4 text-white"
                 >
-                  You're in.
+                  {t("You're in.")}
                 </motion.h2>
 
                 {count > 0 ? (
@@ -105,10 +107,10 @@ export function InterestMatchPopup({ open, count, communityName, onClose }: Prop
                       >
                         {count.toLocaleString()}
                       </motion.span>
-                      <span className="opacity-90">people match your interests</span>
+                      <span className="opacity-90">{t("people match your interests")}</span>
                     </span>
                     <span className="block text-[12px] text-white/70 mt-1">
-                      in {communityName}
+                      {t("in")} {communityName}
                     </span>
                   </motion.p>
                 ) : (
@@ -118,8 +120,8 @@ export function InterestMatchPopup({ open, count, communityName, onClose }: Prop
                     transition={{ delay: 0.25 }}
                     className="mt-2 text-white/90 text-sm"
                   >
-                    Welcome to <span className="font-semibold">{communityName}</span>.
-                    Lurk, learn, post when you feel it.
+                    {t("Welcome to")} <span className="font-semibold">{communityName}</span>.{" "}
+                    {t("Lurk, learn, post when you feel it.")}
                   </motion.p>
                 )}
               </div>

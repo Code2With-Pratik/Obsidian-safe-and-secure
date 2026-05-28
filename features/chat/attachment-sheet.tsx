@@ -16,6 +16,7 @@ import {
   X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 export type AttachmentKind =
   | "photo"
@@ -54,6 +55,7 @@ interface Props {
 }
 
 export function AttachmentSheet({ open, onClose, onPick }: Props) {
+  const t = useT();
   const [mounted, setMounted] = React.useState(false);
 
   React.useEffect(() => {
@@ -102,10 +104,10 @@ export function AttachmentSheet({ open, onClose, onPick }: Props) {
               <div className="flex items-center justify-between px-5 pt-1 md:pt-4 pb-3">
                 <div>
                   <h3 className="font-display font-semibold tracking-tight text-lg">
-                    Attach to message
+                    {t("Attach to message")}
                   </h3>
                   <p className="text-[11px] text-muted-foreground">
-                    Drag down or tap outside to close
+                    {t("Drag down or tap outside to close")}
                   </p>
                 </div>
                 <button
@@ -136,14 +138,14 @@ export function AttachmentSheet({ open, onClose, onPick }: Props) {
                     >
                       {it.icon}
                     </span>
-                    <span className="text-xs font-medium">{it.label}</span>
+                    <span className="text-xs font-medium">{t(it.label)}</span>
                   </motion.button>
                 ))}
               </div>
 
               <div className="px-5 pb-2 pt-1 border-t border-white/10 text-center">
                 <p className="text-[10px] text-muted-foreground">
-                  End-to-end encrypted · drag a file anywhere to attach instantly
+                  {t("End-to-end encrypted · drag a file anywhere to attach instantly")}
                 </p>
               </div>
             </div>

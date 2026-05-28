@@ -89,12 +89,12 @@ export default function DiscoverPage() {
               <span className="neon-text">{t("Discover")}</span>
             </h1>
             <p className="text-muted-foreground mt-2 max-w-xl">
-              Communities, rooms and people tuned to you — host your own world or jump into someone else's.
+              {t("Communities, rooms and people tuned to you — host your own world or jump into someone else's.")}
             </p>
           </div>
           <CreateCommunityDialog>
             <Button variant="gradient" size="lg">
-              <Plus /> Create community
+              <Plus /> {t("Create community")}
             </Button>
           </CreateCommunityDialog>
         </motion.div>
@@ -105,10 +105,10 @@ export default function DiscoverPage() {
             value={q}
             onChange={(e) => setQ(e.target.value)}
             className="pl-9 h-12 text-base"
-            placeholder="Try 'design', 'synthwave', 'ai agents'…"
+            placeholder={t("Try 'design', 'synthwave', 'ai agents'…")}
           />
           <Badge variant="cyan" className="absolute right-3 top-1/2 -translate-y-1/2">
-            <Sparkles className="size-3" /> AI search
+            <Sparkles className="size-3" /> {t("AI search")}
           </Badge>
         </div>
 
@@ -126,7 +126,7 @@ export default function DiscoverPage() {
                     : "glass-subtle text-muted-foreground hover:text-foreground"
                 )}
               >
-                {f.label}
+                {t(f.label)}
               </button>
             ))}
           </div>
@@ -135,19 +135,19 @@ export default function DiscoverPage() {
             <CommunityGridEmpty
               title={
                 filter === "joined"
-                  ? "You haven't joined any yet"
+                  ? t("You haven't joined any yet")
                   : filter === "mine"
-                    ? "You haven't created any communities"
+                    ? t("You haven't created any communities")
                     : filter === "trending"
-                      ? "Nothing trending here"
-                      : "No matches"
+                      ? t("Nothing trending here")
+                      : t("No matches")
               }
               body={
                 filter === "joined"
-                  ? "Browse the All tab and tap Join on a community that vibes."
+                  ? t("Browse the All tab and tap Join on a community that vibes.")
                   : filter === "mine"
-                    ? "Hit Create community to launch your own."
-                    : "Try a different keyword or filter."
+                    ? t("Hit Create community to launch your own.")
+                    : t("Try a different keyword or filter.")
               }
             />
           ) : (

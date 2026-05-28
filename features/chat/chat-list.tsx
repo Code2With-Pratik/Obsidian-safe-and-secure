@@ -253,7 +253,7 @@ export function ChatList({
               transition={{ duration: 0.2 }}
               className="text-3xl font-display font-semibold tracking-tight"
             >
-              Chat
+              {t("Chat")}
             </motion.div>
           )}
         </AnimatePresence>
@@ -278,31 +278,31 @@ export function ChatList({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="!w-56">
               <DropdownMenuLabel className="!text-[10px]">
-                {view === "community" ? "Community options" : "Chat options"}
+                {view === "community" ? t("Community options") : t("Chat options")}
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               {view === "community" ? (
                 <DropdownMenuItem onSelect={() => setCreateCommunityOpen(true)}>
                   <Pencil />
-                  New community
+                  {t("New community")}
                 </DropdownMenuItem>
               ) : (
                 <DropdownMenuItem onSelect={() => setGroupOpen(true)}>
                   <Pencil />
-                  New group
+                  {t("New group")}
                 </DropdownMenuItem>
               )}
               <DropdownMenuItem onSelect={markAllRead}>
                 <CheckCheck />
-                Mark all as read
+                {t("Mark all as read")}
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => setFilter("favorites")}>
                 <Star />
-                Favourites
+                {t("Favourites")}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={() => setFilter("all")}>
-                All chats
+                {t("All chats")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onSelect={() => {
@@ -311,7 +311,7 @@ export function ChatList({
                 }}
                 className="text-rose-400 focus:text-rose-400"
               >
-                Reset chats (demo)
+                {t("Reset chats (demo)")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -320,7 +320,7 @@ export function ChatList({
 
       {/* Filter chips — swap based on the active view. */}
       {!isEmpty && view === "messages" && (
-        <div className="flex gap-1.5 px-4 mt-2 overflow-x-auto no-scrollbar">
+        <div className="flex gap-1.5 px-4 mt-4 overflow-x-auto no-scrollbar">
           {(
             [
               { id: "all", label: "All" },
@@ -346,7 +346,7 @@ export function ChatList({
         </div>
       )}
       {view === "community" && (
-        <div className="flex gap-1.5 px-4 mt-2 overflow-x-auto no-scrollbar">
+        <div className="flex gap-1.5 px-4 mt-4 overflow-x-auto no-scrollbar">
           {COMMUNITY_FILTERS.map((f) => (
             <button
               key={f.id}

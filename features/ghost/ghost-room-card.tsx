@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { Check, Flame, Lock, Sparkles, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useGhostStore } from "@/store/use-ghost-store";
+import { useT } from "@/lib/i18n";
 import type { GhostRoom } from "@/types";
 
 export function GhostRoomCard({
@@ -15,6 +16,7 @@ export function GhostRoomCard({
   room: GhostRoom;
   onJoin?: (room: GhostRoom) => void;
 }) {
+  const t = useT();
   const router = useRouter();
   const joined = useGhostStore((s) => s.joinedIds.includes(room.id));
   const joinRoom = useGhostStore((s) => s.joinRoom);
@@ -48,22 +50,22 @@ export function GhostRoomCard({
       <div className="relative p-5 min-h-[220px] flex flex-col text-white">
         <div className="flex items-center justify-between">
           <span className="text-[10px] tracking-widest uppercase opacity-80">
-            ghost room · {room.id}
+            {t("ghost room")} · {room.id}
           </span>
           <div className="flex gap-1.5">
             {room.hot && (
               <span className="text-[10px] inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-rose-500/30 backdrop-blur">
-                <Flame className="size-2.5" /> trending
+                <Flame className="size-2.5" /> {t("trending")}
               </span>
             )}
             {room.isLocked && (
               <span className="text-[10px] inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-black/30 backdrop-blur">
-                <Lock className="size-2.5" /> private
+                <Lock className="size-2.5" /> {t("private")}
               </span>
             )}
             {joined && (
               <span className="text-[10px] inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-emerald-500/30 backdrop-blur">
-                <Check className="size-2.5" /> joined
+                <Check className="size-2.5" /> {t("joined")}
               </span>
             )}
           </div>
@@ -85,7 +87,7 @@ export function GhostRoomCard({
               ))}
             </div>
             <div className="flex items-center gap-1.5 mt-2 text-[11px] opacity-90">
-              <Users className="size-3" /> {room.members}/{room.capacity} ghosts inside
+              <Users className="size-3" /> {room.members}/{room.capacity} {t("ghosts inside")}
             </div>
           </div>
           <Button
@@ -99,15 +101,15 @@ export function GhostRoomCard({
           >
             {joined ? (
               <>
-                <Check className="size-3.5" /> Joined
+                <Check className="size-3.5" /> {t("Joined")}
               </>
             ) : room.isLocked ? (
               <>
-                <Lock className="size-3.5" /> Enter PIN
+                <Lock className="size-3.5" /> {t("Enter PIN")}
               </>
             ) : (
               <>
-                <Sparkles className="size-3.5" /> Join
+                <Sparkles className="size-3.5" /> {t("Join")}
               </>
             )}
           </Button>

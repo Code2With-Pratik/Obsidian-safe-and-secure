@@ -59,20 +59,20 @@ export default function GhostRoomsPage() {
             <div>
               <div className="inline-flex items-center gap-2 px-3 py-1 glass-subtle rounded-full text-xs mb-3">
                 <Ghost className="size-3 text-violet-400" />
-                <span>Anonymous · ephemeral · safe</span>
+                <span>{t("Anonymous · ephemeral · safe")}</span>
               </div>
               <h1 className="text-4xl md:text-5xl font-display font-semibold tracking-tight">
                 <span className="neon-text">{t("Ghost Rooms")}</span>
               </h1>
               <p className="text-muted-foreground mt-2 max-w-xl">
-                Step into temporary spaces where identity vanishes and conversation gets real.
+                {t("Step into temporary spaces where identity vanishes and conversation gets real.")}
               </p>
             </div>
 
             <div className="flex flex-wrap gap-2">
               <CreateGhostDialog>
                 <Button variant="gradient" size="lg">
-                  <Plus /> Create room
+                  <Plus /> {t("Create room")}
                 </Button>
               </CreateGhostDialog>
               <Button
@@ -80,7 +80,7 @@ export default function GhostRoomsPage() {
                 size="lg"
                 onClick={() => setJoinByPinOpen(true)}
               >
-                <KeyRound /> Join with PIN
+                <KeyRound /> {t("Join with PIN")}
               </Button>
             </div>
           </motion.div>
@@ -89,23 +89,23 @@ export default function GhostRoomsPage() {
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <Input
-                placeholder="Search ghost rooms"
+                placeholder={t("Search ghost rooms")}
                 className="pl-9"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
               />
             </div>
             <Button variant="glass" size="default" className="hidden md:inline-flex">
-              <Share2 /> Share my PIN
+              <Share2 /> {t("Share my PIN")}
             </Button>
           </div>
 
           <Tabs defaultValue="trending" className="mt-6">
             <TabsList>
-              <TabsTrigger value="trending">Trending</TabsTrigger>
-              <TabsTrigger value="new">New</TabsTrigger>
-              <TabsTrigger value="mine">My rooms</TabsTrigger>
-              <TabsTrigger value="joined">Joined</TabsTrigger>
+              <TabsTrigger value="trending">{t("Trending")}</TabsTrigger>
+              <TabsTrigger value="new">{t("New")}</TabsTrigger>
+              <TabsTrigger value="mine">{t("My rooms")}</TabsTrigger>
+              <TabsTrigger value="joined">{t("Joined")}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="trending" className="mt-6">
@@ -115,7 +115,7 @@ export default function GhostRoomsPage() {
               {newest.length > 0 ? (
                 <RoomGrid rooms={newest} onJoin={handleJoinClick} />
               ) : (
-                <EmptyHint title="No new rooms yet" body="Be the first to open a fresh ghost room tonight." />
+                <EmptyHint title={t("No new rooms yet")} body={t("Be the first to open a fresh ghost room tonight.")} />
               )}
             </TabsContent>
             <TabsContent value="mine" className="mt-6">
@@ -123,8 +123,8 @@ export default function GhostRoomsPage() {
                 <RoomGrid rooms={mine} onJoin={handleJoinClick} />
               ) : (
                 <EmptyHint
-                  title="You have no rooms"
-                  body="Create one and share the PIN with the people who matter."
+                  title={t("You have no rooms")}
+                  body={t("Create one and share the PIN with the people who matter.")}
                 />
               )}
             </TabsContent>
@@ -133,8 +133,8 @@ export default function GhostRoomsPage() {
                 <RoomGrid rooms={joined} onJoin={handleJoinClick} />
               ) : (
                 <EmptyHint
-                  title="Nothing joined yet"
-                  body="Hop into a trending room or punch in a PIN someone shared."
+                  title={t("Nothing joined yet")}
+                  body={t("Hop into a trending room or punch in a PIN someone shared.")}
                 />
               )}
             </TabsContent>

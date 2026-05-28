@@ -12,6 +12,7 @@ import {
   X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import {
   fetchKlipyGifs,
@@ -60,6 +61,7 @@ interface Props {
 }
 
 export function ExpressionsPicker({ open, onClose, onPick, anchorRef }: Props) {
+  const t = useT();
   const [mounted, setMounted] = React.useState(false);
   const [tab, setTab] = React.useState<Tab>("emoji");
   const [q, setQ] = React.useState("");
@@ -254,26 +256,26 @@ export function ExpressionsPicker({ open, onClose, onPick, anchorRef }: Props) {
             {/* tab pills */}
             <div className="px-3 pt-3 pb-2 flex items-center gap-1.5">
               <div className="flex-1 flex items-center gap-1 p-1 rounded-full glass-subtle">
-                {TABS.map((t) => (
+                {TABS.map((tb) => (
                   <button
-                    key={t.id}
-                    onClick={() => setTab(t.id)}
+                    key={tb.id}
+                    onClick={() => setTab(tb.id)}
                     className={cn(
                       "flex-1 inline-flex items-center justify-center gap-1.5 h-8 rounded-full text-xs font-medium transition",
-                      tab === t.id
+                      tab === tb.id
                         ? "bg-foreground text-background"
                         : "text-muted-foreground hover:text-foreground"
                     )}
                   >
-                    {t.icon}
-                    {t.label}
+                    {tb.icon}
+                    {t(tb.label)}
                   </button>
                 ))}
               </div>
               <button
                 onClick={onClose}
                 className="size-8 rounded-full grid place-items-center hover:bg-foreground/5"
-                aria-label="Close"
+                aria-label={t("Close")}
               >
                 <X className="size-4" />
               </button>
@@ -287,7 +289,15 @@ export function ExpressionsPicker({ open, onClose, onPick, anchorRef }: Props) {
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
                   autoFocus
-                  placeholder={`Search ${tab === "emoji" ? "emoji" : tab === "gif" ? "GIFs" : tab === "sticker" ? "stickers" : "memes"}`}
+                  placeholder={
+                    tab === "emoji"
+                      ? t("Search emoji")
+                      : tab === "gif"
+                        ? t("Search GIFs")
+                        : tab === "sticker"
+                          ? t("Search stickers")
+                          : t("Search memes")
+                  }
                   className="w-full h-9 pl-9 pr-3 rounded-full glass border border-border/60 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground/70 focus:ring-2 focus:ring-cyan-400/60"
                 />
               </div>
@@ -350,8 +360,8 @@ export function ExpressionsPicker({ open, onClose, onPick, anchorRef }: Props) {
 
             {/* footer hint */}
             <div className="border-t border-white/10 px-4 py-1 text-[10px] text-muted-foreground flex justify-between">
-              <span>{tab === "emoji" ? "Tap to insert" : "Tap to send"}</span>
-              <span className="hidden md:inline">Esc to close</span>
+              <span>{tab === "emoji" ? t("Tap to insert") : t("Tap to send")}</span>
+              <span className="hidden md:inline">{t("Esc to close")}</span>
             </div>
           </motion.div>
         </>
@@ -377,6 +387,7 @@ function EmojiPanel({
   setActiveId: (id: string) => void;
   onPick: (value: string) => void;
 }) {
+  const t = useT();
   const scrollerRef = React.useRef<HTMLDivElement>(null);
   const sectionRefs = React.useRef<Record<string, HTMLDivElement | null>>({});
 
@@ -393,7 +404,7 @@ function EmojiPanel({
       >
         {categories.length === 0 && (
           <p className="text-center text-xs text-muted-foreground py-6">
-            No emoji matches.
+            {t("No emoji matches.")}
           </p>
         )}
         {categories.map((cat, catIdx) => (
@@ -489,17 +500,18 @@ function GifPanel({
   error?: boolean;
   onPick: (gif: GifItem) => void;
 }) {
+  const t = useT();
   return (
     <div className="flex-1 overflow-y-auto no-scrollbar px-3 pb-3 pt-1">
       {error ? (
         <p className="text-center text-xs text-muted-foreground py-6">
-          Couldn&apos;t reach Klipy — check your connection.
+          {t("Couldn't reach Klipy — check your connection.")}
         </p>
       ) : loading && gifs.length === 0 ? (
         <GifSkeletonGrid />
       ) : gifs.length === 0 ? (
         <p className="text-center text-xs text-muted-foreground py-6">
-          No GIFs match.
+          {t("No GIFs match.")}
         </p>
       ) : (
         <div className="columns-2 gap-2 [column-fill:_balance]">
@@ -672,11 +684,12 @@ function StickerPanel({
   packs: typeof STICKER_PACKS;
   onPick: (sticker: { id: string; emoji: string; gradient: string }) => void;
 }) {
+  const t = useT();
   return (
     <div className="flex-1 overflow-y-auto no-scrollbar px-3 pb-3 pt-1">
       {packs.length === 0 ? (
         <p className="text-center text-xs text-muted-foreground py-6">
-          No stickers match.
+          {t("No stickers match.")}
         </p>
       ) : (
         packs.map((p) => (
@@ -727,11 +740,12 @@ function MemePanel({
   error?: boolean;
   onPick: (meme: MemeItem) => void;
 }) {
+  const t = useT();
   return (
     <div className="flex-1 overflow-y-auto no-scrollbar px-3 pb-3 pt-1">
       {error ? (
         <p className="text-center text-xs text-muted-foreground py-6">
-          Couldn&apos;t reach Klipy — check your connection.
+          {t("Couldn't reach Klipy — check your connection.")}
         </p>
       ) : loading && memes.length === 0 ? (
         <div className="grid grid-cols-2 gap-2">
@@ -744,7 +758,7 @@ function MemePanel({
         </div>
       ) : memes.length === 0 ? (
         <p className="text-center text-xs text-muted-foreground py-6">
-          No memes match.
+          {t("No memes match.")}
         </p>
       ) : (
         <div className="grid grid-cols-2 gap-2">

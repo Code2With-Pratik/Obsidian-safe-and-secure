@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
 import { stories, users, currentUser } from "@/lib/mock-data";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export function StoriesRail() {
@@ -21,6 +22,7 @@ export function StoriesRail() {
 }
 
 function CreateTile() {
+  const t = useT();
   return (
     <Link
       href="/stories/create"
@@ -49,7 +51,7 @@ function CreateTile() {
           </div>
         </div>
         <span className="mt-2 text-[11px] font-semibold text-white/95 text-center leading-tight">
-          Start a<br />story
+          {t("Start a story")}
         </span>
       </motion.div>
     </Link>

@@ -7,6 +7,7 @@ import { ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { EMPTY_LIST, useGhostStore, type GhostIdentity } from "@/store/use-ghost-store";
 import { GhostCallTile } from "./ghost-call-tile";
+import { useT } from "@/lib/i18n";
 
 const EMPTY_MEMBERS = EMPTY_LIST as readonly GhostIdentity[];
 
@@ -27,6 +28,7 @@ export function GhostCallStage({
   participantsOpen,
   onToggleParticipants
 }: Props) {
+  const t = useT();
   const members = useGhostStore((s) => s.membersByRoom[roomId] ?? EMPTY_MEMBERS);
   const myIdentity = useGhostStore((s) => s.myIdentityByRoom[roomId]);
   const hostId = useGhostStore((s) => s.hostByRoom[roomId]);
@@ -40,7 +42,7 @@ export function GhostCallStage({
   if (!pinned) {
     return (
       <div className="h-full grid place-items-center text-muted-foreground">
-        Waiting for someone to join…
+        {t("Waiting for someone to join…")}
       </div>
     );
   }
@@ -124,11 +126,11 @@ export function GhostCallStage({
                 a drawer grip. Tap → opens the fullscreen participants sheet. */}
             <button
               onClick={onToggleParticipants}
-              aria-label={`Show all ${members.length} participants`}
+              aria-label={`${t("Show all")} ${members.length} ${t("participants")}`}
               className="absolute -top-3 left-1/2 -translate-x-1/2 z-10 inline-flex items-center gap-1 h-7 px-2.5 rounded-full glass-strong border border-white/15 text-[11px] font-medium text-white shadow-floating hover:bg-foreground/20 transition"
             >
               <ChevronUp className="size-3.5" />
-              All {members.length}
+              {t("All")} {members.length}
             </button>
             <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1 pt-1">
               {others.map((m) => (
@@ -162,15 +164,15 @@ export function GhostCallStage({
             <header className="h-14 flex items-center gap-2 px-3 border-b border-border/40">
               <button
                 onClick={onToggleParticipants}
-                aria-label="Close participants"
+                aria-label={t("Close participants")}
                 className="size-9 rounded-full bg-foreground/10 grid place-items-center text-white"
               >
                 <ChevronDown className="size-5" />
               </button>
               <div className="min-w-0">
-                <p className="font-semibold text-sm">All participants</p>
+                <p className="font-semibold text-sm">{t("All participants")}</p>
                 <p className="text-[11px] text-muted-foreground">
-                  {members.length} ghost{members.length === 1 ? "" : "s"} on stage
+                  {members.length} {members.length === 1 ? t("ghost") : t("ghosts")} {t("on stage")}
                 </p>
               </div>
             </header>

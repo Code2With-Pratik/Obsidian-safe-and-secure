@@ -15,11 +15,21 @@ export default function ChatRoom() {
   const chats = useChatStore((s) => s.chats);
   const setActive = useChatStore((s) => s.setActiveChat);
   const right = useUIStore((s) => s.rightPanel);
+  const setRight = useUIStore((s) => s.setRightPanel);
   const chat = chats.find((c) => c.id === id);
 
   React.useEffect(() => {
     if (id) setActive(id);
   }, [id, setActive]);
+
+  // The details panel docks beside the thread on desktop, so it opens by
+  // default there. On mobile/tablet it's a full-screen overlay that would
+  // cover the chat, so it must stay closed until the user taps the header.
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (window.matchMedia("(min-width: 1280px)").matches) setRight("details");
+    else setRight(null);
+  }, [id, setRight]);
 
   if (!chat) return notFound();
 

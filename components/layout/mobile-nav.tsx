@@ -11,6 +11,7 @@ import {
   Folder,
   User2
 } from "lucide-react";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 const items = [
@@ -23,6 +24,7 @@ const items = [
 
 export function MobileNav() {
   const pathname = usePathname();
+  const t = useT();
 
   return (
     <nav className="md:hidden fixed bottom-3 left-3 right-3 z-40 rounded-3xl glass glass-specular px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
@@ -46,7 +48,7 @@ export function MobileNav() {
                 />
               )}
               <it.icon className="relative size-5" />
-              <span className="relative text-[10px] font-medium">{it.label}</span>
+              <span className="relative text-[10px] font-medium">{t(it.label)}</span>
             </Link>
           );
         })}
