@@ -88,6 +88,7 @@ export interface FontOption {
 
 export const DEFAULT_FONT = "default";
 
+// Listed alphabetically by label (A→Z); new fonts stay sorted automatically.
 export const FONT_OPTIONS: FontOption[] = [
   { id: DEFAULT_FONT, label: "Inter (Default)", family: "var(--font-sans)" },
   { id: "poppins", label: "Poppins", family: poppins.style.fontFamily },
@@ -97,4 +98,4 @@ export const FONT_OPTIONS: FontOption[] = [
   { id: "doto", label: "Doto", family: doto.style.fontFamily },
   { id: "grape-nuts", label: "Grape Nuts", family: grapeNuts.style.fontFamily },
   { id: "satisfy", label: "Satisfy", family: satisfy.style.fontFamily }
-];
+].sort((a, b) => a.label.localeCompare(b.label));

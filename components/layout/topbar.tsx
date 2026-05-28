@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useUIStore } from "@/store/use-ui-store";
 import { NotificationCenter } from "@/components/notifications/notification-center";
+import { NovaMascot } from "@/components/nova-mascot";
 import { useT } from "@/lib/i18n";
 
 export function Topbar() {
@@ -36,7 +37,10 @@ export function Topbar() {
         </div>
       </div>
 
-      <div className="md:hidden flex-1 font-display font-semibold tracking-tight">Obsidian</div>
+      <div className="md:hidden flex flex-1 items-center gap-2">
+        <NovaMascot size={32} className="shrink-0" />
+        <span className="font-display text-xl font-semibold tracking-tight">Obsidian</span>
+      </div>
 
       <div className="ml-auto flex items-center gap-1.5">
         <Tooltip>

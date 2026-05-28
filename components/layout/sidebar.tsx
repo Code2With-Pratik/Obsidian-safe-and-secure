@@ -100,11 +100,11 @@ export function Sidebar() {
                   transition={{ duration: 0.18 }}
                   className="flex flex-col whitespace-nowrap"
                 >
-                  <span className="font-display text-base font-semibold leading-tight tracking-tight">
+                  <span className="font-display text-xl font-semibold leading-tight tracking-tight">
                     Obsidian
                   </span>
                   <span className="text-[10px] text-muted-foreground -mt-0.5">
-                    comms · OS
+                    secure and safe
                   </span>
                 </motion.div>
               )}
@@ -180,9 +180,18 @@ export function Sidebar() {
             className={cn(
               // Same fixed-offset approach as the nav items — px-3 in both
               // states so the gear icon doesn't shake when the rail collapses.
-              "flex items-center gap-3 rounded-xl px-3 py-2.5 text-foreground hover:bg-foreground/[0.04] transition"
+              "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors",
+              pathname?.startsWith("/settings")
+                ? "bg-foreground/[0.06] text-foreground"
+                : "text-foreground hover:bg-foreground/[0.04]"
             )}
           >
+            {pathname?.startsWith("/settings") && (
+              <motion.span
+                layoutId="nav-active"
+                className="absolute left-0 top-2 bottom-2 w-1 bg-gradient-to-b from-violet-400 to-cyan-400"
+              />
+            )}
             <Settings className="size-[22px] shrink-0 text-foreground" />
             <AnimatePresence initial={false}>
               {expanded && (

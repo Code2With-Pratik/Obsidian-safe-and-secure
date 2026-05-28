@@ -179,17 +179,17 @@ function SettingsContent() {
               key={sec.id}
               onClick={() => openSection(sec.id)}
               className={cn(
-                "w-full flex items-center gap-4 md:gap-3 px-4 py-4 md:px-3 md:py-2.5 rounded-2xl md:rounded-xl text-[17px] md:text-sm font-medium md:font-normal transition",
+                "w-full flex items-center gap-3 px-4 py-4 md:px-3 md:py-2.5 rounded-2xl md:rounded-xl text-[17px] md:text-sm font-medium md:font-normal transition",
                 section === sec.id
                   ? "md:bg-foreground/10 md:text-foreground text-foreground hover:bg-foreground/[0.04]"
                   : "text-muted-foreground hover:text-foreground hover:bg-foreground/[0.04]"
               )}
             >
               <sec.icon className="size-[22px] md:size-4 shrink-0" />
-              {t(sec.label)}
+              <span className="flex-1 text-left leading-none">{t(sec.label)}</span>
               <ChevronRight
                 className={cn(
-                  "ml-auto",
+                  "shrink-0",
                   section === sec.id
                     ? "md:inline hidden md:size-3"
                     : "md:hidden inline size-4 opacity-50"
@@ -202,10 +202,10 @@ function SettingsContent() {
           <div className="my-2 border-t border-border/40" />
           <button
             onClick={handleSignOut}
-            className="w-full flex items-center gap-4 md:gap-3 px-4 py-4 md:px-3 md:py-2.5 rounded-2xl md:rounded-xl text-[17px] md:text-sm font-medium md:font-normal text-rose-500 hover:bg-rose-500/10 transition"
+            className="w-full flex items-center gap-3 px-4 py-4 md:px-3 md:py-2.5 rounded-2xl md:rounded-xl text-[17px] md:text-sm font-medium md:font-normal text-rose-500 hover:bg-rose-500/10 transition"
           >
             <LogOut className="size-[22px] md:size-4 shrink-0" />
-            {t("Sign out")}
+            <span className="flex-1 text-left leading-none">{t("Sign out")}</span>
           </button>
         </ScrollArea>
       </aside>
