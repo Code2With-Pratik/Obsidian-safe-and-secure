@@ -11,6 +11,7 @@ import {
   useWhiteboardStore,
   type NoteElement
 } from "@/store/use-whiteboard-store";
+import { useT } from "@/lib/i18n";
 
 /**
  * A draggable HTML sticky note positioned in canvas-space. The parent layer
@@ -18,6 +19,7 @@ import {
  * canvas coordinates and update those values on drag.
  */
 export function StickyNote({ note }: { note: NoteElement }) {
+  const t = useT();
   const updateElement = useWhiteboardStore((s) => s.updateElement);
   const removeElement = useWhiteboardStore((s) => s.removeElement);
   const translateElements = useWhiteboardStore((s) => s.translateElements);
@@ -186,8 +188,8 @@ export function StickyNote({ note }: { note: NoteElement }) {
           so it shares the same UX as the action chips above. */}
       {tool === "select" && (
         <button
-          aria-label="Drag to connect"
-          title="Drag to another note to connect"
+          aria-label={t("Drag to connect")}
+          title={t("Drag to another note to connect")}
           onPointerDown={(e) => {
             e.stopPropagation();
             e.preventDefault();
@@ -221,7 +223,7 @@ export function StickyNote({ note }: { note: NoteElement }) {
           }}
           style={{ fontFamily, fontSize }}
           className="w-full h-full bg-transparent outline-none resize-none leading-snug text-slate-900 placeholder:text-slate-700/60"
-          placeholder="Type your thought…"
+          placeholder={t("Type your thought…")}
         />
       ) : (
         <p
@@ -229,7 +231,7 @@ export function StickyNote({ note }: { note: NoteElement }) {
           style={{ fontFamily, fontSize }}
           className="leading-snug whitespace-pre-wrap break-words h-full overflow-hidden"
         >
-          {note.text || "Double-click to edit"}
+          {note.text || t("Double-click to edit")}
         </p>
       )}
 
@@ -261,7 +263,7 @@ export function StickyNote({ note }: { note: NoteElement }) {
             setShowColor(false);
           }}
           className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full bg-slate-900/90 text-white text-xs font-medium shadow-floating border border-white/10 hover:bg-slate-900 transition tabular-nums"
-          aria-label="Font size"
+          aria-label={t("Font size")}
         >
           <Type className="size-3.5" /> {fontSize}
         </button>
@@ -273,7 +275,7 @@ export function StickyNote({ note }: { note: NoteElement }) {
           }}
           style={{ fontFamily }}
           className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full bg-slate-900/90 text-white text-xs font-medium shadow-floating border border-white/10 hover:bg-slate-900 transition"
-          aria-label="Change font"
+          aria-label={t("Change font")}
         >
           Aa
         </button>
@@ -284,7 +286,7 @@ export function StickyNote({ note }: { note: NoteElement }) {
             setShowSize(false);
           }}
           className="inline-flex items-center justify-center size-8 rounded-full bg-slate-900/90 text-white shadow-floating border border-white/10 hover:bg-slate-900 transition"
-          aria-label="Change color"
+          aria-label={t("Change color")}
         >
           <Palette className="size-4" />
         </button>
@@ -294,7 +296,7 @@ export function StickyNote({ note }: { note: NoteElement }) {
             removeElement(note.id);
           }}
           className="inline-flex items-center justify-center size-8 rounded-full bg-rose-500 text-white shadow-floating hover:bg-rose-400 transition"
-          aria-label="Delete note"
+          aria-label={t("Delete note")}
         >
           <Trash2 className="size-4" />
         </button>
@@ -361,7 +363,7 @@ export function StickyNote({ note }: { note: NoteElement }) {
                 c,
                 c === note.color ? "ring-white scale-110" : "ring-transparent hover:scale-110"
               )}
-              aria-label="Note color"
+              aria-label={t("Note color")}
             />
           ))}
         </div>

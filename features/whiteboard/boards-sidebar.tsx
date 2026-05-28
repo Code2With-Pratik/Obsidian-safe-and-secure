@@ -6,7 +6,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  MoreHorizontal,
+  MoreVertical,
   Pencil,
   Plus,
   Trash2
@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { useWhiteboardStore } from "@/store/use-whiteboard-store";
+import { useT } from "@/lib/i18n";
 
 export function BoardsSidebar({
   collapsed,
@@ -27,6 +28,7 @@ export function BoardsSidebar({
   collapsed: boolean;
   onToggleCollapsed: () => void;
 }) {
+  const t = useT();
   const boards = useWhiteboardStore((s) => s.boards);
   const activeBoardId = useWhiteboardStore((s) => s.activeBoardId);
   const createBoard = useWhiteboardStore((s) => s.createBoard);
@@ -45,7 +47,7 @@ export function BoardsSidebar({
       <div className="flex items-center justify-between px-3 h-12 border-b border-border/40 shrink-0">
         {!collapsed && (
           <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-            Whiteboards
+            {t("Whiteboards")}
           </p>
         )}
         <button
@@ -54,7 +56,7 @@ export function BoardsSidebar({
             "size-8 grid place-items-center rounded-md hover:bg-foreground/10 text-muted-foreground",
             collapsed && "mx-auto"
           )}
-          aria-label={collapsed ? "Expand boards" : "Collapse boards"}
+          aria-label={collapsed ? t("Expand boards") : t("Collapse boards")}
         >
           {collapsed ? <ChevronRight className="size-4" /> : <ChevronLeft className="size-4" />}
         </button>
@@ -73,10 +75,10 @@ export function BoardsSidebar({
             "bg-gradient-to-br from-violet-500 to-cyan-400 text-white shadow-glow hover:brightness-110",
             collapsed ? "h-10" : "h-9"
           )}
-          aria-label="New board"
+          aria-label={t("New board")}
         >
           <Plus className="size-4" />
-          {!collapsed && "New board"}
+          {!collapsed && t("New board")}
         </button>
         {boards.map((b) => {
           const active = b.id === activeBoardId;
@@ -143,23 +145,23 @@ export function BoardsSidebar({
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
-                    className="size-6 grid place-items-center rounded-md hover:bg-foreground/10 text-muted-foreground opacity-0 group-hover:opacity-100 transition"
-                    aria-label="Board options"
+                    className="size-7 grid place-items-center rounded-md hover:bg-foreground/10 text-foreground opacity-0 group-hover:opacity-100 transition outline-none focus:outline-none focus-visible:outline-none focus:ring-0 focus-visible:ring-0 data-[state=open]:opacity-100 data-[state=open]:ring-0"
+                    aria-label={t("Board options")}
                   >
-                    <MoreHorizontal className="size-3.5" />
+                    <MoreVertical className="size-5" />
                   </button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end" className="!w-40">
                   <DropdownMenuItem onSelect={() => setEditingId(b.id)}>
                     <Pencil />
-                    Rename
+                    {t("Rename")}
                   </DropdownMenuItem>
                   <DropdownMenuItem
                     onSelect={() => deleteBoard(b.id)}
                     className="!text-rose-400 focus:!text-rose-300"
                   >
                     <Trash2 />
-                    Delete
+                    {t("Delete")}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>

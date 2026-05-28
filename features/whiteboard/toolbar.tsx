@@ -20,6 +20,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { DRAW_TOOLS, useWhiteboardStore, type Tool } from "@/store/use-whiteboard-store";
+import { useT } from "@/lib/i18n";
 
 interface ToolbarProps {
   /** Called when the user clicks the Icons tray button or presses "I". */
@@ -55,6 +56,7 @@ const COLORS = [
 ];
 
 export function WhiteboardToolbar({ onOpenIcons }: ToolbarProps = {}) {
+  const t = useT();
   const tool = useWhiteboardStore((s) => s.tool);
   const setTool = useWhiteboardStore((s) => s.setTool);
   const color = useWhiteboardStore((s) => s.color);
@@ -126,26 +128,26 @@ export function WhiteboardToolbar({ onOpenIcons }: ToolbarProps = {}) {
       ref={rootRef}
       className="relative flex items-center gap-1 glass-strong rounded-2xl px-2 py-1.5 border border-border/60 shadow-floating"
     >
-      {TOOLS.map((t) => (
-        <Tooltip key={t.id}>
+      {TOOLS.map((tl) => (
+        <Tooltip key={tl.id}>
           <TooltipTrigger asChild>
             <button
-              onClick={() => pickTool(t.id)}
+              onClick={() => pickTool(tl.id)}
               className={cn(
                 "size-9 grid place-items-center rounded-xl transition [&_svg]:size-4",
-                tool === t.id
+                tool === tl.id
                   ? "bg-foreground text-background"
                   : "hover:bg-foreground/5 text-foreground/80 hover:text-foreground"
               )}
-              aria-label={t.label}
+              aria-label={t(tl.label)}
             >
-              {t.icon}
+              {tl.icon}
             </button>
           </TooltipTrigger>
           <TooltipContent side="bottom" sideOffset={10}>
-            {t.label}
-            {t.key && (
-              <span className="ml-2 text-[10px] text-muted-foreground">{t.key}</span>
+            {t(tl.label)}
+            {tl.key && (
+              <span className="ml-2 text-[10px] text-muted-foreground">{tl.key}</span>
             )}
           </TooltipContent>
         </Tooltip>
@@ -157,13 +159,13 @@ export function WhiteboardToolbar({ onOpenIcons }: ToolbarProps = {}) {
           <button
             onClick={() => onOpenIcons?.()}
             className="size-9 grid place-items-center rounded-xl hover:bg-foreground/5 text-foreground/80 hover:text-foreground transition"
-            aria-label="Icons"
+            aria-label={t("Icons")}
           >
             <Smile className="size-4" />
           </button>
         </TooltipTrigger>
         <TooltipContent side="bottom" sideOffset={10}>
-          Icons
+          {t("Icons")}
           <span className="ml-2 text-[10px] text-muted-foreground">I</span>
         </TooltipContent>
       </Tooltip>
@@ -176,7 +178,7 @@ export function WhiteboardToolbar({ onOpenIcons }: ToolbarProps = {}) {
         <TooltipTrigger asChild>
           <button
             onClick={() => setColorOpen((v) => !v)}
-            aria-label="Color"
+            aria-label={t("Color")}
             className={cn(
               "size-9 grid place-items-center rounded-xl transition",
               colorOpen ? "bg-foreground/10" : "hover:bg-foreground/5"
@@ -199,7 +201,7 @@ export function WhiteboardToolbar({ onOpenIcons }: ToolbarProps = {}) {
             />
           </button>
         </TooltipTrigger>
-        <TooltipContent side="bottom" sideOffset={10}>Color</TooltipContent>
+        <TooltipContent side="bottom" sideOffset={10}>{t("Color")}</TooltipContent>
       </Tooltip>
 
       <div className="w-px h-6 bg-border/60 mx-1" />
@@ -209,24 +211,24 @@ export function WhiteboardToolbar({ onOpenIcons }: ToolbarProps = {}) {
           <button
             onClick={undo}
             className="size-9 grid place-items-center rounded-xl hover:bg-foreground/5 transition"
-            aria-label="Undo"
+            aria-label={t("Undo")}
           >
             <Undo2 className="size-4" />
           </button>
         </TooltipTrigger>
-        <TooltipContent side="bottom" sideOffset={10}>Undo · ⌘Z</TooltipContent>
+        <TooltipContent side="bottom" sideOffset={10}>{t("Undo")} · ⌘Z</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
           <button
             onClick={redo}
             className="size-9 grid place-items-center rounded-xl hover:bg-foreground/5 transition"
-            aria-label="Redo"
+            aria-label={t("Redo")}
           >
             <Redo2 className="size-4" />
           </button>
         </TooltipTrigger>
-        <TooltipContent side="bottom" sideOffset={10}>Redo · ⇧⌘Z</TooltipContent>
+        <TooltipContent side="bottom" sideOffset={10}>{t("Redo")} · ⇧⌘Z</TooltipContent>
       </Tooltip>
       <Tooltip>
         <TooltipTrigger asChild>
@@ -236,22 +238,22 @@ export function WhiteboardToolbar({ onOpenIcons }: ToolbarProps = {}) {
               clearBoard();
             }}
             className="size-9 grid place-items-center rounded-xl hover:bg-rose-500/15 text-rose-300 transition"
-            aria-label="Clear board"
+            aria-label={t("Clear board")}
           >
             <Trash className="size-4" />
           </button>
         </TooltipTrigger>
-        <TooltipContent side="bottom" sideOffset={10}>Clear board</TooltipContent>
+        <TooltipContent side="bottom" sideOffset={10}>{t("Clear board")}</TooltipContent>
       </Tooltip>
 
       {colorOpen && (
         <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 glass-strong rounded-2xl border border-border/60 shadow-floating p-3 w-[280px] z-10">
           <div className="flex items-center justify-between mb-2">
             <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
-              Pick a color
+              {t("Pick a color")}
             </p>
             <span className="text-[10px] text-muted-foreground font-mono">
-              {color === ADAPTIVE_COLOR ? "ADAPTIVE" : color.toUpperCase()}
+              {color === ADAPTIVE_COLOR ? t("Adaptive") : color.toUpperCase()}
             </span>
           </div>
           <div className="grid grid-cols-8 gap-1.5 mb-3">
@@ -264,10 +266,10 @@ export function WhiteboardToolbar({ onOpenIcons }: ToolbarProps = {}) {
                     setColor(c);
                     setColorOpen(false);
                   }}
-                  aria-label={isAdaptive ? "Adaptive (theme)" : `Color ${c}`}
+                  aria-label={isAdaptive ? t("Adaptive (theme)") : `${t("Color")} ${c}`}
                   title={
                     isAdaptive
-                      ? "Adaptive — follows the theme (white in dark, black in light)"
+                      ? t("Adaptive — follows the theme (white in dark, black in light)")
                       : c
                   }
                   className={cn(
@@ -284,7 +286,7 @@ export function WhiteboardToolbar({ onOpenIcons }: ToolbarProps = {}) {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-[10px] uppercase tracking-wider text-muted-foreground">
-              Stroke
+              {t("Stroke")}
             </span>
             <input
               type="range"

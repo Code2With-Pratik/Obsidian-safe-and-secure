@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { X, Folder, Lock, KeyRound, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 /* ─────────────────────────────────────────────────────────────
  * Tiny shared modal scaffold (mirrors attachment-dialogs).
@@ -25,6 +26,7 @@ function Shell({
   children: React.ReactNode;
   width?: number;
 }) {
+  const t = useT();
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
   React.useEffect(() => {
@@ -69,7 +71,7 @@ function Shell({
                 <button
                   onClick={onClose}
                   className="size-8 rounded-full glass-subtle grid place-items-center hover:bg-foreground/5"
-                  aria-label="Close"
+                  aria-label={t("Close")}
                 >
                   <X className="size-4" />
                 </button>
@@ -96,6 +98,7 @@ export function NewFolderDialog({
   onClose: () => void;
   onCreate: (name: string) => void;
 }) {
+  const t = useT();
   const [name, setName] = React.useState("");
   React.useEffect(() => {
     if (!open) setName("");
@@ -106,16 +109,16 @@ export function NewFolderDialog({
     onClose();
   };
   return (
-    <Shell open={open} onClose={onClose} title="New folder" subtitle="Pick a name — you can rename later">
+    <Shell open={open} onClose={onClose} title={t("New folder")} subtitle={t("Pick a name — you can rename later")}>
       <label className="block">
-        <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Name</div>
+        <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">{t("Name")}</div>
         <div className="relative">
           <Folder className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
             autoFocus
-            placeholder="My folder"
+            placeholder={t("My folder")}
             onKeyDown={(e) => {
               if (e.key === "Enter") submit();
             }}
@@ -124,7 +127,7 @@ export function NewFolderDialog({
         </div>
       </label>
       <Button onClick={submit} disabled={!name.trim()} variant="gradient" className="w-full mt-4">
-        Create folder
+        {t("Create folder")}
       </Button>
     </Shell>
   );
@@ -152,6 +155,7 @@ export function VaultPasswordDialog({
     payload: string | { current: string; next: string }
   ) => boolean | void;
 }) {
+  const t = useT();
   const [current, setCurrent] = React.useState("");
   const [pw, setPw] = React.useState("");
   const [confirm, setConfirm] = React.useState("");
@@ -210,16 +214,16 @@ export function VaultPasswordDialog({
 
   const title =
     mode === "set"
-      ? "Lock your vault"
+      ? t("Lock your vault")
       : mode === "unlock"
-        ? "Unlock vault"
-        : "Change vault password";
+        ? t("Unlock vault")
+        : t("Change vault password");
   const subtitle =
     mode === "set"
-      ? "Set a password to protect files & folders in your vault."
+      ? t("Set a password to protect files & folders in your vault.")
       : mode === "unlock"
-        ? "Enter your vault password to view protected items."
-        : "Confirm the current password before choosing a new one.";
+        ? t("Enter your vault password to view protected items.")
+        : t("Confirm the current password before choosing a new one.");
 
   return (
     <Shell open={open} onClose={onClose} title={title} subtitle={subtitle} width={420}>
@@ -236,7 +240,7 @@ export function VaultPasswordDialog({
       {mode === "change" && (
         <label className="block">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-            Current password
+            {t("Current password")}
           </div>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -257,7 +261,7 @@ export function VaultPasswordDialog({
 
       <label className={cn("block", mode === "change" && "mt-3")}>
         <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-          {mode === "unlock" ? "Password" : "New password"}
+          {mode === "unlock" ? t("Password") : t("New password")}
         </div>
         <div className="relative">
           <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -278,7 +282,7 @@ export function VaultPasswordDialog({
       {(mode === "set" || mode === "change") && (
         <label className="block mt-3">
           <div className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-            Confirm
+            {t("Confirm")}
           </div>
           <div className="relative">
             <Lock className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
@@ -286,7 +290,7 @@ export function VaultPasswordDialog({
               value={confirm}
               onChange={(e) => setConfirm(e.target.value)}
               type="password"
-              placeholder="Re-enter"
+              placeholder={t("Re-enter")}
               onKeyDown={(e) => {
                 if (e.key === "Enter") submit();
               }}
@@ -296,10 +300,10 @@ export function VaultPasswordDialog({
         </label>
       )}
 
-      {err && <p className={cn("text-[12px] text-rose-400 mt-3 text-center")}>{err}</p>}
+      {err && <p className={cn("text-[12px] text-rose-400 mt-3 text-center")}>{t(err)}</p>}
 
       <Button onClick={submit} variant="gradient" className="w-full mt-5">
-        {mode === "set" ? "Lock vault" : mode === "unlock" ? "Unlock" : "Update password"}
+        {mode === "set" ? t("Lock vault") : mode === "unlock" ? t("Unlock") : t("Update password")}
       </Button>
     </Shell>
   );

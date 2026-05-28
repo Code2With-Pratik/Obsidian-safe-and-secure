@@ -14,6 +14,7 @@ import {
   KeyRound
 } from "lucide-react";
 import { useVaultStore, type VaultNode } from "@/store/use-vault-store";
+import { useT } from "@/lib/i18n";
 
 /** Centered preview modal for files in the vault. Accepts a list so the
  *  user can swipe / arrow-key through every file in the current view.
@@ -36,6 +37,7 @@ export function FilePreviewDialog({
   startIndex: number | null;
   onClose: () => void;
 }) {
+  const t = useT();
   const [mounted, setMounted] = React.useState(false);
   const [index, setIndex] = React.useState(0);
   React.useEffect(() => setMounted(true), []);
@@ -104,11 +106,11 @@ export function FilePreviewDialog({
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-medium truncate flex items-center gap-1.5">
                     {locked && <Lock className="size-3.5 text-amber-400 shrink-0" />}
-                    {locked ? "Locked file" : node.name}
+                    {locked ? t("Locked file") : node.name}
                   </p>
                   <p className="text-[11px] text-muted-foreground truncate">
                     {locked
-                      ? "Protected — enter your vault password to view"
+                      ? t("Protected — enter your vault password to view")
                       : `${node.mime || node.fileKind}${node.size ? ` · ${formatBytes(node.size)}` : ""}`}
                     {hasNav && (
                       <>
@@ -131,7 +133,7 @@ export function FilePreviewDialog({
                       target="_blank"
                       rel="noopener noreferrer"
                       className="size-9 rounded-full glass-subtle grid place-items-center hover:bg-foreground/10"
-                      title="Download"
+                      title={t("Download")}
                     >
                       <Download className="size-4" />
                     </a>
@@ -142,7 +144,7 @@ export function FilePreviewDialog({
                       target="_blank"
                       rel="noopener noreferrer"
                       className="size-9 rounded-full glass-subtle grid place-items-center hover:bg-foreground/10"
-                      title="Open in new tab"
+                      title={t("Open in new tab")}
                     >
                       <ExternalLink className="size-4" />
                     </a>
@@ -150,7 +152,7 @@ export function FilePreviewDialog({
                   <button
                     onClick={onClose}
                     className="size-9 rounded-full glass-subtle grid place-items-center hover:bg-foreground/10"
-                    aria-label="Close"
+                    aria-label={t("Close")}
                   >
                     <X className="size-4" />
                   </button>
@@ -175,14 +177,14 @@ export function FilePreviewDialog({
                     <button
                       onClick={prev}
                       className="absolute left-2 md:left-4 top-1/2 -translate-y-1/2 size-11 rounded-full bg-black/55 backdrop-blur grid place-items-center text-white hover:bg-black/75 transition"
-                      aria-label="Previous"
+                      aria-label={t("Previous")}
                     >
                       <ChevronLeft className="size-5" />
                     </button>
                     <button
                       onClick={next}
                       className="absolute right-2 md:right-4 top-1/2 -translate-y-1/2 size-11 rounded-full bg-black/55 backdrop-blur grid place-items-center text-white hover:bg-black/75 transition"
-                      aria-label="Next"
+                      aria-label={t("Next")}
                     >
                       <ChevronRight className="size-5" />
                     </button>
@@ -204,6 +206,7 @@ export function FilePreviewDialog({
  *  swaps in the real preview. Self-contained so it works above the preview's
  *  high z-index without fighting the page's password modal. */
 function LockedStage() {
+  const t = useT();
   const unlock = useVaultStore((s) => s.unlock);
   const hasPassword = useVaultStore((s) => s.password != null);
   const [pw, setPw] = React.useState("");
@@ -226,11 +229,11 @@ function LockedStage() {
         <Lock className="size-9 text-white" />
       </div>
       <div>
-        <p className="text-base font-semibold">This file is in your vault</p>
+        <p className="text-base font-semibold">{t("This file is in your vault")}</p>
         <p className="text-[12px] text-muted-foreground mt-1">
           {hasPassword
-            ? "Enter your vault password to preview it."
-            : "Set a vault password from the Files page first."}
+            ? t("Enter your vault password to preview it.")
+            : t("Set a vault password from the Files page first.")}
         </p>
       </div>
       {hasPassword && (
@@ -241,7 +244,7 @@ function LockedStage() {
               type="password"
               value={pw}
               autoFocus
-              placeholder="Vault password"
+              placeholder={t("Vault password")}
               onChange={(e) => {
                 setPw(e.target.value);
                 setErr(false);
@@ -253,13 +256,13 @@ function LockedStage() {
             />
           </div>
           {err && (
-            <p className="text-[12px] text-rose-400 mt-2">Wrong password. Try again.</p>
+            <p className="text-[12px] text-rose-400 mt-2">{t("Wrong password. Try again.")}</p>
           )}
           <button
             onClick={submit}
             className="mt-3 w-full h-11 rounded-xl bg-gradient-to-br from-violet-500 to-cyan-400 text-white text-sm font-medium shadow-glow hover:brightness-110 transition"
           >
-            Unlock
+            {t("Unlock")}
           </button>
         </div>
       )}
@@ -269,6 +272,7 @@ function LockedStage() {
 
 /** Renders the appropriate inline preview for a single node. */
 function PreviewStage({ node }: { node: VaultNode }) {
+  const t = useT();
   const url = node.url ?? "";
   const kind = node.fileKind ?? "other";
   const isPdf =
@@ -331,7 +335,7 @@ function PreviewStage({ node }: { node: VaultNode }) {
       <div>
         <p className="text-sm font-medium">{node.name}</p>
         <p className="text-[11px] text-muted-foreground">
-          Preview not supported for this file type
+          {t("Preview not supported for this file type")}
         </p>
       </div>
       {url && (
@@ -342,7 +346,7 @@ function PreviewStage({ node }: { node: VaultNode }) {
           rel="noopener noreferrer"
           className="inline-flex items-center gap-2 px-4 h-10 rounded-full bg-gradient-to-br from-violet-500 to-cyan-400 text-white text-sm font-medium shadow-glow"
         >
-          <Download className="size-4" /> Download
+          <Download className="size-4" /> {t("Download")}
         </a>
       )}
     </div>

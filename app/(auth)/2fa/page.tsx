@@ -6,8 +6,10 @@ import { motion } from "framer-motion";
 import { ShieldCheck, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/use-auth-store";
+import { useT } from "@/lib/i18n";
 
 export default function TwoFactorPage() {
+  const t = useT();
   const router = useRouter();
   const login = useAuthStore((s) => s.login);
   const [code, setCode] = React.useState<string[]>(Array(6).fill(""));
@@ -45,9 +47,9 @@ export default function TwoFactorPage() {
           >
             <ShieldCheck className="text-white" />
           </motion.div>
-          <h1 className="mt-5 text-2xl font-semibold tracking-tight">Verify it's you</h1>
+          <h1 className="mt-5 text-2xl font-semibold tracking-tight">{t("Verify it's you")}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Enter the 6-digit code from your authenticator app.
+            {t("Enter the 6-digit code from your authenticator app.")}
           </p>
         </div>
 
@@ -77,14 +79,14 @@ export default function TwoFactorPage() {
           disabled={!filled}
           onClick={handleVerify}
         >
-          Verify
+          {t("Verify")}
           <ArrowRight />
         </Button>
 
         <div className="mt-6 text-center text-xs text-muted-foreground">
-          Didn't get a code?{" "}
-          <button className="text-primary hover:underline">Resend</button> · or use a{" "}
-          <button className="text-primary hover:underline">backup code</button>
+          {t("Didn't get a code?")}{" "}
+          <button className="text-primary hover:underline">{t("Resend")}</button> · {t("or use a")}{" "}
+          <button className="text-primary hover:underline">{t("backup code")}</button>
         </div>
       </motion.div>
     </div>

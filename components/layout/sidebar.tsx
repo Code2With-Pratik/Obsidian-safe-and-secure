@@ -40,19 +40,39 @@ export function Sidebar() {
   const [hovered, setHovered] = React.useState(false);
   const expanded = hovered;
 
+  // Hover-intent: collapse after a short grace period so a cursor that just
+  // grazes the edge (or briefly crosses a gap) doesn't snap the panel shut
+  // and cause flicker. Re-entering cancels the pending collapse.
+  const closeTimer = React.useRef<number | null>(null);
+  const open = () => {
+    if (closeTimer.current !== null) {
+      window.clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+    setHovered(true);
+  };
+  const close = () => {
+    closeTimer.current = window.setTimeout(() => setHovered(false), 90);
+  };
+  React.useEffect(() => {
+    return () => {
+      if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
+    };
+  }, []);
+
   return (
     <aside
       className="relative hidden md:block shrink-0 h-dvh"
       style={{ width: COLLAPSED }}
     >
       <motion.div
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
+        onMouseEnter={open}
+        onMouseLeave={close}
         initial={false}
         animate={{ width: expanded ? EXPANDED : COLLAPSED }}
         transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
         className={cn(
-          "absolute top-0 left-0 h-dvh z-40 flex flex-col border-r border-border/40 overflow-hidden",
+          "absolute top-0 left-0 h-dvh z-40 flex flex-col border-r border-border/40 overflow-hidden will-change-[width] transition-shadow duration-300",
           "bg-card/80 backdrop-blur-2xl backdrop-saturate-150 glass-specular",
           expanded && "shadow-floating"
         )}

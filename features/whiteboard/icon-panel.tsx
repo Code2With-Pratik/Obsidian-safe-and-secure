@@ -7,6 +7,7 @@ import { Loader2, Search, Sparkles, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useWhiteboardStore } from "@/store/use-whiteboard-store";
+import { useT } from "@/lib/i18n";
 
 interface Props {
   open: boolean;
@@ -43,6 +44,7 @@ const SUGGESTED = [
 ];
 
 export function IconPanel({ open, onOpenChange }: Props) {
+  const t = useT();
   const addElement = useWhiteboardStore((s) => s.addElement);
   const pushHistory = useWhiteboardStore((s) => s.pushHistory);
   const board = useWhiteboardStore((s) => s.activeBoard());
@@ -134,15 +136,15 @@ export function IconPanel({ open, onOpenChange }: Props) {
               <Sparkles className="size-4" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-semibold">Icons</p>
+              <p className="text-sm font-semibold">{t("Icons")}</p>
               <p className="text-[11px] text-muted-foreground -mt-0.5">
-                Powered by Iconify · 200k+ icons
+                {t("Powered by Iconify · 200k+ icons")}
               </p>
             </div>
             <button
               onClick={() => onOpenChange(false)}
               className="size-8 rounded-md grid place-items-center text-muted-foreground hover:bg-foreground/10"
-              aria-label="Close"
+              aria-label={t("Close")}
             >
               <X className="size-4" />
             </button>
@@ -155,7 +157,7 @@ export function IconPanel({ open, onOpenChange }: Props) {
                 autoFocus
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Try 'rocket', 'cloud', 'bell'…"
+                placeholder={t("Try 'rocket', 'cloud', 'bell'…")}
                 className="pl-9 h-10"
               />
               {loading && (
@@ -165,21 +167,21 @@ export function IconPanel({ open, onOpenChange }: Props) {
             <p className="text-[10px] text-muted-foreground mt-2">
               {q.trim()
                 ? loading
-                  ? "Searching…"
-                  : `${results.length} icons for "${q.trim()}"`
-                : "Suggestions — type to search 200k+ icons"}
+                  ? t("Searching…")
+                  : `${results.length} ${t("icons for")} "${q.trim()}"`
+                : t("Suggestions — type to search 200k+ icons")}
             </p>
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto p-2 no-scrollbar">
             {error ? (
               <div className="grid place-items-center py-12 text-center px-4">
-                <p className="text-sm text-rose-300">{error}</p>
+                <p className="text-sm text-rose-300">{t(error)}</p>
               </div>
             ) : results.length === 0 && !loading ? (
               <div className="grid place-items-center py-12 text-center px-4">
                 <p className="text-sm text-muted-foreground">
-                  No icons match "{q.trim()}".
+                  {t("No icons match")} "{q.trim()}".
                 </p>
               </div>
             ) : (
@@ -201,7 +203,7 @@ export function IconPanel({ open, onOpenChange }: Props) {
           </div>
 
           <footer className="border-t border-border/40 px-3 py-2 text-[10px] text-muted-foreground shrink-0">
-            Click any icon to drop it on the board.
+            {t("Click any icon to drop it on the board.")}
           </footer>
         </motion.div>
       )}

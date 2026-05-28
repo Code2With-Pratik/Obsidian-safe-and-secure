@@ -83,19 +83,19 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">{t("Email")}</Label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <Input id="email" type="email" placeholder="you@nova.app" className="pl-9" {...register("email")} />
             </div>
-            {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
+            {errors.email && <p className="text-xs text-destructive">{t(errors.email.message ?? "")}</p>}
           </div>
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t("Password")}</Label>
               <Link href="/recover" className="text-xs text-muted-foreground hover:text-primary">
-                Forgot?
+                {t("Forgot?")}
               </Link>
             </div>
             <div className="relative">
@@ -108,18 +108,18 @@ export default function LoginPage() {
                 {...register("password")}
               />
             </div>
-            {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
+            {errors.password && <p className="text-xs text-destructive">{t(errors.password.message ?? "")}</p>}
           </div>
 
           <Button type="submit" variant="gradient" size="lg" className="w-full !h-12" disabled={isSubmitting}>
-            {isSubmitting ? <Loader2 className="animate-spin" /> : "Continue"}
+            {isSubmitting ? <Loader2 className="animate-spin" /> : t("Continue")}
           </Button>
         </form>
 
         <p className="text-center text-sm text-muted-foreground mt-6">
-          New here?{" "}
+          {t("New here?")}{" "}
           <Link href="/register" className="text-primary hover:underline">
-            Create an account
+            {t("Create an account")}
           </Link>
         </p>
       </motion.div>

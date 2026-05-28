@@ -107,6 +107,8 @@ export function NotificationCenter({ children }: { children: React.ReactNode }) 
   const [open, setOpen] = React.useState(false);
   const [items, setItems] = React.useState<Notification[]>(seed);
   const [tab, setTab] = React.useState<"all" | "unread" | "mentions">("all");
+  const panelRef = React.useRef<HTMLDivElement>(null);
+  const triggerRef = React.useRef<HTMLElement>(null);
 
   const unread = items.filter((i) => !i.read).length;
 
@@ -131,13 +133,29 @@ export function NotificationCenter({ children }: { children: React.ReactNode }) 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
+    // Close on any pointer-down outside the panel. Capture phase so it fires
+    // even if something inside calls stopPropagation, and it's immune to the
+    // CSS stacking/containing-block quirks that can stop the overlay's own
+    // onClick from firing over the page content. The trigger is excluded so
+    // its toggle handler stays in charge of opening/closing via the bell.
+    const onDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (panelRef.current?.contains(target)) return;
+      if (triggerRef.current?.contains(target)) return;
+      setOpen(false);
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onDown, true);
+    };
   }, [open]);
 
   const trigger = React.isValidElement(children)
-    ? React.cloneElement(children as React.ReactElement<{ onClick?: () => void }>, {
-        onClick: () => setOpen(true)
+    ? React.cloneElement(children as React.ReactElement<Record<string, unknown>>, {
+        ref: triggerRef,
+        onClick: () => setOpen((o) => !o)
       })
     : children;
 
@@ -161,6 +179,7 @@ export function NotificationCenter({ children }: { children: React.ReactNode }) 
           >
             <motion.div
               key="panel"
+              ref={panelRef}
               initial={{ opacity: 0, x: 60, scale: 0.95 }}
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, x: 60, scale: 0.95 }}
@@ -230,6 +249,7 @@ export function NotificationCenter({ children }: { children: React.ReactNode }) 
                         key={n.id}
                         n={n}
                         index={i}
+                        total={filtered.length}
                         onRead={markOne}
                       />
                     ))}
@@ -272,31 +292,61 @@ function Stage({ onClose }: { onClose: () => void }) {
 function NotifCard({
   n,
   index,
+  total,
   onRead
 }: {
   n: Notification;
   index: number;
+  total: number;
   onRead: (id: string) => void;
 }) {
   const t = useT();
   const [expanded, setExpanded] = React.useState(false);
+  const bodyRef = React.useRef<HTMLParagraphElement>(null);
+  // Collapsed body height = two lines. Seeded with the expected value so there
+  // is no mount flash, then refined from the real line-height after layout.
+  const [collapsedH, setCollapsedH] = React.useState(39);
   const isLong = n.body.length > 90;
   const style = kindStyle[n.kind];
 
+  React.useLayoutEffect(() => {
+    if (!isLong || !bodyRef.current) return;
+    const lh = parseFloat(getComputedStyle(bodyRef.current).lineHeight);
+    if (!Number.isNaN(lh)) setCollapsedH(lh * 2);
+  }, [isLong, n.body]);
+
   return (
     <motion.li
-      layout
-      initial={{ opacity: 0, x: 80, scale: 0.9, rotate: 4 }}
-      animate={{ opacity: 1, x: 0, scale: 1, rotate: 0 }}
-      // Exit drifts the card down + fades. Clearing all staggers these via the
-      // index-based delay so the cards sweep out toward the bottom.
-      exit={{ opacity: 0, y: 24, scale: 0.95 }}
-      transition={{
-        delay: index * 0.05,
-        type: "spring",
-        stiffness: 240,
-        damping: 24
+      layout="position"
+      custom={{ index, total }}
+      variants={{
+        initial: { opacity: 0, x: 80, scale: 0.9, rotate: 4 },
+        // Enter: slide in from the right, staggered top -> bottom.
+        animate: (c: { index: number; total: number }) => ({
+          opacity: 1,
+          x: 0,
+          scale: 1,
+          rotate: 0,
+          transition: { delay: c.index * 0.05, type: "spring", stiffness: 240, damping: 24 }
+        }),
+        // Exit: mirror of enter — slide back out to the right, staggered
+        // bottom -> top so Clear all peels the cards off from the bottom up.
+        exit: (c: { index: number; total: number }) => ({
+          opacity: 0,
+          x: 80,
+          scale: 0.9,
+          rotate: 4,
+          transition: {
+            delay: (c.total - 1 - c.index) * 0.05,
+            type: "spring",
+            stiffness: 260,
+            damping: 26
+          }
+        })
       }}
+      initial="initial"
+      animate="animate"
+      exit="exit"
       onClick={() => !n.read && onRead(n.id)}
       className={cn(
         "relative flex gap-3 p-3.5 rounded-2xl cursor-pointer transition-colors",
@@ -340,15 +390,22 @@ function NotifCard({
             {formatRelative(n.time)}
           </span>
         </div>
-        <motion.p
-          layout
-          className={cn(
-            "text-xs text-muted-foreground mt-0.5 leading-relaxed",
-            expanded ? "" : "line-clamp-2"
-          )}
-        >
-          {n.body}
-        </motion.p>
+        {isLong ? (
+          // Animate the wrapper's real height (not the text element itself) so
+          // the reveal stays smooth and the glyphs never scale/stretch.
+          <motion.div
+            initial={false}
+            animate={{ height: expanded ? "auto" : collapsedH }}
+            transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden mt-0.5"
+          >
+            <p ref={bodyRef} className="text-xs text-muted-foreground leading-relaxed">
+              {n.body}
+            </p>
+          </motion.div>
+        ) : (
+          <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{n.body}</p>
+        )}
         {isLong && (
           <button
             onClick={(e) => {

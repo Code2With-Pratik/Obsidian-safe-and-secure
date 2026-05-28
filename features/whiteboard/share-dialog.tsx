@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { copyText, cn } from "@/lib/utils";
 import { useWhiteboardStore } from "@/store/use-whiteboard-store";
+import { useT } from "@/lib/i18n";
 
 interface Props {
   open: boolean;
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export function ShareDialog({ open, onOpenChange }: Props) {
+  const t = useT();
   const board = useWhiteboardStore((s) => s.activeBoard());
   const setBoardVisibility = useWhiteboardStore((s) => s.setBoardVisibility);
   // The visibility tier lives on the board (persisted via Zustand), so
@@ -48,9 +50,9 @@ export function ShareDialog({ open, onOpenChange }: Props) {
           <div className="size-12 rounded-2xl bg-gradient-to-br from-violet-500 to-cyan-400 grid place-items-center shadow-glow mb-2">
             <Share2 className="text-white" />
           </div>
-          <DialogTitle className="text-xl">Share board</DialogTitle>
+          <DialogTitle className="text-xl">{t("Share board")}</DialogTitle>
           <DialogDescription>
-            {board?.name ? `“${board.name}”` : "This board"} · who can open it.
+            {board?.name ? `“${board.name}”` : t("This board")} · {t("who can open it")}
           </DialogDescription>
         </DialogHeader>
 
@@ -60,11 +62,11 @@ export function ShareDialog({ open, onOpenChange }: Props) {
             <Button variant={copied ? "glass" : "gradient"} onClick={handleCopy}>
               {copied ? (
                 <>
-                  <Check /> Copied
+                  <Check /> {t("Copied")}
                 </>
               ) : (
                 <>
-                  <Copy /> Copy
+                  <Copy /> {t("Copy")}
                 </>
               )}
             </Button>
@@ -72,26 +74,26 @@ export function ShareDialog({ open, onOpenChange }: Props) {
 
           <div className="space-y-1.5">
             <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">
-              Who has access
+              {t("Who has access")}
             </p>
             <AccessRow
               icon={<Lock className="size-4" />}
-              label="Only me"
-              hint="Just you — collaborators can't open the link."
+              label={t("Only me")}
+              hint={t("Just you — collaborators can't open the link.")}
               active={access === "private"}
               onClick={() => setAccess("private")}
             />
             <AccessRow
               icon={<Users className="size-4" />}
-              label="People in my team"
-              hint="Anyone on your workspace can view + edit."
+              label={t("People in my team")}
+              hint={t("Anyone on your workspace can view + edit.")}
               active={access === "team"}
               onClick={() => setAccess("team")}
             />
             <AccessRow
               icon={<Globe className="size-4" />}
-              label="Anyone with the link"
-              hint="Publicly accessible — be mindful of what's on the board."
+              label={t("Anyone with the link")}
+              hint={t("Publicly accessible — be mindful of what's on the board.")}
               active={access === "link"}
               onClick={() => setAccess("link")}
             />
@@ -100,10 +102,10 @@ export function ShareDialog({ open, onOpenChange }: Props) {
 
         <DialogFooter className="!justify-between">
           <Button variant="ghost">
-            <Mail /> Email invite
+            <Mail /> {t("Email invite")}
           </Button>
           <Button variant="gradient" onClick={() => onOpenChange(false)}>
-            Done
+            {t("Done")}
           </Button>
         </DialogFooter>
       </DialogContent>
