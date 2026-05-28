@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useRouter } from "next/navigation";
 import { useUIStore } from "@/store/use-ui-store";
+import { useT } from "@/lib/i18n";
 import { cn, copyText, formatTime, initials } from "@/lib/utils";
 import { ReactionPicker } from "./reaction-picker";
 import { useImageLightbox } from "./image-lightbox";
@@ -901,6 +902,7 @@ function FileBubble({ me, bubbleMe, meStyle, message }: SubProps) {
 
 /** Interactive poll — WhatsApp-style with progress bars + tap-to-vote. */
 function PollBubble({ me, bubbleMe, meStyle, message }: SubProps) {
+  const t = useT();
   const vote = useChatStore((s) => s.votePoll);
   const poll = message.poll!;
   const total = poll.options.reduce((acc, o) => acc + o.voters.length, 0);
@@ -924,7 +926,7 @@ function PollBubble({ me, bubbleMe, meStyle, message }: SubProps) {
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold leading-tight">{poll.question}</p>
           <p className="text-[11px] opacity-70">
-            Poll · {poll.multi ? "Select one or more" : "Select one"}
+            {t("Poll")} · {poll.multi ? t("Select one or more") : t("Select one")}
           </p>
         </div>
       </div>
@@ -975,7 +977,7 @@ function PollBubble({ me, bubbleMe, meStyle, message }: SubProps) {
         })}
       </div>
       <p className="text-[11px] opacity-60 text-right">
-        {total} {total === 1 ? "vote" : "votes"}
+        {total} {total === 1 ? t("vote") : t("votes")}
       </p>
     </div>
   );

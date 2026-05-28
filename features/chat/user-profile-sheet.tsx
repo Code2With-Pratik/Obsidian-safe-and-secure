@@ -36,6 +36,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { AnimatedAvatar } from "@/components/animated-avatar";
 import { users } from "@/lib/mock-data";
+import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { Chat } from "@/types";
 
@@ -57,6 +58,7 @@ interface Props {
 }
 
 export function UserProfileSheet({ chat, open, onOpenChange }: Props) {
+  const t = useT();
   const [mounted, setMounted] = React.useState(false);
 
   React.useEffect(() => {
@@ -120,17 +122,17 @@ export function UserProfileSheet({ chat, open, onOpenChange }: Props) {
                     {(chat.type === "group" || chat.type === "channel") && (
                       <Badge variant="cyan">
                         <Users className="size-3" />
-                        {chat.membersCount ?? chat.memberIds?.length ?? 0} members
+                        {chat.membersCount ?? chat.memberIds?.length ?? 0} {t("members")}
                       </Badge>
                     )}
                   </div>
                   <p className="text-xs text-muted-foreground">
                     @{chat.name.toLowerCase().replace(/\s+/g, "")}{" "}
                     {chat.type === "group" || chat.type === "channel"
-                      ? `· ${chat.membersCount ?? chat.memberIds?.length ?? 0} members`
+                      ? `· ${chat.membersCount ?? chat.memberIds?.length ?? 0} ${t("members")}`
                       : chat.online
-                      ? "· online"
-                      : "· last seen 2h ago"}
+                      ? `· ${t("online")}`
+                      : `· ${t("last seen 2h ago")}`}
                   </p>
                 </div>
                 <Button variant="glass" size="icon-sm" aria-label="Edit">
@@ -151,52 +153,52 @@ export function UserProfileSheet({ chat, open, onOpenChange }: Props) {
                     <MapPin className="size-3.5" /> Lisbon, PT
                   </span>
                   <span className="inline-flex items-center gap-1.5">
-                    <Calendar className="size-3.5" /> Connected Mar 2024
+                    <Calendar className="size-3.5" /> {t("Connected")} Mar 2024
                   </span>
                 </div>
               )}
 
               <div className="grid grid-cols-3 gap-2 mt-5">
-                <Action icon={<MessageCircle />} label="Message" gradient />
-                <Action icon={<Phone />} label="Voice" />
-                <Action icon={<Video />} label="Video" />
+                <Action icon={<MessageCircle />} label={t("Message")} gradient />
+                <Action icon={<Phone />} label={t("Voice")} />
+                <Action icon={<Video />} label={t("Video")} />
               </div>
 
               {chat.type === "group" || chat.type === "channel" ? (
                 <MemberList chat={chat} />
               ) : (
                 <div className="grid grid-cols-3 gap-2 mt-4">
-                  <Stat k="248" v="Chats" />
-                  <Stat k="86" v="Shared" />
-                  <Stat k="3y" v="Together" />
+                  <Stat k="248" v={t("Chats")} />
+                  <Stat k="86" v={t("Shared")} />
+                  <Stat k="3y" v={t("Together")} />
                 </div>
               )}
 
               <div className="mt-5 space-y-2">
-                <SettingRow icon={<Bell className="size-4" />} label="Mute notifications">
+                <SettingRow icon={<Bell className="size-4" />} label={t("Mute notifications")}>
                   <Switch defaultChecked={chat.muted} />
                 </SettingRow>
-                <SettingRow icon={<Pin className="size-4" />} label="Pin chat">
+                <SettingRow icon={<Pin className="size-4" />} label={t("Pin chat")}>
                   <Switch defaultChecked={chat.pinned} />
                 </SettingRow>
-                <SettingRow icon={<Star className="size-4" />} label="Add to favorites">
+                <SettingRow icon={<Star className="size-4" />} label={t("Add to favorites")}>
                   <Switch />
                 </SettingRow>
-                <SettingRow icon={<Lock className="size-4" />} label="Disappearing messages">
-                  <span className="text-xs text-muted-foreground">Off</span>
+                <SettingRow icon={<Lock className="size-4" />} label={t("Disappearing messages")}>
+                  <span className="text-xs text-muted-foreground">{t("Off")}</span>
                 </SettingRow>
               </div>
 
               <Tabs defaultValue="media" className="mt-6">
                 <TabsList className="w-full">
                   <TabsTrigger value="media" className="flex-1">
-                    <ImageIcon className="size-3 mr-1" /> Media
+                    <ImageIcon className="size-3 mr-1" /> {t("Media")}
                   </TabsTrigger>
                   <TabsTrigger value="files" className="flex-1">
-                    <FileText className="size-3 mr-1" /> Files
+                    <FileText className="size-3 mr-1" /> {t("Files")}
                   </TabsTrigger>
                   <TabsTrigger value="links" className="flex-1">
-                    <LinkIcon className="size-3 mr-1" /> Links
+                    <LinkIcon className="size-3 mr-1" /> {t("Links")}
                   </TabsTrigger>
                 </TabsList>
                 <TabsContent value="media" className="mt-3">
@@ -243,13 +245,13 @@ export function UserProfileSheet({ chat, open, onOpenChange }: Props) {
 
               <div className="mt-6">
                 <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
-                  Links
+                  {t("Links")}
                 </h4>
                 <div className="space-y-2">
-                  <LinkRow icon={<Globe />} label="aria.design" sub="Personal site" />
+                  <LinkRow icon={<Globe />} label="aria.design" sub={t("Personal site")} />
                   <LinkRow icon={<Github />} label="@ariavance" sub="GitHub" />
                   <LinkRow icon={<Twitter />} label="@ariavance" sub="X" />
-                  <LinkRow icon={<Music />} label="Now playing" sub="Glass Cathedrals" pulse />
+                  <LinkRow icon={<Music />} label={t("Now playing")} sub="Glass Cathedrals" pulse />
                 </div>
               </div>
 
@@ -257,7 +259,7 @@ export function UserProfileSheet({ chat, open, onOpenChange }: Props) {
                 <button className="w-full flex items-center justify-between text-sm text-rose-400 hover:bg-rose-500/5 rounded-xl px-3 py-2.5 transition">
                   <span className="flex items-center gap-2">
                     <Shield className="size-4" />
-                    Block & report
+                    {t("Block & report")}
                   </span>
                   <ChevronRight className="size-4" />
                 </button>
@@ -272,6 +274,7 @@ export function UserProfileSheet({ chat, open, onOpenChange }: Props) {
 }
 
 function Header({ chat, onClose }: { chat: Chat; onClose: () => void }) {
+  const t = useT();
   return (
     <div className="relative h-40">
       <div
@@ -292,7 +295,7 @@ function Header({ chat, onClose }: { chat: Chat; onClose: () => void }) {
       />
       <div className="absolute top-4 left-4 right-4 flex items-center justify-between">
         <Badge variant="glass" className="!bg-black/30 !text-white">
-          <Sparkles className="size-3" /> profile
+          <Sparkles className="size-3" /> {t("profile")}
         </Badge>
         <div className="flex items-center gap-1.5">
           <button className="size-8 rounded-full bg-black/30 backdrop-blur grid place-items-center text-white hover:bg-black/50">
@@ -389,6 +392,7 @@ function LinkRow({
 }
 
 function MemberList({ chat }: { chat: Chat }) {
+  const t = useT();
   // Use explicit memberIds if present, otherwise fall back to a deterministic
   // subset of the mock users so existing seeded groups still show a roster.
   const ids = chat.memberIds && chat.memberIds.length > 0
@@ -406,13 +410,13 @@ function MemberList({ chat }: { chat: Chat }) {
     <div className="mt-5">
       <div className="flex items-center justify-between mb-2">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold">Members</h3>
+          <h3 className="text-sm font-semibold">{t("Members")}</h3>
           <span className="text-[11px] text-muted-foreground">
             {members.length}
           </span>
         </div>
         <button className="text-[11px] inline-flex items-center gap-1 text-cyan-400 hover:underline">
-          <UserPlus className="size-3" /> Add people
+          <UserPlus className="size-3" /> {t("Add people")}
         </button>
       </div>
 
@@ -435,6 +439,7 @@ function MemberRow({
   isMe?: boolean;
   isAdmin?: boolean;
 }) {
+  const t = useT();
   return (
     <div
       className={cn(
@@ -453,12 +458,12 @@ function MemberRow({
           <p className="text-sm font-medium truncate">
             {user.name}
             {isMe && (
-              <span className="ml-1.5 text-[10px] text-muted-foreground">(you)</span>
+              <span className="ml-1.5 text-[10px] text-muted-foreground">({t("you")})</span>
             )}
           </p>
           {isAdmin && (
             <Badge variant="warning" className="!text-[9px] !py-0 !px-1.5">
-              <Crown className="size-2.5" /> admin
+              <Crown className="size-2.5" /> {t("admin")}
             </Badge>
           )}
         </div>
