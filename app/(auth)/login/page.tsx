@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -11,7 +12,6 @@ import { Apple, Github, Loader2, LockKeyhole, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { NovaLogo } from "@/components/brand/nova-logo";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useT } from "@/lib/i18n";
 
@@ -50,7 +50,14 @@ export default function LoginPage() {
         className="w-full max-w-md glass rounded-3xl p-8"
       >
         <div className="flex flex-col items-center text-center mb-8">
-          <NovaLogo className="h-14 w-14" />
+          <Image
+            src="/Logo.png"
+            alt="Obsidian"
+            width={56}
+            height={56}
+            priority
+            className="size-14 rounded-xl object-contain"
+          />
           <h1 className="mt-5 text-2xl font-semibold tracking-tight">{t("Welcome back")}</h1>
           <p className="text-sm text-muted-foreground mt-1">{t("Sign in to continue to Obsidian")}</p>
         </div>

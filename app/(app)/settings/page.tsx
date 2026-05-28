@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { motion } from "framer-motion";
 import {
   Bell,
@@ -80,6 +80,15 @@ function formatBytes(b: number) {
 }
 
 export default function SettingsPage() {
+  // Suspense boundary required by Next for the useSearchParams() inside.
+  return (
+    <React.Suspense fallback={null}>
+      <SettingsContent />
+    </React.Suspense>
+  );
+}
+
+function SettingsContent() {
   const { theme, setTheme } = useTheme();
   const router = useRouter();
   const t = useT();
@@ -89,16 +98,17 @@ export default function SettingsPage() {
 
   // A `?section=…` query param (e.g. from the notification popup's "Open
   // notification settings") deep-links straight to that tab — and on mobile
-  // opens its detail view. Read from the URL on mount rather than via
-  // useSearchParams so this client page doesn't need a Suspense boundary.
+  // opens its detail view. Read reactively via useSearchParams so it also
+  // switches tabs when the page is *already* mounted (navigating to the same
+  // route with a new query doesn't remount).
+  const searchParams = useSearchParams();
+  const sectionParam = searchParams.get("section");
   React.useEffect(() => {
-    if (typeof window === "undefined") return;
-    const sec = new URLSearchParams(window.location.search).get("section");
-    if (sec && sections.some((x) => x.id === sec)) {
-      setSection(sec);
+    if (sectionParam && sections.some((x) => x.id === sectionParam)) {
+      setSection(sectionParam);
       setMobileDetail(true);
     }
-  }, []);
+  }, [sectionParam]);
   const [chatThemeOpen, setChatThemeOpen] = React.useState(false);
 
   const handleSignOut = () => {
@@ -133,8 +143,14 @@ export default function SettingsPage() {
   };
 
   return (
-    <div className="flex h-[calc(100dvh-4rem)]">
+    // `rtl:flex-row-reverse` keeps the sections list on the physical left for
+    // RTL languages (Arabic), matching the main nav sidebar; the detail pane
+    // stays RTL so its content still reads right-to-left.
+    <div className="flex h-[calc(100dvh-4rem)] rtl:flex-row-reverse">
       <aside
+        // LTR internals so the rail looks the same in every language
+        // (icon-left, label, chevron pinned to the right via ml-auto).
+        dir="ltr"
         className={cn(
           "shrink-0 flex-col border-r border-border/40 bg-card/30 backdrop-blur-xl",
           "md:flex md:w-64",

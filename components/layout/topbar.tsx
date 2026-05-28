@@ -10,8 +10,10 @@ import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import { useUIStore } from "@/store/use-ui-store";
 import { NotificationCenter } from "@/components/notifications/notification-center";
+import { useT } from "@/lib/i18n";
 
 export function Topbar() {
+  const t = useT();
   const { theme, setTheme } = useTheme();
   const setCommand = useUIStore((s) => s.setCommandOpen);
   const toggleAi = useUIStore((s) => s.toggleAiAssistant);
@@ -22,9 +24,9 @@ export function Topbar() {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
         <button
           onClick={() => setCommand(true)}
-          className="w-full h-10 pl-9 pr-24 rounded-xl text-left text-sm text-muted-foreground border border-border/60 bg-background/40 hover:bg-background/60 transition"
+          className="w-full h-10 pl-9 pr-24 rounded-xl text-left text-sm text-muted-foreground border border-foreground/60 bg-background/40 hover:bg-background/60 transition"
         >
-          Search anything…
+          {t("Search anything…")}
         </button>
         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px] text-muted-foreground">
           <kbd className="px-1.5 py-0.5 rounded glass border border-border/60">

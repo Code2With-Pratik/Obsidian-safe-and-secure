@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -109,6 +110,11 @@ export function NotificationCenter({ children }: { children: React.ReactNode }) 
   const [tab, setTab] = React.useState<"all" | "unread" | "mentions">("all");
   const panelRef = React.useRef<HTMLDivElement>(null);
   const triggerRef = React.useRef<HTMLElement>(null);
+  // Portal the overlays to <body> so their z-index lives in the root stacking
+  // context. Rendered inline they'd be trapped inside the Topbar's z-30 +
+  // backdrop-filter stacking context and sit *below* the AI panel (z-90).
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
 
   const unread = items.filter((i) => !i.read).length;
 
@@ -163,18 +169,21 @@ export function NotificationCenter({ children }: { children: React.ReactNode }) 
     <>
       {trigger}
 
-      <AnimatePresence>
-        {open && <Stage onClose={() => setOpen(false)} />}
-      </AnimatePresence>
+      {mounted &&
+        createPortal(
+          <>
+            <AnimatePresence>
+              {open && <Stage onClose={() => setOpen(false)} />}
+            </AnimatePresence>
 
-      <AnimatePresence>
-        {open && (
+            <AnimatePresence>
+              {open && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.25 }}
-            className="fixed inset-0 z-[110] grid place-items-center md:place-items-end md:justify-items-end p-3 md:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+            className="fixed inset-0 z-[120] grid place-items-center md:items-start md:justify-items-end p-3 md:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
             onClick={() => setOpen(false)}
           >
             <motion.div
@@ -188,7 +197,7 @@ export function NotificationCenter({ children }: { children: React.ReactNode }) 
               // glass-strong is 72% opaque by default — bump to ~94% so the
               // notification list stays legible over busy backgrounds.
               style={{ background: "hsl(var(--card) / 0.94)" }}
-              className="relative w-full max-w-md h-[min(86dvh,720px)] glass-strong glass-specular rounded-3xl border border-white/15 shadow-floating overflow-hidden flex flex-col"
+              className="relative w-full max-w-md h-[min(82dvh,720px)] md:max-h-[calc(100dvh-6rem)] glass-strong glass-specular rounded-3xl border border-white/15 shadow-floating overflow-hidden flex flex-col"
             >
               <div className="px-5 pt-5 pb-3 flex items-start justify-between">
                 <div>
@@ -268,8 +277,11 @@ export function NotificationCenter({ children }: { children: React.ReactNode }) 
               </div>
             </motion.div>
           </motion.div>
+              )}
+            </AnimatePresence>
+          </>,
+          document.body
         )}
-      </AnimatePresence>
     </>
   );
 }
@@ -282,9 +294,9 @@ function Stage({ onClose }: { onClose: () => void }) {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
       onClick={onClose}
-      // Start below the 4rem topbar so the global search bar stays crisp —
-      // the blur only dims the content area, not the header.
-      className="fixed inset-x-0 bottom-0 top-16 z-[105] bg-black/20 backdrop-blur-sm"
+      // Click-catcher that dims the content area below the 4rem topbar. No
+      // backdrop blur — the background stays sharp behind the panel.
+      className="fixed inset-x-0 bottom-0 top-16 z-[115] bg-black/20"
     />
   );
 }

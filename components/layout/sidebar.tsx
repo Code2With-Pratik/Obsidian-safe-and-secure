@@ -30,7 +30,7 @@ const navItems = [
   { href: "/files", label: "Vault", icon: Folder, badge: 0 }
 ];
 
-const COLLAPSED = 76;
+const COLLAPSED = 64;
 const EXPANDED = 260;
 
 export function Sidebar() {
@@ -62,6 +62,11 @@ export function Sidebar() {
 
   return (
     <aside
+      // Force LTR internals so the rail looks identical in every language
+      // (icon-left, label-right, panel expands rightward). The shell pins this
+      // aside to the physical left even under RTL, so left-anchored positioning
+      // here is always correct.
+      dir="ltr"
       className="relative hidden md:block shrink-0 h-dvh"
       style={{ width: COLLAPSED }}
     >
@@ -70,22 +75,25 @@ export function Sidebar() {
         onMouseLeave={close}
         initial={false}
         animate={{ width: expanded ? EXPANDED : COLLAPSED }}
-        transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
+        transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
         className={cn(
           "absolute top-0 left-0 h-dvh z-40 flex flex-col border-r border-border/40 overflow-hidden will-change-[width] transition-shadow duration-300",
-          "bg-card/80 backdrop-blur-2xl backdrop-saturate-150 glass-specular",
+          // Lighter backdrop blur (xl, not 2xl) — a 40px blur is re-sampled
+          // every frame while the width animates, which is the main source of
+          // the stutter. xl keeps the glass look at a fraction of the cost.
+          "bg-card/80 backdrop-blur-xl backdrop-saturate-150 glass-specular",
           expanded && "shadow-floating"
         )}
       >
-        <div className="flex items-center gap-2.5 px-2 py-3">
+        <div className={cn("flex items-center gap-2.5 px-2 py-3", !expanded && "justify-center")}>
           <Link href="/chats" className="flex items-center gap-2.5 shrink-0">
             <Image
               src="/Logo.png"
               alt="Obsidian"
-              width={60}
-              height={60}
+              width={48}
+              height={48}
               priority
-              className="size-[60px] shrink-0 rounded-xl object-contain"
+              className="size-11 shrink-0 rounded-xl object-contain"
             />
             <AnimatePresence initial={false}>
               {expanded && (
@@ -115,11 +123,16 @@ export function Sidebar() {
               <Link
                 href={item.href}
                 className={cn(
-                  "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 transition-all",
+                  // Keep `px-3` in both states (no justify-center toggle): the
+                  // icon stays put at a fixed left offset that reads as centered
+                  // in the 64px rail, so it never jumps/shakes while the panel
+                  // width animates. `transition-colors` (not `transition-all`)
+                  // so a stray sub-pixel height change can't animate into a
+                  // vertical drift.
+                  "group relative flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors",
                   active
                     ? "bg-foreground/[0.06] text-foreground"
-                    : "text-muted-foreground hover:text-foreground hover:bg-foreground/[0.04]",
-                  !expanded && "justify-center px-0"
+                    : "text-foreground hover:bg-foreground/[0.04]"
                 )}
               >
                 {active && (
@@ -128,7 +141,7 @@ export function Sidebar() {
                     className="absolute left-0 top-2 bottom-2 w-1 bg-gradient-to-b from-violet-400 to-cyan-400"
                   />
                 )}
-                <item.icon className="size-[22px] shrink-0" />
+                <item.icon className="size-[22px] shrink-0 text-foreground" />
                 <AnimatePresence initial={false}>
                   {expanded && (
                     <motion.span
@@ -136,7 +149,7 @@ export function Sidebar() {
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: -4 }}
                       transition={{ duration: 0.18 }}
-                      className="text-[15px] font-medium whitespace-nowrap"
+                      className="text-[15px] font-medium whitespace-nowrap leading-none"
                     >
                       {t(item.label)}
                     </motion.span>
@@ -165,15 +178,16 @@ export function Sidebar() {
           })}
         </nav>
 
-        <div className="border-t border-border/50 p-3 space-y-1">
+        <div className="border-t border-border/50 px-2 py-3 space-y-1">
           <Link
             href="/settings"
             className={cn(
-              "flex items-center gap-3 rounded-xl px-3 py-2.5 text-muted-foreground hover:text-foreground hover:bg-foreground/[0.04] transition",
-              !expanded && "justify-center px-0"
+              // Same fixed-offset approach as the nav items — px-3 in both
+              // states so the gear icon doesn't shake when the rail collapses.
+              "flex items-center gap-3 rounded-xl px-3 py-2.5 text-foreground hover:bg-foreground/[0.04] transition"
             )}
           >
-            <Settings className="size-[22px] shrink-0" />
+            <Settings className="size-[22px] shrink-0 text-foreground" />
             <AnimatePresence initial={false}>
               {expanded && (
                 <motion.span
@@ -181,7 +195,7 @@ export function Sidebar() {
                   animate={{ opacity: 1, x: 0 }}
                   exit={{ opacity: 0, x: -4 }}
                   transition={{ duration: 0.18 }}
-                  className="text-[15px] whitespace-nowrap"
+                  className="text-[15px] whitespace-nowrap leading-none"
                 >
                   {t("Settings")}
                 </motion.span>
@@ -192,8 +206,7 @@ export function Sidebar() {
           <Link
             href="/profile"
             className={cn(
-              "flex items-center gap-3 rounded-xl p-2 mt-1 hover:bg-foreground/[0.04] transition",
-              !expanded && "justify-center"
+              "flex items-center gap-3 rounded-xl p-2 mt-1 hover:bg-foreground/[0.04] transition"
             )}
           >
             <Avatar className="size-9 ring-2 ring-emerald-400/60 ring-offset-2 ring-offset-background shrink-0">
@@ -210,7 +223,7 @@ export function Sidebar() {
                   className="flex-1 min-w-0 flex items-center gap-2 whitespace-nowrap"
                 >
                   <div className="flex-1 min-w-0">
-                    <div className="text-[15px] font-medium truncate">
+                    <div className="text-[15px] font-medium truncate leading-tight">
                       {user?.name ?? "Aria Vance"}
                     </div>
                     <div className="text-xs text-muted-foreground flex items-center gap-1">

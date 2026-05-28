@@ -39,7 +39,7 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { useVaultStore, type VaultNode, type VaultFileKind } from "@/store/use-vault-store";
-import { NewFolderDialog, VaultPasswordDialog } from "@/features/vault/vault-dialogs";
+import { NewFolderDialog, VaultPasswordDialog, ConfirmDeleteDialog } from "@/features/vault/vault-dialogs";
 import { FilePreviewDialog } from "@/features/vault/file-preview-dialog";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
@@ -102,6 +102,14 @@ export default function FilesPage() {
   const [view, setView] = React.useState<"grid" | "list">("grid");
   const [drag, setDrag] = React.useState(false);
   const [newFolderOpen, setNewFolderOpen] = React.useState(false);
+  /** Pending delete behind the "Are you sure?" alert. `count` drives the
+   *  dialog copy; `run` performs the actual removal once confirmed (bulk wipe
+   *  or a single — possibly password-gated — node). */
+  const [confirmDelete, setConfirmDelete] = React.useState<{
+    count: number;
+    locked?: boolean;
+    run: () => void;
+  } | null>(null);
   const [pwOpen, setPwOpen] = React.useState(false);
   /** Which password flow the dialog is currently in. Reset on close. */
   const [pwMode, setPwMode] = React.useState<"set" | "unlock" | "change">("set");
@@ -142,10 +150,14 @@ export default function FilesPage() {
     });
   }, [selected, toggleStar]);
 
-  const bulkDelete = React.useCallback(() => {
-    selected.forEach((id) => remove(id));
-    clearSelection();
-  }, [selected, remove, clearSelection]);
+  /** Permanently remove a set of nodes, then drop the selection. */
+  const performDelete = React.useCallback(
+    (ids: string[]) => {
+      ids.forEach((id) => remove(id));
+      clearSelection();
+    },
+    [remove, clearSelection]
+  );
 
   /** Run `fn` if the node is accessible. If it's a vault item and the
    *  vault is still locked, queue the action behind the password dialog. */
@@ -162,6 +174,36 @@ export default function FilesPage() {
       fn();
     },
     [unlocked, password]
+  );
+
+  /** Open the "Are you sure?" alert before removing `ids`. If ANY target is a
+   *  secured (lock-icon / vault) item, confirming prompts for the vault
+   *  password — even when the vault is already unlocked — and the removal only
+   *  runs once the password checks out. */
+  const requestDelete = React.useCallback(
+    (ids: string[]) => {
+      if (ids.length === 0) return;
+      const all = useVaultStore.getState().nodes;
+      const securedWithPw =
+        !!password && ids.some((id) => all.find((n) => n.id === id)?.vault);
+      const run = () => {
+        if (securedWithPw) {
+          pendingActionRef.current = () => performDelete(ids);
+          setPwMode("unlock");
+          setPwOpen(true);
+        } else {
+          performDelete(ids);
+        }
+      };
+      setConfirmDelete({ count: ids.length, locked: securedWithPw, run });
+    },
+    [password, performDelete]
+  );
+
+  /** Single-item convenience wrapper used by each file/folder card. */
+  const requestDeleteOne = React.useCallback(
+    (id: string) => requestDelete([id]),
+    [requestDelete]
   );
 
   /** Open the password dialog in the right mode. Auto-detects "set" vs
@@ -368,7 +410,7 @@ export default function FilesPage() {
           )}
         </button>
         <button
-          onClick={bulkDelete}
+          onClick={() => requestDelete(Array.from(selected))}
           className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium text-rose-300 hover:bg-rose-500/15 transition"
         >
           <Trash2 className="size-3.5" /> {t("Delete")}
@@ -403,7 +445,7 @@ export default function FilesPage() {
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             <DropdownMenuItem
-              onSelect={bulkDelete}
+              onSelect={() => requestDelete(Array.from(selected))}
               className="!text-rose-400 focus:!text-rose-300"
             >
               <Trash2 /> {t("Delete")}
@@ -628,7 +670,7 @@ export default function FilesPage() {
                 }
                 toggleVault(id);
               }}
-              onDelete={remove}
+              onDelete={requestDeleteOne}
               emptyLabel={t("This folder is empty — drag files in or click Upload.")}
             />
           </TabsContent>
@@ -654,7 +696,7 @@ export default function FilesPage() {
               onVault={(id) =>
                 password ? toggleVault(id) : requirePassword(() => toggleVault(id))
               }
-              onDelete={remove}
+              onDelete={requestDeleteOne}
               emptyLabel={t("Nothing starred yet.")}
             />
           </TabsContent>
@@ -700,7 +742,7 @@ export default function FilesPage() {
                   }}
                   onStar={toggleStar}
                   onVault={toggleVault}
-                  onDelete={remove}
+                  onDelete={requestDeleteOne}
                   emptyLabel={t("Your vault is empty. Move a file in from the All tab.")}
                 />
               </>
@@ -713,6 +755,14 @@ export default function FilesPage() {
         open={newFolderOpen}
         onClose={() => setNewFolderOpen(false)}
         onCreate={(name) => createFolder(name, currentFolderId)}
+      />
+
+      <ConfirmDeleteDialog
+        open={!!confirmDelete}
+        count={confirmDelete?.count ?? 0}
+        locked={confirmDelete?.locked}
+        onClose={() => setConfirmDelete(null)}
+        onConfirm={() => confirmDelete?.run()}
       />
 
       <VaultPasswordDialog

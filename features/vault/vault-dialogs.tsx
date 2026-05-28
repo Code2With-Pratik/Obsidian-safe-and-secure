@@ -3,7 +3,7 @@
 import * as React from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { X, Folder, Lock, KeyRound, ShieldCheck } from "lucide-react";
+import { X, Folder, Lock, KeyRound, ShieldCheck, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
@@ -129,6 +129,73 @@ export function NewFolderDialog({
       <Button onClick={submit} disabled={!name.trim()} variant="gradient" className="w-full mt-4">
         {t("Create folder")}
       </Button>
+    </Shell>
+  );
+}
+
+/* ─────────────────────────────────────────────────────────────
+ * 1b. Confirm delete — "are you sure?" before removing selection
+ * ───────────────────────────────────────────────────────────── */
+export function ConfirmDeleteDialog({
+  open,
+  count,
+  locked = false,
+  onClose,
+  onConfirm
+}: {
+  open: boolean;
+  /** How many items are about to be removed — shown as a small count line. */
+  count: number;
+  /** True when the single item being deleted is a locked vault item — shows a
+   *  lock-specific message (the password prompt follows on confirm). */
+  locked?: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const t = useT();
+  return (
+    <Shell open={open} onClose={onClose} title={t("Are you sure?")}>
+      <div className="flex items-start gap-3">
+        <div
+          className={cn(
+            "size-12 shrink-0 rounded-2xl grid place-items-center",
+            locked ? "bg-amber-500/15" : "bg-rose-500/15"
+          )}
+        >
+          {locked ? (
+            <Lock className="size-5 text-amber-400" />
+          ) : (
+            <Trash2 className="size-5 text-rose-400" />
+          )}
+        </div>
+        <div className="min-w-0">
+          <p className="text-sm text-muted-foreground">
+            {locked
+              ? t("This item is locked. Are you sure you want to delete it?")
+              : t("The selected files and folders will be permanently deleted. This can't be undone.")}
+          </p>
+          {count > 1 && (
+            <p className="text-xs text-muted-foreground/80 mt-1.5 tabular-nums">
+              {count} {t("selected")}
+            </p>
+          )}
+        </div>
+      </div>
+      <div className="flex gap-2 mt-5">
+        <Button variant="glass" className="flex-1" onClick={onClose}>
+          {t("Cancel")}
+        </Button>
+        <Button
+          variant="destructive"
+          className="flex-1"
+          onClick={() => {
+            onConfirm();
+            onClose();
+          }}
+        >
+          <Trash2 /> {t("Delete")}
+        </Button>
+      </div>
     </Shell>
   );
 }
