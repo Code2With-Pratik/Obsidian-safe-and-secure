@@ -170,6 +170,13 @@
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+    /* `background-clip: text` clips to the glyph box; with a tight heading
+       line-height the tall marks of scripts like Devanagari/Arabic get cut
+       off at the top. inline-block + roomy line-height + a little vertical
+       padding gives every glyph space so nothing is clipped. */
+    display: inline-block;
+    line-height: 1.25;
+    padding-block: 0.12em;
   }
 
   .ring-glow {

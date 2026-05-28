@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
+import { useT } from "@/lib/i18n";
 
 /** Available video filters — id is what we pass back to the parent so it can
  *  apply the corresponding CSS `filter` to the call stage. */
@@ -62,6 +63,7 @@ export function CallControls({
   filterId?: string;
   onFilterChange?: (id: string) => void;
 }) {
+  const t = useT();
   const [muted, setMuted] = React.useState(false);
   const [camOff, setCamOff] = React.useState(false);
   const [share, setShare] = React.useState(false);
@@ -152,7 +154,7 @@ export function CallControls({
           active={!muted}
           toggled={muted}
           onClick={() => setMuted((m) => !m)}
-          tooltip={muted ? "Unmute" : "Mute"}
+          tooltip={muted ? t("Unmute") : t("Mute")}
           danger={muted}
         >
           {muted ? <MicOff /> : <Mic />}
@@ -161,7 +163,7 @@ export function CallControls({
           active={!camOff}
           toggled={camOff}
           onClick={() => setCamOff((c) => !c)}
-          tooltip={camOff ? "Camera on" : "Camera off"}
+          tooltip={camOff ? t("Camera on") : t("Camera off")}
           danger={camOff}
         >
           {camOff ? <VideoOff /> : <Video />}
@@ -173,29 +175,29 @@ export function CallControls({
             active={share}
             toggled={share}
             onClick={() => setShare((s) => !s)}
-            tooltip="Share screen"
+            tooltip={t("Share screen")}
           >
             <ScreenShare />
           </ControlButton>
         </span>
         <ControlButton
-          tooltip="Filters & effects"
+          tooltip={t("Filters & effects")}
           toggled={filtersOpen || filterId !== "none"}
           onClick={() => setFiltersOpen((v) => !v)}
         >
           <Wand2 />
         </ControlButton>
         <span className="hidden md:contents">
-          <ControlButton tooltip="Raise hand">
+          <ControlButton tooltip={t("Raise hand")}>
             <Hand />
           </ControlButton>
-          <ControlButton tooltip="Participants">
+          <ControlButton tooltip={t("Participants")}>
             <Users />
           </ControlButton>
-          <ControlButton tooltip="Chat">
+          <ControlButton tooltip={t("Chat")}>
             <MessageSquare />
           </ControlButton>
-          <ControlButton tooltip="More">
+          <ControlButton tooltip={t("More")}>
             <MoreHorizontal />
           </ControlButton>
         </span>
@@ -204,7 +206,7 @@ export function CallControls({
           onClick={onEnd}
           className="ml-1 h-10 px-4 rounded-full bg-rose-500 hover:bg-rose-600 text-white flex items-center gap-1.5 text-sm font-medium transition shadow-glow-pink"
         >
-          <PhoneOff className="size-4" /> End
+          <PhoneOff className="size-4" /> {t("End")}
         </button>
       </motion.div>
     </div>

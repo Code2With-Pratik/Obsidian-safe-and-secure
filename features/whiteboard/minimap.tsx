@@ -3,6 +3,7 @@
 import * as React from "react";
 import { animate } from "framer-motion";
 import { useWhiteboardStore, type Element } from "@/store/use-whiteboard-store";
+import { useT } from "@/lib/i18n";
 
 const MAP_W = 200;
 const MAP_H = 140;
@@ -62,6 +63,7 @@ function computeContentBounds(elements: Element[]) {
 }
 
 export function Minimap() {
+  const t = useT();
   const board = useWhiteboardStore((s) => s.activeBoard());
   const setCamera = useWhiteboardStore((s) => s.setCamera);
   const containerRef = React.useRef<HTMLDivElement>(null);
@@ -170,7 +172,7 @@ export function Minimap() {
       onPointerCancel={handlePointerUp}
       className="relative rounded-xl border border-border/60 bg-card/60 backdrop-blur-xl shadow-floating overflow-hidden cursor-crosshair select-none touch-none"
       style={{ width: MAP_W, height: MAP_H }}
-      title="Click or drag to pan"
+      title={t("Click or drag to pan")}
     >
       {/* Element bounding boxes */}
       <svg
@@ -258,7 +260,7 @@ export function Minimap() {
         />
       </svg>
       <span className="absolute bottom-1 right-2 text-[9px] uppercase tracking-wider text-muted-foreground/80 pointer-events-none">
-        Minimap
+        {t("Minimap")}
       </span>
     </div>
   );

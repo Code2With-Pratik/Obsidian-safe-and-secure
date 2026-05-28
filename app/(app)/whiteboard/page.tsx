@@ -33,6 +33,7 @@ import { IconPanel } from "@/features/whiteboard/icon-panel";
 import { downloadBoardAsPng } from "@/features/whiteboard/export-png";
 import { useWhiteboardStore } from "@/store/use-whiteboard-store";
 import { users } from "@/lib/mock-data";
+import { useT } from "@/lib/i18n";
 
 const COLLAB_USERS = [
   { ...users[1], color: "#22D3EE" },
@@ -42,6 +43,7 @@ const COLLAB_USERS = [
 ];
 
 export default function WhiteboardPage() {
+  const t = useT();
   // The whiteboard store is persisted in localStorage so its hydrated state
   // (camera, user-created boards, generated ids) is entirely client-side.
   // Rendering it on the server would produce HTML that diverges from the
@@ -88,7 +90,7 @@ export default function WhiteboardPage() {
   if (!mounted) {
     return (
       <div className="h-[calc(100dvh-4rem)] grid place-items-center text-muted-foreground text-sm">
-        Loading whiteboard…
+        {t("Loading whiteboard…")}
       </div>
     );
   }
@@ -137,7 +139,7 @@ export default function WhiteboardPage() {
             <AccessPopover>
               <button
                 className="hidden md:flex items-center gap-2 glass rounded-full px-3 py-1.5 border border-border/60 hover:bg-foreground/5 transition cursor-pointer pointer-events-auto"
-                aria-label="Manage access"
+                aria-label={t("Manage access")}
               >
                 <Users className="size-3.5 text-muted-foreground" />
                 <div className="flex -space-x-2">
@@ -152,7 +154,7 @@ export default function WhiteboardPage() {
                   ))}
                 </div>
                 <span className="text-xs text-muted-foreground">
-                  {COLLAB_USERS.length} editing
+                  {COLLAB_USERS.length} {t("editing")}
                 </span>
                 <ChevronDown className="size-3 text-muted-foreground" />
               </button>
@@ -160,18 +162,18 @@ export default function WhiteboardPage() {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="gradient" size="sm">
-                  <Share2 /> Share <ChevronDown className="size-3.5 opacity-80" />
+                  <Share2 /> {t("Share")} <ChevronDown className="size-3.5 opacity-80" />
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" sideOffset={8} className="min-w-[220px]">
-                <DropdownMenuLabel>Share board</DropdownMenuLabel>
+                <DropdownMenuLabel>{t("Share board")}</DropdownMenuLabel>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={() => setShareOpen(true)}>
                   <Link2 />
                   <div className="flex flex-col">
-                    <span>Share via link</span>
+                    <span>{t("Share via link")}</span>
                     <span className="text-[10px] text-muted-foreground">
-                      Copy a join link
+                      {t("Copy a join link")}
                     </span>
                   </div>
                 </DropdownMenuItem>
@@ -184,9 +186,9 @@ export default function WhiteboardPage() {
                 >
                   {downloading ? <Loader2 className="animate-spin" /> : <Download />}
                   <div className="flex flex-col">
-                    <span>{downloading ? "Preparing…" : "Download HD"}</span>
+                    <span>{downloading ? t("Preparing…") : t("Download HD")}</span>
                     <span className="text-[10px] text-muted-foreground">
-                      Full canvas, 2× PNG
+                      {t("Full canvas, 2× PNG")}
                     </span>
                   </div>
                 </DropdownMenuItem>
@@ -212,7 +214,7 @@ export default function WhiteboardPage() {
             <button
               onClick={() => setCamera({ zoom: Math.max(0.25, zoom - 0.15) })}
               className="size-7 grid place-items-center rounded-full hover:bg-foreground/10 text-foreground/80 hover:text-foreground transition"
-              aria-label="Zoom out"
+              aria-label={t("Zoom out")}
             >
               <Minus className="size-3.5" />
             </button>
@@ -222,7 +224,7 @@ export default function WhiteboardPage() {
             <button
               onClick={() => setCamera({ zoom: Math.min(4, zoom + 0.15) })}
               className="size-7 grid place-items-center rounded-full hover:bg-foreground/10 text-foreground/80 hover:text-foreground transition"
-              aria-label="Zoom in"
+              aria-label={t("Zoom in")}
             >
               <Plus className="size-3.5" />
             </button>
@@ -230,7 +232,7 @@ export default function WhiteboardPage() {
               onClick={() => setCamera({ x: 0, y: 0, zoom: 1 })}
               className="text-[10px] font-medium px-2 h-7 rounded-full hover:bg-foreground/10 text-foreground/70 hover:text-foreground transition"
             >
-              Fit
+              {t("Fit")}
             </button>
           </div>
         </div>
@@ -243,13 +245,14 @@ export default function WhiteboardPage() {
 }
 
 function BoardTitle() {
+  const t = useT();
   const board = useWhiteboardStore((s) => s.activeBoard());
   if (!board) return null;
   return (
     <div className="glass rounded-full px-4 py-1.5 border border-border/60 inline-flex items-center gap-2 text-xs">
       <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
       <span className="font-semibold">{board.name}</span>
-      <span className="text-muted-foreground">· {board.elements.length} items</span>
+      <span className="text-muted-foreground">· {board.elements.length} {t("items")}</span>
     </div>
   );
 }

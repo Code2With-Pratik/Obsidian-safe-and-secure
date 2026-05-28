@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NovaLogo } from "@/components/brand/nova-logo";
 import { useAuthStore } from "@/store/use-auth-store";
+import { useT } from "@/lib/i18n";
 
 const schema = z.object({
   email: z.string().email("Enter a valid email"),
@@ -22,6 +23,7 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 export default function LoginPage() {
+  const t = useT();
   const router = useRouter();
   const login = useAuthStore((s) => s.login);
   const {
@@ -49,8 +51,8 @@ export default function LoginPage() {
       >
         <div className="flex flex-col items-center text-center mb-8">
           <NovaLogo className="h-14 w-14" />
-          <h1 className="mt-5 text-2xl font-semibold tracking-tight">Welcome back</h1>
-          <p className="text-sm text-muted-foreground mt-1">Sign in to continue to Obsidian</p>
+          <h1 className="mt-5 text-2xl font-semibold tracking-tight">{t("Welcome back")}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{t("Sign in to continue to Obsidian")}</p>
         </div>
 
         <div className="grid grid-cols-3 gap-2 mb-6">
@@ -75,25 +77,25 @@ export default function LoginPage() {
             <div className="w-full border-t border-border/60" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="px-3 text-muted-foreground bg-background/50 backdrop-blur">or</span>
+            <span className="px-3 text-muted-foreground bg-background/50 backdrop-blur">{t("or")}</span>
           </div>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">{t("Email")}</Label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <Input id="email" type="email" placeholder="you@nova.app" className="pl-9" {...register("email")} />
             </div>
-            {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
+            {errors.email && <p className="text-xs text-destructive">{t(errors.email.message ?? "")}</p>}
           </div>
 
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t("Password")}</Label>
               <Link href="/recover" className="text-xs text-muted-foreground hover:text-primary">
-                Forgot?
+                {t("Forgot?")}
               </Link>
             </div>
             <div className="relative">
@@ -106,18 +108,18 @@ export default function LoginPage() {
                 {...register("password")}
               />
             </div>
-            {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
+            {errors.password && <p className="text-xs text-destructive">{t(errors.password.message ?? "")}</p>}
           </div>
 
           <Button type="submit" variant="gradient" size="lg" className="w-full !h-12" disabled={isSubmitting}>
-            {isSubmitting ? <Loader2 className="animate-spin" /> : "Continue"}
+            {isSubmitting ? <Loader2 className="animate-spin" /> : t("Continue")}
           </Button>
         </form>
 
         <p className="text-center text-sm text-muted-foreground mt-6">
-          New here?{" "}
+          {t("New here?")}{" "}
           <Link href="/register" className="text-primary hover:underline">
-            Create an account
+            {t("Create an account")}
           </Link>
         </p>
       </motion.div>

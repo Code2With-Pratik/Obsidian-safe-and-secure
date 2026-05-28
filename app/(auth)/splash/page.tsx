@@ -6,8 +6,10 @@ import { motion } from "framer-motion";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NovaLogo } from "@/components/brand/nova-logo";
+import { useT } from "@/lib/i18n";
 
 export default function SplashPage() {
+  const t = useT();
   return (
     <div className="relative grid min-h-dvh place-items-center px-6">
       <div className="text-center max-w-3xl">
@@ -26,7 +28,7 @@ export default function SplashPage() {
           transition={{ delay: 0.25, duration: 0.7 }}
           className="mt-10 text-5xl md:text-7xl font-display font-semibold tracking-tight text-balance"
         >
-          The future of <span className="neon-text">communication</span>.
+          {t("The future of")} <span className="neon-text">{t("communication")}</span>.
         </motion.h1>
 
         <motion.p
@@ -35,8 +37,7 @@ export default function SplashPage() {
           transition={{ delay: 0.4, duration: 0.7 }}
           className="mt-6 text-lg md:text-xl text-muted-foreground text-balance"
         >
-          Chats, calls, ghost rooms, stories, whiteboards and an internal browser — one luminous operating system for the
-          people, ideas and stories you carry with you.
+          {t("Chats, calls, ghost rooms, stories, whiteboards and an internal browser — one luminous operating system for the people, ideas and stories you carry with you.")}
         </motion.p>
 
         <motion.div
@@ -47,14 +48,14 @@ export default function SplashPage() {
         >
           <Button asChild size="xl" variant="gradient" className="group">
             <Link href="/onboarding">
-              Enter Obsidian
+              {t("Enter Obsidian")}
               <ArrowRight className="transition-transform group-hover:translate-x-1" />
             </Link>
           </Button>
           <Button asChild size="xl" variant="glass">
             <Link href="/login">
               <Sparkles className="mr-1" />
-              I already have an account
+              {t("I already have an account")}
             </Link>
           </Button>
         </motion.div>
@@ -67,12 +68,12 @@ export default function SplashPage() {
         >
           <span className="flex items-center gap-2">
             <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            End-to-end encrypted
+            {t("End-to-end encrypted")}
           </span>
           <span>·</span>
-          <span>No tracking</span>
+          <span>{t("No tracking")}</span>
           <span>·</span>
-          <span>Open standards</span>
+          <span>{t("Open standards")}</span>
         </motion.div>
       </div>
     </div>

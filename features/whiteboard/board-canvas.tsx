@@ -13,6 +13,7 @@ import { StickyNote } from "./sticky-note";
 import { cn } from "@/lib/utils";
 import { Trash2, Type } from "lucide-react";
 import { Icon } from "@iconify/react";
+import { useT } from "@/lib/i18n";
 
 /**
  * The drawing surface. Renders a dot grid + an SVG canvas with camera-space
@@ -825,6 +826,35 @@ function ConnectionSvg({
   conn: import("@/store/use-whiteboard-store").ConnectionElement;
   elements: Element[];
 }) {
+  const t = useT();
+  const tool = useWhiteboardStore((s) => s.tool);
+  const camera = useWhiteboardStore((s) => s.activeBoard()?.camera);
+  const removeElement = useWhiteboardStore((s) => s.removeElement);
+  const pushHistory = useWhiteboardStore((s) => s.pushHistory);
+
+  // Hover state with a deferred hide so moving the cursor from the wire to the
+  // delete button (a small gap) doesn't flicker the button out of existence.
+  const [hovered, setHovered] = React.useState(false);
+  const hideTimer = React.useRef<number | null>(null);
+  const setHoverDeferred = (v: boolean) => {
+    if (hideTimer.current !== null) {
+      window.clearTimeout(hideTimer.current);
+      hideTimer.current = null;
+    }
+    if (v) setHovered(true);
+    else
+      hideTimer.current = window.setTimeout(() => {
+        setHovered(false);
+        hideTimer.current = null;
+      }, 140);
+  };
+  React.useEffect(
+    () => () => {
+      if (hideTimer.current !== null) window.clearTimeout(hideTimer.current);
+    },
+    []
+  );
+
   const a = elements.find((e) => e.id === conn.fromNoteId);
   const b = elements.find((e) => e.id === conn.toNoteId);
   if (!a || !b) return null;
@@ -835,16 +865,86 @@ function ConnectionSvg({
   const y1 = a.y + a.h / 2;
   const x2 = b.x;
   const y2 = b.y + b.h / 2;
+
+  // The delete control + hit area only respond while the Select tool is active
+  // so other tools (pen, eraser) still draw straight through the wire.
+  const interactive = tool === "select";
+  const zoom = camera?.zoom ?? 1;
+  // For this symmetric horizontal bezier, t=0.5 lands exactly on the midpoint
+  // of the endpoints — so the delete button sits right on the curve.
+  const midX = (x1 + x2) / 2;
+  const midY = (y1 + y2) / 2;
+  // Keep the hit area + button a constant *screen* size regardless of zoom.
+  const dxAbs = Math.abs(x2 - x1);
+  const bend = Math.max(50, dxAbs / 2);
+  const d = `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`;
+  const r = 11 / zoom;
+  const cross = 4 / zoom;
+  const sw = 1.5 / zoom;
+
+  const removeConnection = () => {
+    pushHistory();
+    removeElement(conn.id);
+  };
+
   return (
-    <BezierWire
-      x1={x1}
-      y1={y1}
-      x2={x2}
-      y2={y2}
-      color={conn.color}
-      width={conn.width}
-      arrow={conn.arrow}
-    />
+    <g>
+      <BezierWire
+        x1={x1}
+        y1={y1}
+        x2={x2}
+        y2={y2}
+        color={conn.color}
+        width={hovered ? conn.width + 1 : conn.width}
+        arrow={conn.arrow}
+      />
+      {interactive && (
+        <path
+          d={d}
+          fill="none"
+          stroke="transparent"
+          strokeWidth={16 / zoom}
+          pointerEvents="stroke"
+          style={{ cursor: "pointer" }}
+          onPointerEnter={() => setHoverDeferred(true)}
+          onPointerLeave={() => setHoverDeferred(false)}
+        />
+      )}
+      {interactive && hovered && (
+        <g
+          style={{ cursor: "pointer" }}
+          pointerEvents="all"
+          onPointerEnter={() => setHoverDeferred(true)}
+          onPointerLeave={() => setHoverDeferred(false)}
+          onPointerDown={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            removeConnection();
+          }}
+        >
+          <title>{t("Remove connection")}</title>
+          <circle cx={midX} cy={midY} r={r} fill="#f43f5e" stroke="#ffffff" strokeWidth={sw} />
+          <line
+            x1={midX - cross}
+            y1={midY - cross}
+            x2={midX + cross}
+            y2={midY + cross}
+            stroke="#ffffff"
+            strokeWidth={sw}
+            strokeLinecap="round"
+          />
+          <line
+            x1={midX - cross}
+            y1={midY + cross}
+            x2={midX + cross}
+            y2={midY - cross}
+            stroke="#ffffff"
+            strokeWidth={sw}
+            strokeLinecap="round"
+          />
+        </g>
+      )}
+    </g>
   );
 }
 
@@ -1106,6 +1206,7 @@ function TextEditor({
   fontSize: number;
   onCommit: (next: string) => void;
 }) {
+  const t = useT();
   const ref = React.useRef<HTMLTextAreaElement>(null);
   React.useLayoutEffect(() => {
     const t = window.setTimeout(() => {
@@ -1127,7 +1228,7 @@ function TextEditor({
         if (e.key === "Escape") (e.target as HTMLTextAreaElement).blur();
       }}
       style={{ fontFamily, color: el.color, fontSize }}
-      placeholder="Type here…"
+      placeholder={t("Type here…")}
       className="w-full h-full bg-transparent outline-none resize-none px-2 py-1 leading-snug placeholder:opacity-50"
     />
   );
@@ -1142,6 +1243,7 @@ function TextEditor({
  * current zoom to keep the resize feel correct at any zoom level.
  */
 function TextLabel({ el }: { el: import("@/store/use-whiteboard-store").TextElement }) {
+  const t = useT();
   const updateElement = useWhiteboardStore((s) => s.updateElement);
   const removeElement = useWhiteboardStore((s) => s.removeElement);
   const translateElements = useWhiteboardStore((s) => s.translateElements);
@@ -1380,7 +1482,7 @@ function TextLabel({ el }: { el: import("@/store/use-whiteboard-store").TextElem
           style={{ color: el.color, fontFamily, fontSize }}
           className="w-full h-full px-2 py-1 leading-snug whitespace-pre-wrap break-words overflow-hidden"
         >
-          {el.text || (tool === "select" ? "Double-click to edit" : "")}
+          {el.text || (tool === "select" ? t("Double-click to edit") : "")}
         </p>
       )}
 
@@ -1409,7 +1511,7 @@ function TextLabel({ el }: { el: import("@/store/use-whiteboard-store").TextElem
               setShowFont(false);
             }}
             className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full bg-slate-900/90 text-white text-xs font-medium shadow-floating border border-white/10 hover:bg-slate-900 transition tabular-nums"
-            aria-label="Font size"
+            aria-label={t("Font size")}
           >
             <Type className="size-3.5" /> {fontSize}
           </button>
@@ -1421,7 +1523,7 @@ function TextLabel({ el }: { el: import("@/store/use-whiteboard-store").TextElem
             }}
             style={{ fontFamily }}
             className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full bg-slate-900/90 text-white text-xs font-medium shadow-floating border border-white/10 hover:bg-slate-900 transition"
-            aria-label="Change font"
+            aria-label={t("Change font")}
           >
             Aa
           </button>
@@ -1432,7 +1534,7 @@ function TextLabel({ el }: { el: import("@/store/use-whiteboard-store").TextElem
               removeElement(el.id);
             }}
             className="inline-flex items-center justify-center size-8 rounded-full bg-rose-500 text-white shadow-floating hover:bg-rose-400 transition"
-            aria-label="Delete text"
+            aria-label={t("Delete text")}
           >
             <Trash2 className="size-3.5" />
           </button>
@@ -1539,6 +1641,7 @@ function TextLabel({ el }: { el: import("@/store/use-whiteboard-store").TextElem
  * sticky note but with a single Iconify glyph instead of text.
  */
 function IconTile({ el }: { el: IconElement }) {
+  const t = useT();
   const updateElement = useWhiteboardStore((s) => s.updateElement);
   const removeElement = useWhiteboardStore((s) => s.removeElement);
   const translateElements = useWhiteboardStore((s) => s.translateElements);
@@ -1722,7 +1825,7 @@ function IconTile({ el }: { el: IconElement }) {
               removeElement(el.id);
             }}
             className="inline-flex items-center justify-center size-8 rounded-full bg-rose-500 text-white shadow-floating ring-1 ring-white/20 hover:bg-rose-400 transition"
-            aria-label="Delete icon"
+            aria-label={t("Delete icon")}
           >
             <Trash2 className="size-4" />
           </button>

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bell,
@@ -21,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn, formatRelative } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 type NotifKind = "message" | "mention" | "call" | "ghost" | "reaction" | "system";
 
@@ -100,14 +102,22 @@ const kindStyle: Record<NotifKind, { icon: React.ReactNode; color: string }> = {
 };
 
 export function NotificationCenter({ children }: { children: React.ReactNode }) {
+  const t = useT();
+  const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [items, setItems] = React.useState<Notification[]>(seed);
   const [tab, setTab] = React.useState<"all" | "unread" | "mentions">("all");
+  const panelRef = React.useRef<HTMLDivElement>(null);
+  const triggerRef = React.useRef<HTMLElement>(null);
 
   const unread = items.filter((i) => !i.read).length;
 
   const markAllRead = () => setItems((cur) => cur.map((c) => ({ ...c, read: true })));
   const clearAll = () => setItems([]);
+  const openNotificationSettings = () => {
+    setOpen(false);
+    router.push("/settings?section=notifications");
+  };
   const markOne = (id: string) =>
     setItems((cur) => cur.map((c) => (c.id === id ? { ...c, read: true } : c)));
 
@@ -123,13 +133,29 @@ export function NotificationCenter({ children }: { children: React.ReactNode }) 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
     };
+    // Close on any pointer-down outside the panel. Capture phase so it fires
+    // even if something inside calls stopPropagation, and it's immune to the
+    // CSS stacking/containing-block quirks that can stop the overlay's own
+    // onClick from firing over the page content. The trigger is excluded so
+    // its toggle handler stays in charge of opening/closing via the bell.
+    const onDown = (e: PointerEvent) => {
+      const target = e.target as Node;
+      if (panelRef.current?.contains(target)) return;
+      if (triggerRef.current?.contains(target)) return;
+      setOpen(false);
+    };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    document.addEventListener("pointerdown", onDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("pointerdown", onDown, true);
+    };
   }, [open]);
 
   const trigger = React.isValidElement(children)
-    ? React.cloneElement(children as React.ReactElement<{ onClick?: () => void }>, {
-        onClick: () => setOpen(true)
+    ? React.cloneElement(children as React.ReactElement<Record<string, unknown>>, {
+        ref: triggerRef,
+        onClick: () => setOpen((o) => !o)
       })
     : children;
 
@@ -148,43 +174,46 @@ export function NotificationCenter({ children }: { children: React.ReactNode }) 
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.25 }}
-            className="fixed inset-0 z-[110] grid place-items-center md:place-items-end md:justify-items-end p-4"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) setOpen(false);
-            }}
+            className="fixed inset-0 z-[110] grid place-items-center md:place-items-end md:justify-items-end p-3 md:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+            onClick={() => setOpen(false)}
           >
             <motion.div
               key="panel"
+              ref={panelRef}
               initial={{ opacity: 0, x: 60, scale: 0.95 }}
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, x: 60, scale: 0.95 }}
               transition={{ type: "spring", stiffness: 220, damping: 26 }}
-              className="relative w-full max-w-md h-[min(86vh,720px)] glass-strong glass-specular rounded-3xl border border-white/15 shadow-floating overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+              // glass-strong is 72% opaque by default — bump to ~94% so the
+              // notification list stays legible over busy backgrounds.
+              style={{ background: "hsl(var(--card) / 0.94)" }}
+              className="relative w-full max-w-md h-[min(86dvh,720px)] glass-strong glass-specular rounded-3xl border border-white/15 shadow-floating overflow-hidden flex flex-col"
             >
               <div className="px-5 pt-5 pb-3 flex items-start justify-between">
                 <div>
                   <h2 className="text-2xl font-display font-semibold tracking-tight">
-                    Notifications
+                    {t("Notifications")}
                   </h2>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {unread > 0 ? `${unread} unread` : "You're all caught up"}
+                    {unread > 0 ? `${unread} ${t("unread")}` : t("You're all caught up")}
                   </p>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="icon-sm" onClick={markAllRead} title="Mark all read">
+                  <Button variant="ghost" size="icon-sm" onClick={markAllRead} title={t("Mark all read")}>
                     <Check className="size-4" />
                   </Button>
-                  <Button variant="ghost" size="icon-sm" onClick={clearAll} title="Clear all">
+                  <Button variant="ghost" size="icon-sm" onClick={clearAll} title={t("Clear all")}>
                     <Trash2 className="size-4" />
                   </Button>
-                  <Button variant="ghost" size="icon-sm" title="Settings">
+                  <Button variant="ghost" size="icon-sm" onClick={openNotificationSettings} title={t("Settings")}>
                     <Settings className="size-4" />
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon-sm"
                     onClick={() => setOpen(false)}
-                    title="Close"
+                    title={t("Close")}
                   >
                     <X className="size-4" />
                   </Button>
@@ -194,42 +223,47 @@ export function NotificationCenter({ children }: { children: React.ReactNode }) 
               <div className="px-5">
                 <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
                   <TabsList className="w-full">
-                    <TabsTrigger value="all" className="flex-1">All</TabsTrigger>
+                    <TabsTrigger value="all" className="flex-1">{t("All")}</TabsTrigger>
                     <TabsTrigger value="unread" className="flex-1">
-                      Unread
+                      {t("Unread")}
                       {unread > 0 && (
                         <Badge variant="default" className="ml-1.5 !text-[9px] !py-0">
                           {unread}
                         </Badge>
                       )}
                     </TabsTrigger>
-                    <TabsTrigger value="mentions" className="flex-1">Mentions</TabsTrigger>
+                    <TabsTrigger value="mentions" className="flex-1">{t("Mentions")}</TabsTrigger>
                   </TabsList>
                 </Tabs>
               </div>
 
-              <div className="flex-1 mt-3 overflow-y-auto no-scrollbar px-3 pb-4">
-                {filtered.length === 0 ? (
-                  <Empty />
-                ) : (
-                  <ul className="space-y-2">
-                    <AnimatePresence initial={true}>
-                      {filtered.map((n, i) => (
-                        <NotifCard
-                          key={n.id}
-                          n={n}
-                          index={i}
-                          onRead={markOne}
-                        />
-                      ))}
-                    </AnimatePresence>
-                  </ul>
-                )}
+              <div className="flex-1 mt-3 overflow-y-auto no-scrollbar px-3 pb-4 scroll-smooth">
+                {/* The list stays mounted (with its own AnimatePresence) even
+                    when empty so Clear all plays each card's exit animation —
+                    cards drift up and fade. Empty renders underneath once the
+                    cards have left. */}
+                <ul className="space-y-2">
+                  <AnimatePresence initial={true}>
+                    {filtered.map((n, i) => (
+                      <NotifCard
+                        key={n.id}
+                        n={n}
+                        index={i}
+                        total={filtered.length}
+                        onRead={markOne}
+                      />
+                    ))}
+                  </AnimatePresence>
+                </ul>
+                {filtered.length === 0 && <Empty />}
               </div>
 
               <div className="px-5 py-3 border-t border-border/40 bg-background/30 backdrop-blur-md text-center">
-                <button className="text-xs text-cyan-400 hover:underline">
-                  Open notification settings
+                <button
+                  onClick={openNotificationSettings}
+                  className="text-xs text-cyan-400 hover:underline"
+                >
+                  {t("Open notification settings")}
                 </button>
               </div>
             </motion.div>
@@ -248,7 +282,9 @@ function Stage({ onClose }: { onClose: () => void }) {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
       onClick={onClose}
-      className="fixed inset-0 z-[105] bg-black/20 backdrop-blur-sm"
+      // Start below the 4rem topbar so the global search bar stays crisp —
+      // the blur only dims the content area, not the header.
+      className="fixed inset-x-0 bottom-0 top-16 z-[105] bg-black/20 backdrop-blur-sm"
     />
   );
 }
@@ -256,29 +292,61 @@ function Stage({ onClose }: { onClose: () => void }) {
 function NotifCard({
   n,
   index,
+  total,
   onRead
 }: {
   n: Notification;
   index: number;
+  total: number;
   onRead: (id: string) => void;
 }) {
+  const t = useT();
   const [expanded, setExpanded] = React.useState(false);
+  const bodyRef = React.useRef<HTMLParagraphElement>(null);
+  // Collapsed body height = two lines. Seeded with the expected value so there
+  // is no mount flash, then refined from the real line-height after layout.
+  const [collapsedH, setCollapsedH] = React.useState(39);
   const isLong = n.body.length > 90;
-  const display = !expanded && isLong ? n.body.slice(0, 90).trimEnd() + "…" : n.body;
   const style = kindStyle[n.kind];
+
+  React.useLayoutEffect(() => {
+    if (!isLong || !bodyRef.current) return;
+    const lh = parseFloat(getComputedStyle(bodyRef.current).lineHeight);
+    if (!Number.isNaN(lh)) setCollapsedH(lh * 2);
+  }, [isLong, n.body]);
 
   return (
     <motion.li
-      layout
-      initial={{ opacity: 0, x: 80, scale: 0.9, rotate: 4 }}
-      animate={{ opacity: 1, x: 0, scale: 1, rotate: 0 }}
-      exit={{ opacity: 0, x: 80, height: 0, scale: 0.92 }}
-      transition={{
-        delay: index * 0.07,
-        type: "spring",
-        stiffness: 240,
-        damping: 24
+      layout="position"
+      custom={{ index, total }}
+      variants={{
+        initial: { opacity: 0, x: 80, scale: 0.9, rotate: 4 },
+        // Enter: slide in from the right, staggered top -> bottom.
+        animate: (c: { index: number; total: number }) => ({
+          opacity: 1,
+          x: 0,
+          scale: 1,
+          rotate: 0,
+          transition: { delay: c.index * 0.05, type: "spring", stiffness: 240, damping: 24 }
+        }),
+        // Exit: mirror of enter — slide back out to the right, staggered
+        // bottom -> top so Clear all peels the cards off from the bottom up.
+        exit: (c: { index: number; total: number }) => ({
+          opacity: 0,
+          x: 80,
+          scale: 0.9,
+          rotate: 4,
+          transition: {
+            delay: (c.total - 1 - c.index) * 0.05,
+            type: "spring",
+            stiffness: 260,
+            damping: 26
+          }
+        })
       }}
+      initial="initial"
+      animate="animate"
+      exit="exit"
       onClick={() => !n.read && onRead(n.id)}
       className={cn(
         "relative flex gap-3 p-3.5 rounded-2xl cursor-pointer transition-colors",
@@ -322,15 +390,22 @@ function NotifCard({
             {formatRelative(n.time)}
           </span>
         </div>
-        <motion.p
-          layout
-          className={cn(
-            "text-xs text-muted-foreground mt-0.5 leading-relaxed",
-            expanded ? "" : "line-clamp-2"
-          )}
-        >
-          {display}
-        </motion.p>
+        {isLong ? (
+          // Animate the wrapper's real height (not the text element itself) so
+          // the reveal stays smooth and the glyphs never scale/stretch.
+          <motion.div
+            initial={false}
+            animate={{ height: expanded ? "auto" : collapsedH }}
+            transition={{ duration: 0.32, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden mt-0.5"
+          >
+            <p ref={bodyRef} className="text-xs text-muted-foreground leading-relaxed">
+              {n.body}
+            </p>
+          </motion.div>
+        ) : (
+          <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">{n.body}</p>
+        )}
         {isLong && (
           <button
             onClick={(e) => {
@@ -339,7 +414,7 @@ function NotifCard({
             }}
             className="mt-1.5 text-[11px] font-semibold text-cyan-400 hover:underline"
           >
-            {expanded ? "Show less" : "Read more"}
+            {expanded ? t("Show less") : t("Read more")}
           </button>
         )}
       </div>
@@ -348,6 +423,7 @@ function NotifCard({
 }
 
 function Empty() {
+  const t = useT();
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
@@ -357,8 +433,8 @@ function Empty() {
       <div className="size-14 rounded-2xl bg-gradient-to-br from-violet-500/30 to-cyan-400/30 grid place-items-center">
         <Inbox className="size-7 text-muted-foreground" />
       </div>
-      <p className="text-sm font-medium mt-3">Inbox zero</p>
-      <p className="text-xs text-muted-foreground">Nothing new to catch up on.</p>
+      <p className="text-sm font-medium mt-3">{t("Inbox zero")}</p>
+      <p className="text-xs text-muted-foreground">{t("Nothing new to catch up on.")}</p>
     </motion.div>
   );
 }

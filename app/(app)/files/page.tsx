@@ -42,6 +42,7 @@ import { useVaultStore, type VaultNode, type VaultFileKind } from "@/store/use-v
 import { NewFolderDialog, VaultPasswordDialog } from "@/features/vault/vault-dialogs";
 import { FilePreviewDialog } from "@/features/vault/file-preview-dialog";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 const iconFor: Record<VaultFileKind, React.ReactNode> = {
   image: <FileImage />,
@@ -77,6 +78,7 @@ function truncateName(name: string, max: number): string {
 }
 
 export default function FilesPage() {
+  const t = useT();
   /* ---- state ---- */
   const nodes = useVaultStore((s) => s.nodes);
   const byParent = useVaultStore((s) => s.byParent);
@@ -327,8 +329,8 @@ export default function FilesPage() {
     >
       <button
         onClick={toggleSelectAll}
-        title={allVisibleSelected ? "Deselect all" : "Select all"}
-        aria-label={allVisibleSelected ? "Deselect all" : "Select all"}
+        title={allVisibleSelected ? t("Deselect all") : t("Select all")}
+        aria-label={allVisibleSelected ? t("Deselect all") : t("Select all")}
         className={cn(
           "size-8 grid place-items-center rounded-full transition mr-0.5",
           allVisibleSelected
@@ -340,7 +342,7 @@ export default function FilesPage() {
       </button>
       <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground tabular-nums mr-1 shrink-0">
         <span className="size-1.5 rounded-full bg-cyan-400" />
-        {selected.size} selected
+        {selected.size} {t("selected")}
       </span>
 
       {/* Desktop: full inline action buttons. */}
@@ -349,7 +351,7 @@ export default function FilesPage() {
           onClick={bulkStar}
           className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium glass-subtle hover:bg-foreground/10 transition"
         >
-          <Star className="size-3.5" /> Star
+          <Star className="size-3.5" /> {t("Star")}
         </button>
         <button
           onClick={bulkVault}
@@ -357,11 +359,11 @@ export default function FilesPage() {
         >
           {allSelectedVaulted ? (
             <>
-              <Unlock className="size-3.5" /> Remove from vault
+              <Unlock className="size-3.5" /> {t("Remove from vault")}
             </>
           ) : (
             <>
-              <Lock className="size-3.5" /> Move to vault
+              <Lock className="size-3.5" /> {t("Move to vault")}
             </>
           )}
         </button>
@@ -369,7 +371,7 @@ export default function FilesPage() {
           onClick={bulkDelete}
           className="inline-flex items-center gap-1.5 h-8 px-3 rounded-full text-xs font-medium text-rose-300 hover:bg-rose-500/15 transition"
         >
-          <Trash2 className="size-3.5" /> Delete
+          <Trash2 className="size-3.5" /> {t("Delete")}
         </button>
       </div>
 
@@ -378,7 +380,7 @@ export default function FilesPage() {
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <button
-              aria-label="Selection actions"
+              aria-label={t("Selection actions")}
               className="size-8 grid place-items-center rounded-full glass-subtle hover:bg-foreground/10 transition"
             >
               <MoreHorizontal className="size-4" />
@@ -386,16 +388,16 @@ export default function FilesPage() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="!w-auto !min-w-[10rem]">
             <DropdownMenuItem onSelect={bulkStar}>
-              <Star /> Star
+              <Star /> {t("Star")}
             </DropdownMenuItem>
             <DropdownMenuItem onSelect={bulkVault}>
               {allSelectedVaulted ? (
                 <>
-                  <Unlock /> Remove from vault
+                  <Unlock /> {t("Remove from vault")}
                 </>
               ) : (
                 <>
-                  <Lock /> Move to vault
+                  <Lock /> {t("Move to vault")}
                 </>
               )}
             </DropdownMenuItem>
@@ -404,7 +406,7 @@ export default function FilesPage() {
               onSelect={bulkDelete}
               className="!text-rose-400 focus:!text-rose-300"
             >
-              <Trash2 /> Delete
+              <Trash2 /> {t("Delete")}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
@@ -438,12 +440,12 @@ export default function FilesPage() {
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <h1 className="text-4xl md:text-5xl font-display font-semibold tracking-tight">
-                <span className="block md:inline text-foreground">Your</span>{" "}
-                <span className="block md:inline neon-text">Vault</span>
+                <span className="block md:inline text-foreground">{t("Your")}</span>{" "}
+                <span className="block md:inline neon-text">{t("Vault")}</span>
               </h1>
               {/* Web: paragraph under the heading. */}
               <p className="hidden md:block text-muted-foreground mt-2 max-w-xl">
-                You can protect your files and folders.
+                {t("You can protect your files and folders.")}
               </p>
             </div>
             <div className="shrink-0 w-auto md:w-64 text-right">
@@ -451,7 +453,7 @@ export default function FilesPage() {
                 {formatBytes(usedBytes)}
               </p>
               <p className="text-sm md:text-base text-muted-foreground mt-1.5">
-                of 5 GB used
+                {t("of 5 GB used")}
               </p>
               <div className="mt-2.5 h-3 w-full rounded-full bg-foreground/10 overflow-hidden">
                 <div
@@ -465,7 +467,7 @@ export default function FilesPage() {
           </div>
           {/* Mobile: paragraph below the heading + storage row. */}
           <p className="md:hidden text-muted-foreground mt-3">
-            You can protect your files and folders.
+            {t("You can protect your files and folders.")}
           </p>
         </motion.div>
 
@@ -494,35 +496,35 @@ export default function FilesPage() {
               <Upload className="text-white" />
             </div>
             <h3 className="mt-3 font-semibold">
-              {drag ? "Drop to upload" : "Drag & drop anywhere"}
+              {drag ? t("Drop to upload") : t("Drag & drop anywhere")}
             </h3>
             <p className="text-sm text-muted-foreground mt-1">
-              Or click to upload. Encrypted at rest, only your password unlocks the vault.
+              {t("Or click to upload. Encrypted at rest, only your password unlocks the vault.")}
             </p>
             <div className="flex flex-wrap justify-center gap-2 mt-4" onClick={(e) => e.stopPropagation()}>
               <Button variant="glass" size="sm" onClick={() => setNewFolderOpen(true)}>
-                <Folder /> New folder
+                <Folder /> {t("New folder")}
               </Button>
               {!password ? (
                 <Button variant="glass" size="sm" onClick={() => openPwDialog("set")}>
-                  <ShieldCheck /> Set vault password
+                  <ShieldCheck /> {t("Set vault password")}
                 </Button>
               ) : unlocked ? (
                 <>
                   <Button variant="glass" size="sm" onClick={() => lock()}>
-                    <Lock /> Lock vault
+                    <Lock /> {t("Lock vault")}
                   </Button>
                   <Button variant="glass" size="sm" onClick={() => openPwDialog("change")}>
-                    <ShieldCheck /> Change password
+                    <ShieldCheck /> {t("Change password")}
                   </Button>
                 </>
               ) : (
                 <>
                   <Button variant="glass" size="sm" onClick={() => openPwDialog("unlock")}>
-                    <Unlock /> Unlock vault
+                    <Unlock /> {t("Unlock vault")}
                   </Button>
                   <Button variant="glass" size="sm" onClick={() => openPwDialog("change")}>
-                    <ShieldCheck /> Change password
+                    <ShieldCheck /> {t("Change password")}
                   </Button>
                 </>
               )}
@@ -537,7 +539,7 @@ export default function FilesPage() {
             <Input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search files…"
+              placeholder={t("Search files…")}
               className="pl-9 border-foreground/70 focus-visible:border-foreground"
             />
           </div>
@@ -545,7 +547,7 @@ export default function FilesPage() {
           <div className="ml-auto inline-flex items-center rounded-xl glass-subtle p-0.5 border border-border/60">
             <button
               onClick={() => setView("grid")}
-              aria-label="Grid view"
+              aria-label={t("Grid view")}
               className={cn(
                 "size-8 grid place-items-center rounded-lg transition",
                 view === "grid"
@@ -557,7 +559,7 @@ export default function FilesPage() {
             </button>
             <button
               onClick={() => setView("list")}
-              aria-label="List view"
+              aria-label={t("List view")}
               className={cn(
                 "size-8 grid place-items-center rounded-lg transition",
                 view === "list"
@@ -573,11 +575,11 @@ export default function FilesPage() {
         {/* Tabs */}
         <Tabs value={tab} onValueChange={handleTabChange} className="mt-6">
           <TabsList className="flex flex-wrap h-auto w-full justify-start gap-1 md:inline-flex md:h-10 md:w-auto">
-            <TabsTrigger value="all">All files</TabsTrigger>
-            <TabsTrigger value="starred">Starred</TabsTrigger>
+            <TabsTrigger value="all">{t("All files")}</TabsTrigger>
+            <TabsTrigger value="starred">{t("Starred")}</TabsTrigger>
             <TabsTrigger value="vault">
-              <Lock className="size-3 mr-1" /> Vault
-              {!unlocked && password && <span className="ml-1 text-[10px] opacity-70">locked</span>}
+              <Lock className="size-3 mr-1" /> {t("Vault")}
+              {!unlocked && password && <span className="ml-1 text-[10px] opacity-70">{t("locked")}</span>}
             </TabsTrigger>
           </TabsList>
 
@@ -590,7 +592,7 @@ export default function FilesPage() {
                   onClick={() => setCurrentFolderId(null)}
                   className="inline-flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-foreground/5 hover:text-foreground transition shrink-0"
                 >
-                  <Home className="size-3.5" /> Vault root
+                  <Home className="size-3.5" /> {t("Vault root")}
                 </button>
                 {breadcrumb.map((b) => (
                   <React.Fragment key={b.id}>
@@ -627,7 +629,7 @@ export default function FilesPage() {
                 toggleVault(id);
               }}
               onDelete={remove}
-              emptyLabel={`This folder is empty — drag files in or click Upload.`}
+              emptyLabel={t("This folder is empty — drag files in or click Upload.")}
             />
           </TabsContent>
 
@@ -653,7 +655,7 @@ export default function FilesPage() {
                 password ? toggleVault(id) : requirePassword(() => toggleVault(id))
               }
               onDelete={remove}
-              emptyLabel="Nothing starred yet."
+              emptyLabel={t("Nothing starred yet.")}
             />
           </TabsContent>
 
@@ -670,7 +672,7 @@ export default function FilesPage() {
                       onClick={() => setCurrentFolderId(null)}
                       className="inline-flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-foreground/5 hover:text-foreground transition shrink-0"
                     >
-                      <Lock className="size-3.5" /> Vault root
+                      <Lock className="size-3.5" /> {t("Vault root")}
                     </button>
                     {breadcrumb.map((b) => (
                       <React.Fragment key={b.id}>
@@ -699,7 +701,7 @@ export default function FilesPage() {
                   onStar={toggleStar}
                   onVault={toggleVault}
                   onDelete={remove}
-                  emptyLabel="Your vault is empty. Move a file in from the All tab."
+                  emptyLabel={t("Your vault is empty. Move a file in from the All tab.")}
                 />
               </>
             )}
@@ -754,6 +756,7 @@ function VaultLockedState({
   onUnlock: () => void;
   hasPassword: boolean;
 }) {
+  const t = useT();
   return (
     <motion.div
       initial={{ opacity: 0, y: 10 }}
@@ -764,21 +767,21 @@ function VaultLockedState({
         <Lock className="text-white size-7" />
       </div>
       <h3 className="mt-4 font-display text-xl font-semibold tracking-tight">
-        Vault is locked
+        {t("Vault is locked")}
       </h3>
       <p className="text-sm text-muted-foreground mt-1 max-w-md mx-auto">
         {hasPassword
-          ? "Enter your vault password to view protected files and folders."
-          : "Set a vault password to start protecting files and folders."}
+          ? t("Enter your vault password to view protected files and folders.")
+          : t("Set a vault password to start protecting files and folders.")}
       </p>
       <Button onClick={onUnlock} variant="gradient" className="mt-5">
         {hasPassword ? (
           <>
-            <Unlock /> Unlock vault
+            <Unlock /> {t("Unlock vault")}
           </>
         ) : (
           <>
-            <ShieldCheck /> Create vault password
+            <ShieldCheck /> {t("Create vault password")}
           </>
         )}
       </Button>
@@ -989,13 +992,14 @@ function NodeItem({
   onVault: () => void;
   onDelete: () => void;
 }) {
+  const t = useT();
   const unlocked = useVaultStore((s) => s.unlocked);
   const isFolder = node.kind === "folder";
   const kind = node.fileKind ?? "other";
   // Locked vault files never reveal their thumbnail until unlocked.
   const locked = !!node.vault && !unlocked;
   const showThumb = !isFolder && kind === "image" && (node.preview || node.url) && !locked;
-  const label = locked ? "Locked file" : node.name;
+  const label = locked ? t("Locked file") : node.name;
 
   const glyph = (sizeClass: string, thumbClass: string) =>
     isFolder ? (
@@ -1020,7 +1024,7 @@ function NodeItem({
       <button
         onClick={onStar}
         className="grid place-items-center transition hover:scale-110"
-        aria-label="Star"
+        aria-label={t("Star")}
       >
         <Star
           className={cn(
@@ -1075,7 +1079,7 @@ function NodeItem({
           </p>
           <p className="text-[11px] text-muted-foreground line-clamp-1 break-all">
             {isFolder
-              ? "Folder"
+              ? t("Folder")
               : `${formatBytes(node.size)} · ${new Date(node.createdAt).toLocaleDateString()}`}
           </p>
         </div>
@@ -1215,13 +1219,14 @@ function CardMoreMenu({
   downloadHref?: string;
   downloadName?: string;
 }) {
+  const t = useT();
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
           onClick={(e) => e.stopPropagation()}
           className="grid place-items-center text-white hover:scale-110 transition"
-          aria-label="More"
+          aria-label={t("More")}
         >
           <MoreHorizontal className="size-[19px] drop-shadow-[0_1px_2px_rgba(0,0,0,0.55)]" />
         </button>
@@ -1230,18 +1235,18 @@ function CardMoreMenu({
         <DropdownMenuItem onSelect={onVault}>
           {isVault ? (
             <>
-              <Unlock /> Remove from vault
+              <Unlock /> {t("Remove from vault")}
             </>
           ) : (
             <>
-              <Lock /> Move to vault
+              <Lock /> {t("Move to vault")}
             </>
           )}
         </DropdownMenuItem>
         {downloadHref && (
           <DropdownMenuItem asChild>
             <a href={downloadHref} download={downloadName} target="_blank" rel="noopener noreferrer">
-              <Share2 /> Download / share
+              <Share2 /> {t("Download / share")}
             </a>
           </DropdownMenuItem>
         )}
@@ -1250,7 +1255,7 @@ function CardMoreMenu({
           onSelect={onDelete}
           className="!text-red-400 focus:!text-red-300"
         >
-          <Trash2 /> Delete
+          <Trash2 /> {t("Delete")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

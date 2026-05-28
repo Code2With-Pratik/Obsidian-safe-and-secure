@@ -6,6 +6,7 @@ import { Mic, MicOff, VideoOff, Pin, Crown } from "lucide-react";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 import type { CallParticipant } from "@/types";
 
 export function VideoGrid({ participants }: { participants: CallParticipant[] }) {
@@ -91,6 +92,7 @@ function Tile({
   /** Shrunk PiP overlay — smaller badges, no pin button. */
   compact?: boolean;
 }) {
+  const t = useT();
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
@@ -149,10 +151,10 @@ function Tile({
         <div className="absolute top-3 left-3 flex gap-1.5">
           {p.isHost && (
             <Badge variant="warning">
-              <Crown className="size-3" /> host
+              <Crown className="size-3" /> {t("host")}
             </Badge>
           )}
-          {p.isMe && <Badge variant="glass">you</Badge>}
+          {p.isMe && <Badge variant="glass">{t("you")}</Badge>}
         </div>
       )}
       {!compact && (
@@ -180,7 +182,7 @@ function Tile({
           ) : (
             <Mic className={cn(compact ? "size-2.5" : "size-3", "text-emerald-400")} />
           )}
-          <span className="truncate max-w-[80px]">{compact ? "You" : p.name}</span>
+          <span className="truncate max-w-[80px]">{compact ? t("You") : p.name}</span>
         </div>
         {!compact && !p.cameraOn && <VideoOff className="size-4 text-white/80" />}
       </div>
