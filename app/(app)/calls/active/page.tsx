@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { callParticipants } from "@/lib/mock-data";
 import { useUIStore } from "@/store/use-ui-store";
+import { useT } from "@/lib/i18n";
 
 function Timer01() {
   const [s, setS] = React.useState(0);
@@ -27,6 +28,7 @@ function Timer01() {
 }
 
 export default function ActiveCall() {
+  const t = useT();
   const router = useRouter();
   const activeCall = useUIStore((s) => s.activeCall);
   const startCall = useUIStore((s) => s.startCall);
@@ -60,13 +62,19 @@ export default function ActiveCall() {
   // briefly renders mock tiles before the manual `router.push` lands —
   // especially noticeable on multi-user calls.
   const initialCallSeen = React.useRef(false);
+  // Remember where to go when the call ends. Captured while the call is live
+  // so it survives `endCall()` clearing `activeCall`. Defaults to the Calls
+  // tab, but a call started from a chat carries `returnTo: /chats/<id>` so
+  // ending drops the user back into that exact chat — not the calls list.
+  const returnToRef = React.useRef("/calls");
   React.useEffect(() => {
     if (activeCall) {
       initialCallSeen.current = true;
+      returnToRef.current = activeCall.returnTo ?? "/calls";
       return;
     }
     if (initialCallSeen.current) {
-      router.push("/calls");
+      router.push(returnToRef.current);
     }
   }, [activeCall, router]);
 
@@ -107,10 +115,10 @@ export default function ActiveCall() {
             setMiniCallOpen(true);
             router.push(activeCall?.returnTo ?? "/chats");
           }}
-          title="Minimize — the call keeps running"
+          title={t("Minimize — the call keeps running")}
           className="pointer-events-auto"
         >
-          <ChevronLeft /> Minimize
+          <ChevronLeft /> {t("Minimize")}
         </Button>
 
         <motion.div
@@ -122,13 +130,13 @@ export default function ActiveCall() {
             <>
               <Ghost className="size-3.5 text-violet-300" />
               <span className="text-xs font-medium tracking-tight">
-                {activeCall.ghostHandle ?? "Ghost call"}
+                {activeCall.ghostHandle ?? t("Ghost call")}
               </span>
             </>
           ) : (
             <div className="flex items-center gap-1.5">
               <span className="size-2 rounded-full bg-rose-500 animate-pulse" />
-              <span className="text-xs font-medium">LIVE</span>
+              <span className="text-xs font-medium">{t("LIVE")}</span>
             </div>
           )}
           <span className="text-muted-foreground/60">·</span>
@@ -136,13 +144,13 @@ export default function ActiveCall() {
           <span className="text-muted-foreground/60 hidden md:inline">·</span>
           <span className="hidden md:inline-flex text-xs text-muted-foreground items-center gap-1">
             <Lock className="size-3 text-emerald-400" />
-            {activeCall?.ghost ? "Anonymous" : "Encrypted"}
+            {activeCall?.ghost ? t("Anonymous") : t("Encrypted")}
           </span>
         </motion.div>
 
         <div className="pointer-events-auto flex items-center gap-2">
           <Badge variant="cyan" className="hidden md:inline-flex">
-            <Sparkles className="size-3" /> AI noise cancel · on
+            <Sparkles className="size-3" /> {t("AI noise cancel · on")}
           </Badge>
           <Badge variant="success" className="hidden sm:inline-flex">
             <Radio className="size-3" /> 320 kbps

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   Bell,
@@ -21,6 +22,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn, formatRelative } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 type NotifKind = "message" | "mention" | "call" | "ghost" | "reaction" | "system";
 
@@ -100,6 +102,8 @@ const kindStyle: Record<NotifKind, { icon: React.ReactNode; color: string }> = {
 };
 
 export function NotificationCenter({ children }: { children: React.ReactNode }) {
+  const t = useT();
+  const router = useRouter();
   const [open, setOpen] = React.useState(false);
   const [items, setItems] = React.useState<Notification[]>(seed);
   const [tab, setTab] = React.useState<"all" | "unread" | "mentions">("all");
@@ -108,6 +112,10 @@ export function NotificationCenter({ children }: { children: React.ReactNode }) 
 
   const markAllRead = () => setItems((cur) => cur.map((c) => ({ ...c, read: true })));
   const clearAll = () => setItems([]);
+  const openNotificationSettings = () => {
+    setOpen(false);
+    router.push("/settings?section=notifications");
+  };
   const markOne = (id: string) =>
     setItems((cur) => cur.map((c) => (c.id === id ? { ...c, read: true } : c)));
 
@@ -148,10 +156,8 @@ export function NotificationCenter({ children }: { children: React.ReactNode }) 
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.25 }}
-            className="fixed inset-0 z-[110] grid place-items-center md:place-items-end md:justify-items-end p-4"
-            onClick={(e) => {
-              if (e.target === e.currentTarget) setOpen(false);
-            }}
+            className="fixed inset-0 z-[110] grid place-items-center md:place-items-end md:justify-items-end p-3 md:p-4 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+            onClick={() => setOpen(false)}
           >
             <motion.div
               key="panel"
@@ -159,32 +165,36 @@ export function NotificationCenter({ children }: { children: React.ReactNode }) 
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, x: 60, scale: 0.95 }}
               transition={{ type: "spring", stiffness: 220, damping: 26 }}
-              className="relative w-full max-w-md h-[min(86vh,720px)] glass-strong glass-specular rounded-3xl border border-white/15 shadow-floating overflow-hidden flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+              // glass-strong is 72% opaque by default — bump to ~94% so the
+              // notification list stays legible over busy backgrounds.
+              style={{ background: "hsl(var(--card) / 0.94)" }}
+              className="relative w-full max-w-md h-[min(86dvh,720px)] glass-strong glass-specular rounded-3xl border border-white/15 shadow-floating overflow-hidden flex flex-col"
             >
               <div className="px-5 pt-5 pb-3 flex items-start justify-between">
                 <div>
                   <h2 className="text-2xl font-display font-semibold tracking-tight">
-                    Notifications
+                    {t("Notifications")}
                   </h2>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {unread > 0 ? `${unread} unread` : "You're all caught up"}
+                    {unread > 0 ? `${unread} ${t("unread")}` : t("You're all caught up")}
                   </p>
                 </div>
                 <div className="flex items-center gap-1">
-                  <Button variant="ghost" size="icon-sm" onClick={markAllRead} title="Mark all read">
+                  <Button variant="ghost" size="icon-sm" onClick={markAllRead} title={t("Mark all read")}>
                     <Check className="size-4" />
                   </Button>
-                  <Button variant="ghost" size="icon-sm" onClick={clearAll} title="Clear all">
+                  <Button variant="ghost" size="icon-sm" onClick={clearAll} title={t("Clear all")}>
                     <Trash2 className="size-4" />
                   </Button>
-                  <Button variant="ghost" size="icon-sm" title="Settings">
+                  <Button variant="ghost" size="icon-sm" onClick={openNotificationSettings} title={t("Settings")}>
                     <Settings className="size-4" />
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon-sm"
                     onClick={() => setOpen(false)}
-                    title="Close"
+                    title={t("Close")}
                   >
                     <X className="size-4" />
                   </Button>
@@ -194,42 +204,46 @@ export function NotificationCenter({ children }: { children: React.ReactNode }) 
               <div className="px-5">
                 <Tabs value={tab} onValueChange={(v) => setTab(v as typeof tab)}>
                   <TabsList className="w-full">
-                    <TabsTrigger value="all" className="flex-1">All</TabsTrigger>
+                    <TabsTrigger value="all" className="flex-1">{t("All")}</TabsTrigger>
                     <TabsTrigger value="unread" className="flex-1">
-                      Unread
+                      {t("Unread")}
                       {unread > 0 && (
                         <Badge variant="default" className="ml-1.5 !text-[9px] !py-0">
                           {unread}
                         </Badge>
                       )}
                     </TabsTrigger>
-                    <TabsTrigger value="mentions" className="flex-1">Mentions</TabsTrigger>
+                    <TabsTrigger value="mentions" className="flex-1">{t("Mentions")}</TabsTrigger>
                   </TabsList>
                 </Tabs>
               </div>
 
-              <div className="flex-1 mt-3 overflow-y-auto no-scrollbar px-3 pb-4">
-                {filtered.length === 0 ? (
-                  <Empty />
-                ) : (
-                  <ul className="space-y-2">
-                    <AnimatePresence initial={true}>
-                      {filtered.map((n, i) => (
-                        <NotifCard
-                          key={n.id}
-                          n={n}
-                          index={i}
-                          onRead={markOne}
-                        />
-                      ))}
-                    </AnimatePresence>
-                  </ul>
-                )}
+              <div className="flex-1 mt-3 overflow-y-auto no-scrollbar px-3 pb-4 scroll-smooth">
+                {/* The list stays mounted (with its own AnimatePresence) even
+                    when empty so Clear all plays each card's exit animation —
+                    cards drift up and fade. Empty renders underneath once the
+                    cards have left. */}
+                <ul className="space-y-2">
+                  <AnimatePresence initial={true}>
+                    {filtered.map((n, i) => (
+                      <NotifCard
+                        key={n.id}
+                        n={n}
+                        index={i}
+                        onRead={markOne}
+                      />
+                    ))}
+                  </AnimatePresence>
+                </ul>
+                {filtered.length === 0 && <Empty />}
               </div>
 
               <div className="px-5 py-3 border-t border-border/40 bg-background/30 backdrop-blur-md text-center">
-                <button className="text-xs text-cyan-400 hover:underline">
-                  Open notification settings
+                <button
+                  onClick={openNotificationSettings}
+                  className="text-xs text-cyan-400 hover:underline"
+                >
+                  {t("Open notification settings")}
                 </button>
               </div>
             </motion.div>
@@ -248,7 +262,9 @@ function Stage({ onClose }: { onClose: () => void }) {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3 }}
       onClick={onClose}
-      className="fixed inset-0 z-[105] bg-black/20 backdrop-blur-sm"
+      // Start below the 4rem topbar so the global search bar stays crisp —
+      // the blur only dims the content area, not the header.
+      className="fixed inset-x-0 bottom-0 top-16 z-[105] bg-black/20 backdrop-blur-sm"
     />
   );
 }
@@ -262,9 +278,9 @@ function NotifCard({
   index: number;
   onRead: (id: string) => void;
 }) {
+  const t = useT();
   const [expanded, setExpanded] = React.useState(false);
   const isLong = n.body.length > 90;
-  const display = !expanded && isLong ? n.body.slice(0, 90).trimEnd() + "…" : n.body;
   const style = kindStyle[n.kind];
 
   return (
@@ -272,9 +288,11 @@ function NotifCard({
       layout
       initial={{ opacity: 0, x: 80, scale: 0.9, rotate: 4 }}
       animate={{ opacity: 1, x: 0, scale: 1, rotate: 0 }}
-      exit={{ opacity: 0, x: 80, height: 0, scale: 0.92 }}
+      // Exit drifts the card down + fades. Clearing all staggers these via the
+      // index-based delay so the cards sweep out toward the bottom.
+      exit={{ opacity: 0, y: 24, scale: 0.95 }}
       transition={{
-        delay: index * 0.07,
+        delay: index * 0.05,
         type: "spring",
         stiffness: 240,
         damping: 24
@@ -329,7 +347,7 @@ function NotifCard({
             expanded ? "" : "line-clamp-2"
           )}
         >
-          {display}
+          {n.body}
         </motion.p>
         {isLong && (
           <button
@@ -339,7 +357,7 @@ function NotifCard({
             }}
             className="mt-1.5 text-[11px] font-semibold text-cyan-400 hover:underline"
           >
-            {expanded ? "Show less" : "Read more"}
+            {expanded ? t("Show less") : t("Read more")}
           </button>
         )}
       </div>
@@ -348,6 +366,7 @@ function NotifCard({
 }
 
 function Empty() {
+  const t = useT();
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.95 }}
@@ -357,8 +376,8 @@ function Empty() {
       <div className="size-14 rounded-2xl bg-gradient-to-br from-violet-500/30 to-cyan-400/30 grid place-items-center">
         <Inbox className="size-7 text-muted-foreground" />
       </div>
-      <p className="text-sm font-medium mt-3">Inbox zero</p>
-      <p className="text-xs text-muted-foreground">Nothing new to catch up on.</p>
+      <p className="text-sm font-medium mt-3">{t("Inbox zero")}</p>
+      <p className="text-xs text-muted-foreground">{t("Nothing new to catch up on.")}</p>
     </motion.div>
   );
 }

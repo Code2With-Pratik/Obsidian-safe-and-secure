@@ -113,8 +113,10 @@ interface UpcomingCall {
   participants: number;
 }
 
-/** Format an ISO timestamp into a friendly "Today · 4:00 PM" string. */
-function formatScheduledWhen(iso: string): string {
+/** Format an ISO timestamp into a friendly "Today · 4:00 PM" string. The
+ *  `tr` translator localizes the Today/Tomorrow words; the date/time portions
+ *  follow the browser locale. */
+function formatScheduledWhen(iso: string, tr: (s: string) => string): string {
   const d = new Date(iso);
   const now = new Date();
   const sameDay = (a: Date, b: Date) =>
@@ -123,13 +125,13 @@ function formatScheduledWhen(iso: string): string {
     a.getDate() === b.getDate();
   const tomorrow = new Date(now);
   tomorrow.setDate(now.getDate() + 1);
-  const t = d.toLocaleTimeString(undefined, {
+  const clock = d.toLocaleTimeString(undefined, {
     hour: "numeric",
     minute: "2-digit"
   });
-  if (sameDay(d, now)) return `Today · ${t}`;
-  if (sameDay(d, tomorrow)) return `Tomorrow · ${t}`;
-  return `${d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} · ${t}`;
+  if (sameDay(d, now)) return `${tr("Today")} · ${clock}`;
+  if (sameDay(d, tomorrow)) return `${tr("Tomorrow")} · ${clock}`;
+  return `${d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" })} · ${clock}`;
 }
 
 export default function CallsPage() {
@@ -240,7 +242,7 @@ export default function CallsPage() {
             <span className="neon-text">{t("Calls & meetings")}</span>
           </h1>
           <p className="text-muted-foreground mt-2 max-w-xl">
-            Crystal-clear voice and video. AI noise cancellation, live captions, and floating mini calls — all built in.
+            {t("Crystal-clear voice and video. AI noise cancellation, live captions, and floating mini calls — all built in.")}
           </p>
         </motion.div>
 
@@ -250,23 +252,23 @@ export default function CallsPage() {
         <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 grid-flow-dense mt-6 shrink-0">
           <ActionTile
             icon={<Video />}
-            title="Start a call"
-            subtitle="Pick people & ring"
+            title={t("Start a call")}
+            subtitle={t("Pick people & ring")}
             gradient="from-violet-500 to-fuchsia-500"
             onClick={() => setStartOpen(true)}
             cta
           />
           <ActionTile
             icon={<Ghost />}
-            title="Ghost call"
-            subtitle="Ring with no identity"
+            title={t("Ghost call")}
+            subtitle={t("Ring with no identity")}
             gradient="from-violet-500 via-fuchsia-500 to-cyan-400"
             onClick={() => setGhostOpen(true)}
           />
           <ActionTile
             icon={<CalendarClock />}
-            title="Schedule"
-            subtitle="Plan with your circle"
+            title={t("Schedule")}
+            subtitle={t("Plan with your circle")}
             gradient="from-amber-400 to-pink-500"
             onClick={() => setScheduleOpen(true)}
           />
@@ -283,14 +285,14 @@ export default function CallsPage() {
               card so the card never balloons past the viewport. */}
           <div className="lg:col-span-2 glass rounded-3xl p-6 flex flex-col md:h-full md:min-h-0">
             <div className="flex items-center justify-between mb-4 shrink-0">
-              <h2 className="text-lg font-semibold">Recent calls</h2>
+              <h2 className="text-lg font-semibold">{t("Recent calls")}</h2>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setViewAll(true)}
                 disabled={history.length === 0}
               >
-                View all
+                {t("View all")}
               </Button>
             </div>
 
@@ -307,13 +309,13 @@ export default function CallsPage() {
                     icon={<PhoneCall className="size-5" />}
                     title={
                       history.length === 0
-                        ? "No call history"
-                        : `No ${filter === "all" ? "" : filter} calls`
+                        ? t("No call history")
+                        : t("No calls match")
                     }
                     body={
                       history.length === 0
-                        ? "Once you make or receive a call it'll show up here."
-                        : "Try a different filter or start a new call."
+                        ? t("Once you make or receive a call it'll show up here.")
+                        : t("Try a different filter or start a new call.")
                     }
                   />
                 ) : (
@@ -328,14 +330,14 @@ export default function CallsPage() {
           {/* Upcoming — same fixed-header + scrolling-list pattern. */}
           <div className="glass rounded-3xl p-6 flex flex-col md:h-full md:min-h-0">
             <div className="flex items-center justify-between mb-4 shrink-0">
-              <h2 className="text-lg font-semibold">Upcoming</h2>
+              <h2 className="text-lg font-semibold">{t("Upcoming")}</h2>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={() => setViewAllSchedule(true)}
                 disabled={upcoming.length === 0}
               >
-                View all
+                {t("View all")}
               </Button>
             </div>
             <div className="md:flex-1 md:min-h-0 md:overflow-y-auto -mx-2 no-scrollbar">
@@ -343,8 +345,8 @@ export default function CallsPage() {
                 {upcoming.length === 0 ? (
                   <EmptyState
                   icon={<CalendarClock className="size-5" />}
-                  title="No scheduled calls"
-                  body="Hit Schedule to plan one with your circle."
+                  title={t("No scheduled calls")}
+                  body={t("Hit Schedule to plan one with your circle.")}
                   compact
                 />
               ) : (
@@ -363,7 +365,7 @@ export default function CallsPage() {
                       <span className="truncate">{u.title}</span>
                     </div>
                     <div className="text-[11px] text-muted-foreground mt-0.5">
-                      {formatScheduledWhen(u.whenIso)}
+                      {formatScheduledWhen(u.whenIso, t)}
                     </div>
                     <div className="flex items-center justify-between mt-2.5">
                       <div className="flex -space-x-2">
@@ -379,7 +381,7 @@ export default function CallsPage() {
                           </div>
                         )}
                       </div>
-                      <Badge variant="cyan">Join</Badge>
+                      <Badge variant="cyan">{t("Join")}</Badge>
                     </div>
                   </button>
                 ))
@@ -430,6 +432,7 @@ function ActionTile({
   cta?: boolean;
   onClick?: () => void;
 }) {
+  const t = useT();
   return (
     <button
       onClick={onClick}
@@ -450,7 +453,7 @@ function ActionTile({
       </div>
       {cta && (
         <Badge variant="default" className="absolute top-3 right-3 !text-[9px] !py-0 !px-1.5">
-          New
+          {t("New")}
         </Badge>
       )}
     </button>
@@ -470,6 +473,7 @@ function TotalTimeCard({
   incoming: string;
   outgoing: string;
 }) {
+  const t = useT();
   return (
     <div
       // Same flex-col rhythm as ActionTile so the title/subtitle baselines
@@ -508,13 +512,13 @@ function TotalTimeCard({
       <div className="absolute top-5 right-5 flex flex-col gap-1 min-w-[140px]">
         <TimeSplit
           icon={<PhoneIncoming className="size-3.5" />}
-          label="Incoming"
+          label={t("Incoming")}
           value={incoming}
           accent="emerald"
         />
         <TimeSplit
           icon={<PhoneOutgoing className="size-3.5" />}
-          label="Outgoing"
+          label={t("Outgoing")}
           value={outgoing}
           accent="cyan"
         />
@@ -523,7 +527,7 @@ function TotalTimeCard({
       {/* Title + subtitle + total stacked together, with the SAME small
           gap from the icon row that the action tiles use (mt-3). */}
       <div className="relative mt-3 min-w-0">
-        <h3 className="font-semibold text-lg leading-tight">Total call time</h3>
+        <h3 className="font-semibold text-lg leading-tight">{t("Total call time")}</h3>
         <div className="text-lg font-display font-semibold tracking-tight tabular-nums leading-none mt-1.5">
           {total}
         </div>
@@ -568,6 +572,7 @@ function FilterChips({
   filter: Filter;
   onChange: (f: Filter) => void;
 }) {
+  const t = useT();
   return (
     <div className="flex gap-1.5 overflow-x-auto no-scrollbar">
       {FILTERS.map((f) => (
@@ -581,7 +586,7 @@ function FilterChips({
               : "glass-subtle text-muted-foreground hover:text-foreground"
           )}
         >
-          {f.label}
+          {t(f.label)}
         </button>
       ))}
     </div>
@@ -626,6 +631,7 @@ function HistoryRow({
   entry: HistoryEntry;
   onCall: (user: User, video: boolean) => void;
 }) {
+  const t = useT();
   return (
     <div className="flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-foreground/[0.04] transition">
       <Avatar className="size-10">
@@ -645,7 +651,7 @@ function HistoryRow({
         variant="ghost"
         size="icon-sm"
         onClick={() => onCall(entry.user, false)}
-        aria-label={`Voice call ${entry.user.name}`}
+        aria-label={`${t("Voice call")} ${entry.user.name}`}
       >
         <PhoneCall className="size-4" />
       </Button>
@@ -653,7 +659,7 @@ function HistoryRow({
         variant="ghost"
         size="icon-sm"
         onClick={() => onCall(entry.user, true)}
-        aria-label={`Video call ${entry.user.name}`}
+        aria-label={`${t("Video call")} ${entry.user.name}`}
       >
         <Video className="size-4" />
       </Button>
@@ -678,6 +684,7 @@ function FullScreenHistory({
   rows: HistoryEntry[];
   onCall: (user: User, video: boolean) => void;
 }) {
+  const t = useT();
   const filtered = applyFilter(rows, filter);
   return (
     <AnimatePresence>
@@ -695,22 +702,22 @@ function FullScreenHistory({
                 variant="ghost"
                 size="icon"
                 onClick={onClose}
-                aria-label="Back to calls"
+                aria-label={t("Back to calls")}
                 className="[&_svg]:size-6"
               >
                 <ChevronLeft />
               </Button>
               <h1 className="font-display text-xl font-semibold tracking-tight">
-                Call history
+                {t("Call history")}
               </h1>
               <span className="text-xs text-muted-foreground ml-2">
-                {filtered.length} {filtered.length === 1 ? "entry" : "entries"}
+                {filtered.length} {filtered.length === 1 ? t("entry") : t("entries")}
               </span>
               <Button
                 variant="ghost"
                 size="icon-sm"
                 onClick={onClose}
-                aria-label="Close"
+                aria-label={t("Close")}
                 className="ml-auto"
               >
                 <X className="size-4" />
@@ -728,13 +735,13 @@ function FullScreenHistory({
                     icon={<PhoneCall className="size-5" />}
                     title={
                       rows.length === 0
-                        ? "No call history"
-                        : `No ${filter === "all" ? "" : filter} calls`
+                        ? t("No call history")
+                        : t("No calls match")
                     }
                     body={
                       rows.length === 0
-                        ? "Once you make or receive a call it'll show up here."
-                        : "Try a different filter or start a new call."
+                        ? t("Once you make or receive a call it'll show up here.")
+                        : t("Try a different filter or start a new call.")
                     }
                   />
                 ) : (
@@ -766,6 +773,7 @@ function FullScreenSchedule({
   rows: UpcomingCall[];
   onJoin: (u: UpcomingCall) => void;
 }) {
+  const t = useT();
   return (
     <AnimatePresence>
       {open && (
@@ -782,22 +790,22 @@ function FullScreenSchedule({
                 variant="ghost"
                 size="icon"
                 onClick={onClose}
-                aria-label="Back to calls"
+                aria-label={t("Back to calls")}
                 className="[&_svg]:size-6"
               >
                 <ChevronLeft />
               </Button>
               <h1 className="font-display text-xl font-semibold tracking-tight">
-                Scheduled calls
+                {t("Scheduled calls")}
               </h1>
               <span className="text-xs text-muted-foreground ml-2">
-                {rows.length} {rows.length === 1 ? "call" : "calls"}
+                {rows.length} {rows.length === 1 ? t("call") : t("calls")}
               </span>
               <Button
                 variant="ghost"
                 size="icon-sm"
                 onClick={onClose}
-                aria-label="Close"
+                aria-label={t("Close")}
                 className="ml-auto"
               >
                 <X className="size-4" />
@@ -809,8 +817,8 @@ function FullScreenSchedule({
                 {rows.length === 0 ? (
                   <EmptyState
                     icon={<CalendarClock className="size-5" />}
-                    title="No scheduled calls"
-                    body="Hit Schedule to plan one with your circle."
+                    title={t("No scheduled calls")}
+                    body={t("Hit Schedule to plan one with your circle.")}
                   />
                 ) : (
                   <div className="space-y-2">
@@ -838,11 +846,11 @@ function FullScreenSchedule({
                             {u.title}
                           </div>
                           <div className="text-xs text-muted-foreground mt-0.5">
-                            {formatScheduledWhen(u.whenIso)} · {u.participants}{" "}
-                            {u.participants === 1 ? "invitee" : "invitees"}
+                            {formatScheduledWhen(u.whenIso, t)} · {u.participants}{" "}
+                            {u.participants === 1 ? t("invitee") : t("invitees")}
                           </div>
                         </div>
-                        <Badge variant="cyan" className="shrink-0">Join</Badge>
+                        <Badge variant="cyan" className="shrink-0">{t("Join")}</Badge>
                       </button>
                     ))}
                   </div>

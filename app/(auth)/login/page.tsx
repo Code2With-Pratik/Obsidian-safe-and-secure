@@ -13,6 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NovaLogo } from "@/components/brand/nova-logo";
 import { useAuthStore } from "@/store/use-auth-store";
+import { useT } from "@/lib/i18n";
 
 const schema = z.object({
   email: z.string().email("Enter a valid email"),
@@ -22,6 +23,7 @@ const schema = z.object({
 type FormValues = z.infer<typeof schema>;
 
 export default function LoginPage() {
+  const t = useT();
   const router = useRouter();
   const login = useAuthStore((s) => s.login);
   const {
@@ -49,8 +51,8 @@ export default function LoginPage() {
       >
         <div className="flex flex-col items-center text-center mb-8">
           <NovaLogo className="h-14 w-14" />
-          <h1 className="mt-5 text-2xl font-semibold tracking-tight">Welcome back</h1>
-          <p className="text-sm text-muted-foreground mt-1">Sign in to continue to Obsidian</p>
+          <h1 className="mt-5 text-2xl font-semibold tracking-tight">{t("Welcome back")}</h1>
+          <p className="text-sm text-muted-foreground mt-1">{t("Sign in to continue to Obsidian")}</p>
         </div>
 
         <div className="grid grid-cols-3 gap-2 mb-6">
@@ -75,7 +77,7 @@ export default function LoginPage() {
             <div className="w-full border-t border-border/60" />
           </div>
           <div className="relative flex justify-center text-xs uppercase">
-            <span className="px-3 text-muted-foreground bg-background/50 backdrop-blur">or</span>
+            <span className="px-3 text-muted-foreground bg-background/50 backdrop-blur">{t("or")}</span>
           </div>
         </div>
 

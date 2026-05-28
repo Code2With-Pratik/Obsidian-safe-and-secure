@@ -18,6 +18,7 @@ import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import { useChatStore } from "@/store/use-chat-store";
 import { users as allUsers } from "@/lib/mock-data";
+import { useT } from "@/lib/i18n";
 
 interface Props {
   open: boolean;
@@ -38,6 +39,7 @@ function defaultIso(offsetMinutes: number) {
 }
 
 export function ScheduleCallDialog({ open, onOpenChange }: Props) {
+  const t = useT();
   const scheduleCallWith = useChatStore((s) => s.scheduleCallWith);
 
   const [title, setTitle] = React.useState("Team sync");
@@ -94,15 +96,15 @@ export function ScheduleCallDialog({ open, onOpenChange }: Props) {
           <div className="size-12 rounded-2xl bg-gradient-to-br from-amber-400 to-pink-500 grid place-items-center shadow-glow mb-2">
             <CalendarClock className="text-white" />
           </div>
-          <DialogTitle className="text-xl">Schedule a call</DialogTitle>
+          <DialogTitle className="text-xl">{t("Schedule a call")}</DialogTitle>
           <DialogDescription>
-            Pick a window and invitees. Each person gets a "Join call" message in their chat with a live countdown.
+            {t("Pick a window and invitees. Each person gets a \"Join call\" message in their chat with a live countdown.")}
           </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 min-h-0 overflow-y-auto px-6 pb-2 pt-2 space-y-4">
           <div className="space-y-1.5">
-            <Label>Title</Label>
+            <Label>{t("Title")}</Label>
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -113,7 +115,7 @@ export function ScheduleCallDialog({ open, onOpenChange }: Props) {
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label>Starts</Label>
+              <Label>{t("Starts")}</Label>
               <Input
                 type="datetime-local"
                 value={start}
@@ -133,7 +135,7 @@ export function ScheduleCallDialog({ open, onOpenChange }: Props) {
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Ends</Label>
+              <Label>{t("Ends")}</Label>
               <Input
                 type="datetime-local"
                 value={end}
@@ -144,7 +146,7 @@ export function ScheduleCallDialog({ open, onOpenChange }: Props) {
           </div>
           {!isValidWindow && (
             <p className="text-[11px] text-rose-300">
-              End time must come after the start.
+              {t("End time must come after the start.")}
             </p>
           )}
 
@@ -156,7 +158,7 @@ export function ScheduleCallDialog({ open, onOpenChange }: Props) {
                 !video ? "bg-foreground text-background" : "text-muted-foreground"
               )}
             >
-              <Phone className="size-3.5" /> Voice
+              <Phone className="size-3.5" /> {t("Voice")}
             </button>
             <button
               onClick={() => setVideo(true)}
@@ -165,18 +167,18 @@ export function ScheduleCallDialog({ open, onOpenChange }: Props) {
                 video ? "bg-foreground text-background" : "text-muted-foreground"
               )}
             >
-              <Video className="size-3.5" /> Video
+              <Video className="size-3.5" /> {t("Video")}
             </button>
           </div>
 
           <div className="space-y-1.5">
-            <Label>Invitees</Label>
+            <Label>{t("Invitees")}</Label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <Input
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
-                placeholder="Search people"
+                placeholder={t("Search people")}
                 className="pl-9 h-10"
               />
             </div>
@@ -202,7 +204,7 @@ export function ScheduleCallDialog({ open, onOpenChange }: Props) {
             <div className="rounded-2xl border border-border/60 max-h-60 overflow-y-auto no-scrollbar">
               {candidates.length === 0 ? (
                 <p className="text-center text-xs text-muted-foreground py-6">
-                  No people match "{q}".
+                  {t("No people match")} &quot;{q}&quot;
                 </p>
               ) : (
                 candidates.map((u) => {
@@ -249,12 +251,12 @@ export function ScheduleCallDialog({ open, onOpenChange }: Props) {
           <div className="text-[11px] text-muted-foreground inline-flex items-center gap-1.5">
             <UsersIcon className="size-3" />
             {picked.length === 0
-              ? "No invitees"
-              : `${picked.length} ${picked.length === 1 ? "invitee" : "invitees"}`}
+              ? t("No invitees")
+              : `${picked.length} ${picked.length === 1 ? t("invitee") : t("invitees")}`}
           </div>
           <div className="flex gap-2">
             <Button variant="ghost" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t("Cancel")}
             </Button>
             <motion.div whileTap={{ scale: 0.97 }}>
               <Button
@@ -262,7 +264,7 @@ export function ScheduleCallDialog({ open, onOpenChange }: Props) {
                 onClick={handleSchedule}
                 disabled={picked.length === 0 || !isValidWindow || !title.trim()}
               >
-                <Sparkles /> Schedule
+                <Sparkles /> {t("Schedule")}
               </Button>
             </motion.div>
           </div>

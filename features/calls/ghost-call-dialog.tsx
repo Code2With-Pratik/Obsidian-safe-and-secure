@@ -29,6 +29,7 @@ import { cn } from "@/lib/utils";
 import { useChatStore } from "@/store/use-chat-store";
 import { useUIStore } from "@/store/use-ui-store";
 import { users as allUsers } from "@/lib/mock-data";
+import { useT } from "@/lib/i18n";
 
 interface Props {
   open: boolean;
@@ -39,6 +40,7 @@ interface Props {
  *  identity is hidden from invitees — the call surface is branded as
  *  "Ghost call" and the caller appears as a randomized Ghost handle. */
 export function GhostCallDialog({ open, onOpenChange }: Props) {
+  const t = useT();
   const router = useRouter();
   const startDM = useChatStore((s) => s.startDM);
   const addGroup = useChatStore((s) => s.addGroup);
@@ -123,13 +125,13 @@ export function GhostCallDialog({ open, onOpenChange }: Props) {
             <Ghost className="text-white" />
           </div>
           <DialogTitle className="text-xl flex items-center gap-2">
-            Ghost call
+            {t("Ghost call")}
             <span className="text-[10px] inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-violet-500/20 border border-violet-400/40 text-violet-200">
-              <Lock className="size-2.5" /> anonymous
+              <Lock className="size-2.5" /> {t("anonymous")}
             </span>
           </DialogTitle>
           <DialogDescription>
-            Your identity is hidden. Invitees only see a fresh Ghost handle — and the call is end-to-end encrypted.
+            {t("Your identity is hidden. Invitees only see a fresh Ghost handle — and the call is end-to-end encrypted.")}
           </DialogDescription>
         </DialogHeader>
 
@@ -141,7 +143,7 @@ export function GhostCallDialog({ open, onOpenChange }: Props) {
               !video ? "bg-foreground text-background" : "text-muted-foreground"
             )}
           >
-            <Phone className="size-3.5" /> Voice
+            <Phone className="size-3.5" /> {t("Voice")}
           </button>
           <button
             onClick={() => setVideo(true)}
@@ -150,7 +152,7 @@ export function GhostCallDialog({ open, onOpenChange }: Props) {
               video ? "bg-foreground text-background" : "text-muted-foreground"
             )}
           >
-            <Video className="size-3.5" /> Video
+            <Video className="size-3.5" /> {t("Video")}
           </button>
         </div>
 
@@ -161,7 +163,7 @@ export function GhostCallDialog({ open, onOpenChange }: Props) {
               autoFocus
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search anyone — they won't know it's you"
+              placeholder={t("Search anyone — they won't know it's you")}
               className="pl-9 h-10"
             />
           </div>
@@ -190,7 +192,7 @@ export function GhostCallDialog({ open, onOpenChange }: Props) {
         <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-2 mt-3">
           {candidates.length === 0 ? (
             <p className="text-center text-xs text-muted-foreground py-8">
-              No people match "{q}".
+              {t("No people match")} &quot;{q}&quot;
             </p>
           ) : (
             <div className="space-y-0.5">
@@ -235,21 +237,21 @@ export function GhostCallDialog({ open, onOpenChange }: Props) {
 
         <div className="px-6 py-2 border-t border-border/40 bg-violet-500/5 text-[11px] text-violet-200/80 inline-flex items-center gap-1.5">
           <ShieldCheck className="size-3.5 text-violet-300" />
-          You'll appear as a fresh Ghost handle. Disappears when the call ends.
+          {t("You'll appear as a fresh Ghost handle. Disappears when the call ends.")}
         </div>
 
         <DialogFooter className="!justify-between px-6 py-4 border-t border-border/40 bg-background/30 backdrop-blur-md">
           <div className="text-[11px] text-muted-foreground inline-flex items-center gap-1.5">
             <UsersIcon className="size-3" />
             {picked.length === 0
-              ? "No one selected"
+              ? t("No one selected")
               : picked.length === 1
-                ? "1 person"
-                : `${picked.length} people · group ghost call`}
+                ? t("1 person")
+                : `${picked.length} ${t("people · group ghost call")}`}
           </div>
           <div className="flex gap-2">
             <Button variant="ghost" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t("Cancel")}
             </Button>
             <motion.div whileTap={{ scale: 0.97 }}>
               <Button
@@ -257,7 +259,7 @@ export function GhostCallDialog({ open, onOpenChange }: Props) {
                 onClick={handleStart}
                 disabled={picked.length === 0}
               >
-                <Sparkles /> Ring anonymously
+                <Sparkles /> {t("Ring anonymously")}
               </Button>
             </motion.div>
           </div>

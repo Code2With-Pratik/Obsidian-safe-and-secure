@@ -40,6 +40,7 @@ import { useUIStore } from "@/store/use-ui-store";
 import { useAuthStore } from "@/store/use-auth-store";
 import { NovaMascot } from "@/components/nova-mascot";
 import { cn } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 interface Msg {
   id: string;
@@ -74,6 +75,7 @@ const PRESETS: { icon: React.ReactNode; label: string }[] = [
 ];
 
 export function AIAssistant() {
+  const t = useT();
   const open = useUIStore((s) => s.aiAssistantOpen);
   const setOpen = useUIStore((s) => s.setAiAssistantOpen);
   const user = useAuthStore((s) => s.user);
@@ -94,9 +96,9 @@ export function AIAssistant() {
   const empty = messages.length === 0;
 
   const send = (incoming?: string) => {
-    const t = (incoming ?? text).trim();
-    if (!t) return;
-    const u: Msg = { id: `u${Date.now()}`, role: "user", text: t };
+    const trimmed = (incoming ?? text).trim();
+    if (!trimmed) return;
+    const u: Msg = { id: `u${Date.now()}`, role: "user", text: trimmed };
     setMessages((m) => [...m, u]);
     setText("");
     setTimeout(() => {
@@ -105,8 +107,7 @@ export function AIAssistant() {
         {
           id: `a${Date.now()}`,
           role: "ai",
-          text:
-            "On it — I'll surface relevant threads, suggest replies, and keep you posted. (Demo response — wire this to your model API.)"
+          text: t("On it — I'll surface relevant threads, suggest replies, and keep you posted. (Demo response — wire this to your model API.)")
         }
       ]);
     }, 700);
@@ -120,7 +121,7 @@ export function AIAssistant() {
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: 40 }}
           transition={{ type: "spring", stiffness: 220, damping: 26 }}
-          className="fixed right-4 bottom-4 md:bottom-6 md:right-6 z-[90] w-[min(96vw,420px)] h-[min(86vh,720px)] glass-strong glass-specular rounded-[32px] shadow-floating border border-white/20 flex flex-col overflow-hidden"
+          className="fixed inset-x-3 bottom-[max(0.75rem,env(safe-area-inset-bottom))] md:inset-x-auto md:right-6 md:bottom-6 z-[90] w-auto md:w-[420px] h-[min(82dvh,720px)] glass-strong glass-specular rounded-[32px] shadow-floating border border-white/20 flex flex-col overflow-hidden"
         >
           {/* soft pastel halo behind everything */}
           <div className="pointer-events-none absolute inset-0 -z-10">
@@ -149,7 +150,7 @@ export function AIAssistant() {
                 <DropdownMenuTrigger asChild>
                   <button
                     className="size-9 rounded-full glass-subtle grid place-items-center hover:bg-foreground/5"
-                    aria-label="Settings"
+                    aria-label={t("Settings")}
                   >
                     <Settings className="size-4" />
                   </button>
@@ -161,12 +162,12 @@ export function AIAssistant() {
                   style={{ zIndex: 9999 }}
                 >
                   <DropdownMenuLabel className="!text-[10px]">
-                    Obsidian AI · session
+                    Obsidian AI · {t("session")}
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem onSelect={() => setMessages([])}>
                     <MessageSquarePlus />
-                    New chat
+                    {t("New chat")}
                     <DropdownMenuShortcut>⌘N</DropdownMenuShortcut>
                   </DropdownMenuItem>
                   <DropdownMenuItem
@@ -182,20 +183,20 @@ export function AIAssistant() {
                     }}
                   >
                     <Share2 />
-                    Share transcript
+                    {t("Share transcript")}
                   </DropdownMenuItem>
                   <DropdownMenuItem>
                     <History />
-                    Chat history
+                    {t("Chat history")}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem>
                     <Volume2 />
-                    Voice responses
+                    {t("Voice responses")}
                   </DropdownMenuItem>
                   <DropdownMenuItem>
                     <Bell />
-                    Suggestion alerts
+                    {t("Suggestion alerts")}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
@@ -203,7 +204,7 @@ export function AIAssistant() {
                     className="text-rose-400 focus:text-rose-400"
                   >
                     <Trash2 />
-                    Delete chat history
+                    {t("Delete chat history")}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -211,7 +212,7 @@ export function AIAssistant() {
               <button
                 onClick={() => setOpen(false)}
                 className="size-9 rounded-full glass-subtle grid place-items-center hover:bg-foreground/5"
-                aria-label="Close"
+                aria-label={t("Close")}
               >
                 <X className="size-4" />
               </button>
@@ -248,11 +249,12 @@ export function AIAssistant() {
 /* ---------- Greeting (empty state) ---------- */
 
 function Greeting({ firstName, tagline }: { firstName: string; tagline: string }) {
+  const t = useT();
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="text-center pt-1 pb-3">
         <span className="text-[11px] uppercase tracking-[0.16em] text-muted-foreground">
-          AI assistant
+          {t("AI assistant")}
         </span>
       </div>
 
@@ -262,8 +264,8 @@ function Greeting({ firstName, tagline }: { firstName: string; tagline: string }
         transition={{ duration: 0.4 }}
         className="px-6 text-2xl md:text-[28px] leading-tight font-display font-semibold tracking-tight text-center text-balance"
       >
-        Hello {firstName},<br />
-        How can I help you today?
+        {t("Hello")} {firstName},<br />
+        {t("How can I help you today?")}
       </motion.h1>
 
       <div className="relative flex-1 grid place-items-center">
@@ -277,7 +279,7 @@ function Greeting({ firstName, tagline }: { firstName: string; tagline: string }
             transition={{ duration: 0.35 }}
             className="absolute bottom-3 text-sm font-medium text-foreground/80"
           >
-            {tagline}
+            {t(tagline)}
           </motion.p>
         </AnimatePresence>
       </div>
@@ -360,6 +362,7 @@ function MarqueeRow({
   duration: number;
   reverse?: boolean;
 }) {
+  const t = useT();
   // Two copies of the chip set so the loop is seamless.
   const loop = [...chips, ...chips];
 
@@ -382,13 +385,13 @@ function MarqueeRow({
             key={`${c.label}-${i}`}
             whileHover={{ y: -2, scale: 1.04 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => onPick(c.label)}
+            onClick={() => onPick(t(c.label))}
             className="shrink-0 inline-flex items-center gap-2 px-3.5 py-2 rounded-full glass border border-white/15 hover:bg-foreground/[0.06] transition shadow-[0_4px_16px_-6px_rgba(0,0,0,0.25)]"
           >
             <span className="size-6 rounded-full grid place-items-center [&_svg]:size-3.5 text-foreground/80">
               {c.icon}
             </span>
-            <span className="text-[12.5px] font-medium whitespace-nowrap">{c.label}</span>
+            <span className="text-[12.5px] font-medium whitespace-nowrap">{t(c.label)}</span>
           </motion.button>
         ))}
       </motion.div>
@@ -407,6 +410,7 @@ function Composer({
   onChange: (v: string) => void;
   onSend: () => void;
 }) {
+  const t = useT();
   const ref = React.useRef<HTMLTextAreaElement>(null);
 
   React.useEffect(() => {
@@ -440,7 +444,7 @@ function Composer({
           />
           {!hasText && (
             <div className="pointer-events-none absolute inset-y-0 left-0 right-2 flex items-center text-[14px] text-muted-foreground/60">
-              Got Questions...
+              {t("Got Questions...")}
             </div>
           )}
         </div>
@@ -453,7 +457,7 @@ function Composer({
               ? "bg-gradient-to-br from-cyan-400 via-sky-500 to-blue-600"
               : "bg-gradient-to-br from-sky-400/60 to-blue-500/60"
           )}
-          aria-label="Send"
+          aria-label={t("Send")}
         >
           {hasText ? (
             <ArrowUp className="size-[18px]" strokeWidth={2.5} />

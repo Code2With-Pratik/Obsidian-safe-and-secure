@@ -86,6 +86,19 @@ export default function SettingsPage() {
   const logout = useAuthStore((st) => st.logout);
   const [section, setSection] = React.useState("appearance");
   const [mobileDetail, setMobileDetail] = React.useState(false);
+
+  // A `?section=…` query param (e.g. from the notification popup's "Open
+  // notification settings") deep-links straight to that tab — and on mobile
+  // opens its detail view. Read from the URL on mount rather than via
+  // useSearchParams so this client page doesn't need a Suspense boundary.
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const sec = new URLSearchParams(window.location.search).get("section");
+    if (sec && sections.some((x) => x.id === sec)) {
+      setSection(sec);
+      setMobileDetail(true);
+    }
+  }, []);
   const [chatThemeOpen, setChatThemeOpen] = React.useState(false);
 
   const handleSignOut = () => {

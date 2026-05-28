@@ -50,7 +50,7 @@ export function Sidebar() {
         onMouseLeave={() => setHovered(false)}
         initial={false}
         animate={{ width: expanded ? EXPANDED : COLLAPSED }}
-        transition={{ type: "spring", stiffness: 320, damping: 32 }}
+        transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
         className={cn(
           "absolute top-0 left-0 h-dvh z-40 flex flex-col border-r border-border/40 overflow-hidden",
           "bg-card/80 backdrop-blur-2xl backdrop-saturate-150 glass-specular",
@@ -173,7 +173,7 @@ export function Sidebar() {
             href="/profile"
             className={cn(
               "flex items-center gap-3 rounded-xl p-2 mt-1 hover:bg-foreground/[0.04] transition",
-              !expanded && "justify-center p-0"
+              !expanded && "justify-center"
             )}
           >
             <Avatar className="size-9 ring-2 ring-emerald-400/60 ring-offset-2 ring-offset-background shrink-0">

@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { useChatStore } from "@/store/use-chat-store";
 import { useUIStore } from "@/store/use-ui-store";
 import { users as allUsers } from "@/lib/mock-data";
+import { useT } from "@/lib/i18n";
 
 interface Props {
   open: boolean;
@@ -28,6 +29,7 @@ interface Props {
 /** "Start a call" dialog — pick one or more users + voice/video, then drop
  *  the user straight into /calls/active. Multi-user picks become a group call. */
 export function StartCallDialog({ open, onOpenChange }: Props) {
+  const t = useT();
   const router = useRouter();
   const startDM = useChatStore((s) => s.startDM);
   const addGroup = useChatStore((s) => s.addGroup);
@@ -115,9 +117,9 @@ export function StartCallDialog({ open, onOpenChange }: Props) {
           <div className="size-12 rounded-2xl bg-gradient-to-br from-violet-500 to-fuchsia-500 grid place-items-center shadow-glow mb-2">
             {video ? <Video className="text-white" /> : <Phone className="text-white" />}
           </div>
-          <DialogTitle className="text-xl">Start a call</DialogTitle>
+          <DialogTitle className="text-xl">{t("Start a call")}</DialogTitle>
           <DialogDescription>
-            Pick the people you want to ring. Add more than one to start an instant group call.
+            {t("Pick the people you want to ring. Add more than one to start an instant group call.")}
           </DialogDescription>
         </DialogHeader>
 
@@ -129,7 +131,7 @@ export function StartCallDialog({ open, onOpenChange }: Props) {
               !video ? "bg-foreground text-background" : "text-muted-foreground"
             )}
           >
-            <Phone className="size-3.5" /> Voice
+            <Phone className="size-3.5" /> {t("Voice")}
           </button>
           <button
             onClick={() => setVideo(true)}
@@ -138,7 +140,7 @@ export function StartCallDialog({ open, onOpenChange }: Props) {
               video ? "bg-foreground text-background" : "text-muted-foreground"
             )}
           >
-            <Video className="size-3.5" /> Video
+            <Video className="size-3.5" /> {t("Video")}
           </button>
         </div>
 
@@ -149,7 +151,7 @@ export function StartCallDialog({ open, onOpenChange }: Props) {
               autoFocus
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Search people"
+              placeholder={t("Search people")}
               className="pl-9 h-10"
             />
           </div>
@@ -178,7 +180,7 @@ export function StartCallDialog({ open, onOpenChange }: Props) {
         <div className="flex-1 min-h-0 overflow-y-auto px-3 pb-2 mt-3">
           {candidates.length === 0 ? (
             <p className="text-center text-xs text-muted-foreground py-8">
-              No people match "{q}".
+              {t("No people match")} &quot;{q}&quot;
             </p>
           ) : (
             <div className="space-y-0.5">
@@ -225,14 +227,14 @@ export function StartCallDialog({ open, onOpenChange }: Props) {
           <div className="text-[11px] text-muted-foreground inline-flex items-center gap-1.5">
             <UsersIcon className="size-3" />
             {picked.length === 0
-              ? "No one selected"
+              ? t("No one selected")
               : picked.length === 1
-                ? "1 person"
-                : `${picked.length} people · group call`}
+                ? t("1 person")
+                : `${picked.length} ${t("people · group call")}`}
           </div>
           <div className="flex gap-2">
             <Button variant="ghost" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t("Cancel")}
             </Button>
             <motion.div whileTap={{ scale: 0.97 }}>
               <Button
@@ -240,7 +242,7 @@ export function StartCallDialog({ open, onOpenChange }: Props) {
                 onClick={handleStart}
                 disabled={picked.length === 0}
               >
-                <Sparkles /> Start
+                <Sparkles /> {t("Start")}
               </Button>
             </motion.div>
           </div>
