@@ -18,6 +18,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuthStore } from "@/store/use-auth-store";
 import { cn, initials } from "@/lib/utils";
+import { useT } from "@/lib/i18n";
 
 const BANNER_PRESETS = [
   "linear-gradient(135deg, #8B5CF6, #EC4899, #22D3EE)",
@@ -35,6 +36,7 @@ interface Props {
 }
 
 export function EditProfileDialog({ open, onOpenChange }: Props) {
+  const t = useT();
   const user = useAuthStore((s) => s.user);
   const updateUser = useAuthStore((s) => s.updateUser);
 
@@ -76,9 +78,9 @@ export function EditProfileDialog({ open, onOpenChange }: Props) {
         <ScrollArea className="max-h-[85vh]">
           <div className="p-6 pb-2">
             <DialogHeader>
-              <DialogTitle className="text-xl font-display">Edit profile</DialogTitle>
+              <DialogTitle className="text-xl font-display">{t("Edit profile")}</DialogTitle>
               <DialogDescription>
-                Update how the rest of Obsidian sees you.
+                {t("Update how the rest of Obsidian sees you.")}
               </DialogDescription>
             </DialogHeader>
           </div>
@@ -86,7 +88,7 @@ export function EditProfileDialog({ open, onOpenChange }: Props) {
           {/* Banner preview + presets */}
           <div className="px-6">
             <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-              Banner
+              {t("Banner")}
             </Label>
             <div
               className="relative h-28 mt-2 rounded-2xl overflow-hidden border border-border/60"
@@ -98,7 +100,7 @@ export function EditProfileDialog({ open, onOpenChange }: Props) {
             >
               <div className="absolute inset-0 bg-gradient-to-b from-black/0 to-black/30" />
               <span className="absolute bottom-2 left-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-black/40 backdrop-blur text-[10px] text-white">
-                <ImageIcon className="size-3" /> preview
+                <ImageIcon className="size-3" /> {t("preview")}
               </span>
             </div>
             <div className="flex items-center gap-2 mt-2 overflow-x-auto no-scrollbar pb-1">
@@ -122,7 +124,7 @@ export function EditProfileDialog({ open, onOpenChange }: Props) {
             <Input
               value={bannerIsUrl ? banner : ""}
               onChange={(e) => setBanner(e.target.value)}
-              placeholder="…or paste an image URL"
+              placeholder={t("…or paste an image URL")}
               className="mt-2 text-xs"
             />
           </div>
@@ -130,7 +132,7 @@ export function EditProfileDialog({ open, onOpenChange }: Props) {
           {/* Avatar */}
           <div className="px-6 mt-5">
             <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-              Avatar
+              {t("Avatar")}
             </Label>
             <div className="flex items-center gap-4 mt-2">
               <div className="relative shrink-0">
@@ -148,7 +150,7 @@ export function EditProfileDialog({ open, onOpenChange }: Props) {
               <Input
                 value={avatar}
                 onChange={(e) => setAvatar(e.target.value)}
-                placeholder="Avatar image URL"
+                placeholder={t("Avatar image URL")}
                 className="flex-1 text-xs"
               />
             </div>
@@ -158,20 +160,20 @@ export function EditProfileDialog({ open, onOpenChange }: Props) {
           <div className="px-6 mt-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="ep-name" className="text-xs uppercase tracking-wider text-muted-foreground">
-                Name
+                {t("Name")}
               </Label>
               <Input
                 id="ep-name"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Your display name"
+                placeholder={t("Your display name")}
                 className="mt-2"
                 maxLength={40}
               />
             </div>
             <div>
               <Label htmlFor="ep-username" className="text-xs uppercase tracking-wider text-muted-foreground">
-                Username
+                {t("Username")}
               </Label>
               <div className="relative mt-2">
                 <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 size-3.5 text-muted-foreground" />
@@ -181,7 +183,7 @@ export function EditProfileDialog({ open, onOpenChange }: Props) {
                   onChange={(e) =>
                     setUsername(e.target.value.replace(/\s+/g, "").toLowerCase())
                   }
-                  placeholder="handle"
+                  placeholder={t("handle")}
                   className="pl-8"
                   maxLength={24}
                 />
@@ -192,7 +194,7 @@ export function EditProfileDialog({ open, onOpenChange }: Props) {
           {/* Pronouns */}
           <div className="px-6 mt-5">
             <Label className="text-xs uppercase tracking-wider text-muted-foreground">
-              Pronouns
+              {t("Pronouns")}
             </Label>
             <div className="flex flex-wrap gap-1.5 mt-2">
               {PRONOUN_PRESETS.map((p) => (
@@ -213,7 +215,7 @@ export function EditProfileDialog({ open, onOpenChange }: Props) {
             <Input
               value={pronouns}
               onChange={(e) => setPronouns(e.target.value)}
-              placeholder="Or write your own (e.g. xe/xem)"
+              placeholder={t("Or write your own (e.g. xe/xem)")}
               className="mt-2 text-xs"
               maxLength={20}
             />
@@ -223,7 +225,7 @@ export function EditProfileDialog({ open, onOpenChange }: Props) {
           <div className="px-6 mt-5 pb-4">
             <div className="flex items-center justify-between">
               <Label htmlFor="ep-bio" className="text-xs uppercase tracking-wider text-muted-foreground">
-                Bio
+                {t("Bio")}
               </Label>
               <span className="text-[10px] text-muted-foreground inline-flex items-center gap-1">
                 <Sparkles className="size-3 text-cyan-300" />
@@ -234,7 +236,7 @@ export function EditProfileDialog({ open, onOpenChange }: Props) {
               id="ep-bio"
               value={bio}
               onChange={(e) => setBio(e.target.value.slice(0, 160))}
-              placeholder="A line about you — what you're building, what you love."
+              placeholder={t("A line about you — what you're building, what you love.")}
               rows={3}
               className="mt-2 w-full rounded-xl border border-border/60 bg-background/40 px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none transition"
               maxLength={160}
@@ -243,11 +245,11 @@ export function EditProfileDialog({ open, onOpenChange }: Props) {
 
           <DialogFooter className="px-6 pb-6 pt-2 gap-2 sm:gap-2">
             <Button variant="glass" onClick={() => onOpenChange(false)}>
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button variant="gradient" onClick={handleSave}>
               <Check />
-              Save changes
+              {t("Save changes")}
             </Button>
           </DialogFooter>
         </ScrollArea>

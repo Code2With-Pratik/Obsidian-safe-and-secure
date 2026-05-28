@@ -21,6 +21,7 @@ import {
 import { useTheme } from "next-themes";
 import { useHotkeys } from "@/hooks/use-hotkeys";
 import { useUIStore } from "@/store/use-ui-store";
+import { useT } from "@/lib/i18n";
 
 const navActions = [
   { label: "Open Chats", href: "/chats", icon: MessageCircle, hint: "G then C" },
@@ -34,6 +35,7 @@ const navActions = [
 ];
 
 export function CommandPalette() {
+  const t = useT();
   const open = useUIStore((s) => s.commandOpen);
   const setOpen = useUIStore((s) => s.setCommandOpen);
   const router = useRouter();
@@ -58,7 +60,7 @@ export function CommandPalette() {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="fixed inset-0 z-[100] grid place-items-start pt-[12vh] bg-black/50 backdrop-blur-md"
+          className="fixed inset-0 z-[100] grid place-items-start pt-[12vh] bg-black/25 backdrop-blur-sm"
           onClick={() => setOpen(false)}
         >
           <motion.div
@@ -67,24 +69,24 @@ export function CommandPalette() {
             exit={{ scale: 0.95, opacity: 0 }}
             transition={{ duration: 0.18 }}
             onClick={(e) => e.stopPropagation()}
-            className="mx-auto w-full max-w-2xl glass-strong rounded-2xl shadow-floating border border-border/60 overflow-hidden"
+            className="mx-auto w-full max-w-2xl glass-strong glass-specular text-foreground rounded-2xl shadow-floating border border-border/60 overflow-hidden [&_svg]:[stroke-width:2.5]"
           >
             <Command className="w-full" loop>
               <div className="flex items-center gap-3 px-4 py-3.5 border-b border-border/50">
-                <Search className="size-4 text-muted-foreground" />
+                <Search className="size-4 text-foreground" />
                 <Command.Input
-                  placeholder="Search chats, people, files, actions… or ask Obsidian AI"
-                  className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+                  placeholder={t("Search chats, people, files, actions… or ask Obsidian AI")}
+                  className="flex-1 bg-transparent text-sm font-medium text-foreground outline-none placeholder:text-muted-foreground placeholder:font-normal"
                   autoFocus
                 />
                 <kbd className="text-[10px] text-muted-foreground glass px-1.5 py-0.5 rounded">ESC</kbd>
               </div>
               <Command.List className="max-h-[60vh] overflow-y-auto p-2">
                 <Command.Empty className="py-10 text-center text-sm text-muted-foreground">
-                  No results found.
+                  {t("No results found.")}
                 </Command.Empty>
 
-                <Command.Group heading="Suggestions" className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 py-1">
+                <Command.Group heading={t("Suggestions")} className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 py-1">
                   <Command.Item
                     onSelect={() => {
                       setOpen(false);
@@ -92,21 +94,21 @@ export function CommandPalette() {
                     }}
                     className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer aria-selected:bg-foreground/5 data-[selected=true]:bg-foreground/5"
                   >
-                    <Sparkles className="size-4 text-violet-400" />
-                    <span className="text-sm">Ask Obsidian AI…</span>
+                    <Sparkles className="size-4 text-foreground" />
+                    <span className="text-sm font-semibold text-foreground">{t("Ask Obsidian AI…")}</span>
                     <kbd className="ml-auto text-[10px] glass px-1.5 py-0.5 rounded">⌘J</kbd>
                   </Command.Item>
                 </Command.Group>
 
-                <Command.Group heading="Navigate" className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 py-1 mt-2">
+                <Command.Group heading={t("Navigate")} className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 py-1 mt-2">
                   {navActions.map((a) => (
                     <Command.Item
                       key={a.href}
                       onSelect={() => go(a.href)}
                       className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer data-[selected=true]:bg-foreground/5"
                     >
-                      <a.icon className="size-4 text-muted-foreground" />
-                      <span className="text-sm">{a.label}</span>
+                      <a.icon className="size-4 text-foreground" />
+                      <span className="text-sm font-semibold text-foreground">{t(a.label)}</span>
                       {a.hint && (
                         <kbd className="ml-auto text-[10px] text-muted-foreground glass px-1.5 py-0.5 rounded">
                           {a.hint}
@@ -116,21 +118,21 @@ export function CommandPalette() {
                   ))}
                 </Command.Group>
 
-                <Command.Group heading="Actions" className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 py-1 mt-2">
+                <Command.Group heading={t("Actions")} className="text-[10px] uppercase tracking-wider text-muted-foreground px-2 py-1 mt-2">
                   <Command.Item
                     onSelect={() => setTheme(theme === "dark" ? "light" : "dark")}
                     className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer data-[selected=true]:bg-foreground/5"
                   >
-                    {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
-                    <span className="text-sm">Toggle theme</span>
+                    {theme === "dark" ? <Sun className="size-4 text-foreground" /> : <Moon className="size-4 text-foreground" />}
+                    <span className="text-sm font-semibold text-foreground">{t("Toggle theme")}</span>
                   </Command.Item>
                   <Command.Item className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer data-[selected=true]:bg-foreground/5">
-                    <Ghost className="size-4" />
-                    <span className="text-sm">Create new ghost room</span>
+                    <Ghost className="size-4 text-foreground" />
+                    <span className="text-sm font-semibold text-foreground">{t("Create new ghost room")}</span>
                   </Command.Item>
                   <Command.Item className="flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer data-[selected=true]:bg-foreground/5">
-                    <Phone className="size-4" />
-                    <span className="text-sm">Start a new call</span>
+                    <Phone className="size-4 text-foreground" />
+                    <span className="text-sm font-semibold text-foreground">{t("Start a new call")}</span>
                   </Command.Item>
                 </Command.Group>
               </Command.List>

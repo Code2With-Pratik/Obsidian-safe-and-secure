@@ -29,6 +29,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuthStore } from "@/store/use-auth-store";
 import { initials } from "@/lib/utils";
 import { EditProfileDialog } from "@/features/profile/edit-profile-dialog";
+import { useT } from "@/lib/i18n";
 
 const gallery = [
   "https://images.unsplash.com/photo-1502920917128-1aa500764cbd?w=400&q=80",
@@ -40,6 +41,7 @@ const gallery = [
 ];
 
 export default function ProfilePage() {
+  const t = useT();
   const user = useAuthStore((s) => s.user);
   const name = user?.name ?? "Aria Vance";
   const [editOpen, setEditOpen] = React.useState(false);
@@ -77,7 +79,7 @@ export default function ProfilePage() {
           />
           <Link
             href="/settings"
-            aria-label="Open settings"
+            aria-label={t("Open settings")}
             className="absolute top-4 right-4 size-10 rounded-full glass border border-white/20 backdrop-blur grid place-items-center text-white hover:bg-white/15 hover:scale-105 active:scale-95 transition shadow-floating"
           >
             <Settings className="size-[18px]" />
@@ -93,7 +95,7 @@ export default function ProfilePage() {
               </Avatar>
               <button
                 onClick={() => setEditOpen(true)}
-                aria-label="Edit profile"
+                aria-label={t("Edit profile")}
                 className="absolute bottom-1 right-1 size-9 rounded-full bg-primary grid place-items-center shadow-glow ring-2 ring-background hover:scale-105 active:scale-95 transition"
               >
                 <Pencil className="size-4 text-primary-foreground" />
@@ -111,23 +113,23 @@ export default function ProfilePage() {
                 {user?.pronouns ? ` · ${user.pronouns}` : " · she/her"}
               </p>
               <p className="mt-2 max-w-xl">
-                {user?.bio ?? "Designing the future, one pixel at a time. Currently building Obsidian ✨"}
+                {user?.bio ?? t("Designing the future, one pixel at a time. Currently building Obsidian ✨")}
               </p>
               <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                 <span className="inline-flex items-center gap-1.5">
                   <MapPin className="size-3.5" /> Lisbon, Portugal
                 </span>
                 <span className="inline-flex items-center gap-1.5">
-                  <Calendar className="size-3.5" /> Joined Mar 2024
+                  <Calendar className="size-3.5" /> {t("Joined")} Mar 2024
                 </span>
                 <span className="inline-flex items-center gap-1.5 text-emerald-400">
-                  <span className="size-1.5 rounded-full bg-emerald-400" /> Online · designing
+                  <span className="size-1.5 rounded-full bg-emerald-400" /> {t("Online")} · {t("designing")}
                 </span>
               </div>
             </div>
             <div className="flex gap-2">
               <Button variant="gradient">
-                <MessageCircle /> Message
+                <MessageCircle /> {t("Message")}
               </Button>
               <Button variant="glass">
                 <Phone />
@@ -139,42 +141,41 @@ export default function ProfilePage() {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-7">
-            <Stat k="248" v="Conversations" />
-            <Stat k="3.4k" v="Connections" />
-            <Stat k="86" v="Ghost rooms" />
-            <Stat k="2.1k" v="Story views" />
+            <Stat k="248" v={t("Conversations")} />
+            <Stat k="3.4k" v={t("Connections")} />
+            <Stat k="86" v={t("Ghost rooms")} />
+            <Stat k="2.1k" v={t("Story views")} />
           </div>
 
           <Tabs defaultValue="about" className="mt-8">
             <TabsList>
-              <TabsTrigger value="about">About</TabsTrigger>
-              <TabsTrigger value="media">Media</TabsTrigger>
-              <TabsTrigger value="activity">Activity</TabsTrigger>
-              <TabsTrigger value="privacy">Privacy</TabsTrigger>
+              <TabsTrigger value="about">{t("About")}</TabsTrigger>
+              <TabsTrigger value="media">{t("Media")}</TabsTrigger>
+              <TabsTrigger value="activity">{t("Activity")}</TabsTrigger>
+              <TabsTrigger value="privacy">{t("Privacy")}</TabsTrigger>
             </TabsList>
 
             <TabsContent value="about" className="mt-5">
               <div className="grid md:grid-cols-2 gap-3">
                 <div className="glass rounded-2xl p-5">
-                  <h3 className="font-semibold text-sm mb-3">Bio card</h3>
+                  <h3 className="font-semibold text-sm mb-3">{t("Bio card")}</h3>
                   <p className="text-sm text-muted-foreground">
-                    Senior product designer, ex-Linear, ex-Arc. I care deeply about the texture of digital
-                    experiences. Currently architecting Obsidian — a futuristic OS for communication.
+                    {t("Senior product designer, ex-Linear, ex-Arc. I care deeply about the texture of digital experiences. Currently architecting Obsidian — a futuristic OS for communication.")}
                   </p>
                   <div className="mt-4 flex flex-wrap gap-2">
-                    {["#design", "#motion", "#typography", "#systems", "#synthwave"].map((t) => (
-                      <Badge key={t} variant="glass">{t}</Badge>
+                    {["#design", "#motion", "#typography", "#systems", "#synthwave"].map((tag) => (
+                      <Badge key={tag} variant="glass">{tag}</Badge>
                     ))}
                   </div>
                 </div>
 
                 <div className="glass rounded-2xl p-5">
-                  <h3 className="font-semibold text-sm mb-3">Links</h3>
+                  <h3 className="font-semibold text-sm mb-3">{t("Links")}</h3>
                   <div className="space-y-2">
-                    <LinkRow icon={<Globe />} label="Personal site" sub="aria.design" />
+                    <LinkRow icon={<Globe />} label={t("Personal site")} sub="aria.design" />
                     <LinkRow icon={<Github />} label="GitHub" sub="@ariavance" />
                     <LinkRow icon={<Twitter />} label="X" sub="@ariavance" />
-                    <LinkRow icon={<Music />} label="Spotify" sub="Now playing: Glass Cathedrals" pulse />
+                    <LinkRow icon={<Music />} label="Spotify" sub={`${t("Now playing:")} Glass Cathedrals`} pulse />
                   </div>
                 </div>
               </div>
@@ -198,15 +199,15 @@ export default function ProfilePage() {
             <TabsContent value="activity" className="mt-5">
               <div className="glass rounded-2xl p-5 space-y-3">
                 {[
-                  { t: "Joined ghost room 'Designers Unfiltered'", at: "5 min ago" },
-                  { t: "Pinned a message in Aurora Design Lab", at: "1 hr ago" },
-                  { t: "Posted a new story", at: "3 hr ago" },
-                  { t: "Started a video meeting with 4 people", at: "Yesterday" }
+                  { msg: "Joined ghost room 'Designers Unfiltered'", at: "5 min ago" },
+                  { msg: "Pinned a message in Aurora Design Lab", at: "1 hr ago" },
+                  { msg: "Posted a new story", at: "3 hr ago" },
+                  { msg: "Started a video meeting with 4 people", at: "Yesterday" }
                 ].map((a) => (
-                  <div key={a.t} className="flex items-center gap-3 text-sm">
+                  <div key={a.msg} className="flex items-center gap-3 text-sm">
                     <div className="size-2 rounded-full bg-primary" />
-                    <span className="flex-1">{a.t}</span>
-                    <span className="text-xs text-muted-foreground">{a.at}</span>
+                    <span className="flex-1">{t(a.msg)}</span>
+                    <span className="text-xs text-muted-foreground">{t(a.at)}</span>
                   </div>
                 ))}
               </div>
@@ -214,9 +215,9 @@ export default function ProfilePage() {
 
             <TabsContent value="privacy" className="mt-5">
               <div className="glass rounded-2xl p-5 space-y-2">
-                <PrivacyRow icon={<Lock />} label="Last seen" sub="Friends only" />
-                <PrivacyRow icon={<Shield />} label="Profile photo" sub="Everyone" />
-                <PrivacyRow icon={<MessageCircle />} label="Who can message me" sub="People I know" />
+                <PrivacyRow icon={<Lock />} label={t("Last seen")} sub={t("Friends only")} />
+                <PrivacyRow icon={<Shield />} label={t("Profile photo")} sub={t("Everyone")} />
+                <PrivacyRow icon={<MessageCircle />} label={t("Who can message me")} sub={t("People I know")} />
               </div>
             </TabsContent>
           </Tabs>
