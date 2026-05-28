@@ -51,16 +51,76 @@ const shadowsIntoLight = Shadows_Into_Light({
   display: "swap"
 });
 
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+const SITE_NAME = "Obsidian";
+const SITE_TITLE = "Obsidian · The Future of Communication";
+const SITE_DESCRIPTION =
+  "Obsidian is a next-generation communication ecosystem — chats, ghost rooms, calls, stories, whiteboards and an internal browser, all in one futuristic OS for talking, building and connecting.";
+
 export const metadata: Metadata = {
-  title: "Obsidian · The Future of Communication",
-  description:
-    "Obsidian is a next-generation communication ecosystem — chats, ghost rooms, calls, stories, whiteboards and an internal browser, all in one futuristic OS for talking, building and connecting.",
-  applicationName: "Obsidian",
-  authors: [{ name: "Obsidian Labs" }]
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: SITE_TITLE,
+    template: "%s · Obsidian"
+  },
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  authors: [{ name: "Obsidian Labs", url: SITE_URL }],
+  creator: "Obsidian Labs",
+  publisher: "Obsidian Labs",
+  keywords: [
+    "Obsidian",
+    "secure messaging",
+    "encrypted chat",
+    "ghost rooms",
+    "voice and video calls",
+    "stories",
+    "whiteboard",
+    "communication OS",
+    "privacy"
+  ],
+  category: "communication",
+  formatDetection: { telephone: false, email: false, address: false },
+  alternates: { canonical: "/" },
+  icons: {
+    icon: "/Favicon.ico",
+    shortcut: "/Favicon.ico",
+    apple: "/Favicon.ico"
+  },
+  openGraph: {
+    type: "website",
+    siteName: SITE_NAME,
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    url: "/",
+    locale: "en_US",
+    images: [{ url: "/Background.jpg", alt: "Obsidian — the future of communication" }]
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: SITE_TITLE,
+    description: SITE_DESCRIPTION,
+    images: ["/Background.jpg"]
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+      "max-video-preview": -1
+    }
+  }
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0b0a14",
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#ffffff" },
+    { media: "(prefers-color-scheme: dark)", color: "#0b0a14" }
+  ],
+  colorScheme: "dark light",
   width: "device-width",
   initialScale: 1
 };

@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -13,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuthStore } from "@/store/use-auth-store";
+import { NovaMascot } from "@/components/nova-mascot";
 import { useT } from "@/lib/i18n";
 
 const schema = z.object({
@@ -50,14 +50,7 @@ export default function LoginPage() {
         className="w-full max-w-md glass rounded-3xl p-8"
       >
         <div className="flex flex-col items-center text-center mb-8">
-          <Image
-            src="/Logo.png"
-            alt="Obsidian"
-            width={56}
-            height={56}
-            priority
-            className="size-14 rounded-xl object-contain"
-          />
+          <NovaMascot size={56} />
           <h1 className="mt-5 text-2xl font-semibold tracking-tight">{t("Welcome back")}</h1>
           <p className="text-sm text-muted-foreground mt-1">{t("Sign in to continue to Obsidian")}</p>
         </div>

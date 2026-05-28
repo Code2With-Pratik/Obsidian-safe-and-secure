@@ -11,7 +11,7 @@ import { Loader2, LockKeyhole, Mail, User2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { NovaLogo } from "@/components/brand/nova-logo";
+import { NovaMascot } from "@/components/nova-mascot";
 
 const schema = z
   .object({
@@ -49,7 +49,7 @@ export default function RegisterPage() {
         className="w-full max-w-md glass rounded-3xl p-8"
       >
         <div className="flex flex-col items-center text-center mb-7">
-          <NovaLogo className="h-14 w-14" />
+          <NovaMascot size={56} />
           <h1 className="mt-5 text-2xl font-semibold tracking-tight">Create your Obsidian</h1>
           <p className="text-sm text-muted-foreground mt-1">
             One identity. Infinite ways to connect.

@@ -42,7 +42,12 @@
       "Bash(node -e \"const d=require\\('next/dist/compiled/@next/font/dist/google/font-data.json'\\); ['Arima','Doto','Grape Nuts','Lora','Montserrat Alternates','Poppins'].forEach\\(f=>{const x=d[f]; console.log\\(f\\); console.log\\('  weights:', JSON.stringify\\(x.weights\\)\\); console.log\\('  styles :', JSON.stringify\\(x.styles\\)\\); console.log\\('  axes   :', x.axes? JSON.stringify\\(x.axes.map\\(a=>a.tag\\)\\) : 'none'\\);}\\)\")",
       "Bash(node -e \"const d=require\\('next/dist/compiled/@next/font/dist/google/font-data.json'\\); ['Arima','Doto','Grape Nuts','Lora','Montserrat Alternates','Poppins'].forEach\\(f=>console.log\\(f.padEnd\\(24\\), JSON.stringify\\(d[f].subsets\\)\\)\\)\")",
       "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:3001/settings)",
-      "Bash(node -e \"const d=require\\('next/dist/compiled/@next/font/dist/google/font-data.json'\\); const x=d['Satisfy']; console.log\\('exists:', !!x\\); if\\(x\\){console.log\\('weights:', JSON.stringify\\(x.weights\\)\\); console.log\\('styles :', JSON.stringify\\(x.styles\\)\\); console.log\\('subsets:', JSON.stringify\\(x.subsets\\)\\);}\")"
+      "Bash(node -e \"const d=require\\('next/dist/compiled/@next/font/dist/google/font-data.json'\\); const x=d['Satisfy']; console.log\\('exists:', !!x\\); if\\(x\\){console.log\\('weights:', JSON.stringify\\(x.weights\\)\\); console.log\\('styles :', JSON.stringify\\(x.styles\\)\\); console.log\\('subsets:', JSON.stringify\\(x.subsets\\)\\);}\")",
+      "Bash(curl -s -o /tmp/icon_out.png -w \"HTTP %{http_code} | type=%{content_type} | bytes=%{size_download}\\\\n\" http://localhost:3000/icon)",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code} | type=%{content_type} | bytes=%{size_download}\\\\n\" http://localhost:3000/Logo.ico)",
+      "Bash(curl -s http://localhost:3000/login)",
+      "Bash(curl -s -o /dev/null -w \"/Favicon.ico: HTTP %{http_code} | %{content_type} | %{size_download}b\\\\n\" http://localhost:3000/Favicon.ico)",
+      "Bash(curl -s -o /dev/null -w \"/register: HTTP %{http_code}\\\\n\" http://localhost:3000/register)"
     ]
   }
 }

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { NovaLogo } from "@/components/brand/nova-logo";
+import { NovaMascot } from "@/components/nova-mascot";
 import { useT } from "@/lib/i18n";
 
 export default function SplashPage() {
@@ -19,7 +19,7 @@ export default function SplashPage() {
           transition={{ duration: 0.8, ease: [0.22, 1, 0.36, 1] }}
           className="mx-auto"
         >
-          <NovaLogo className="h-24 w-24 mx-auto" animated />
+          <NovaMascot size={96} />
         </motion.div>
 
         <motion.h1
