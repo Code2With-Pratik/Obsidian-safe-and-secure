@@ -9,6 +9,7 @@ import {
   Shadows_Into_Light
 } from "next/font/google";
 import "./globals.css";
+import { fontVariables } from "./fonts";
 import { AppProviders } from "@/providers/app-providers";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
@@ -69,7 +70,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${inter.variable} ${jbMono.variable} ${indieFlower.variable} ${merienda.variable} ${caveat.variable} ${permanentMarker.variable} ${shadowsIntoLight.variable}`}
+      className={`${inter.variable} ${jbMono.variable} ${indieFlower.variable} ${merienda.variable} ${caveat.variable} ${permanentMarker.variable} ${shadowsIntoLight.variable} ${fontVariables}`}
     >
       <body className="min-h-dvh font-sans antialiased">
         <AppProviders>

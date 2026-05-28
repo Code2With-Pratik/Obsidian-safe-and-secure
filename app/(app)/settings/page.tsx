@@ -51,6 +51,7 @@ import {
 } from "@/store/use-settings-store";
 import { useVaultStore } from "@/store/use-vault-store";
 import { useAuthStore } from "@/store/use-auth-store";
+import { FONT_OPTIONS } from "@/app/fonts";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
@@ -266,6 +267,10 @@ function SettingsContent() {
                         />
                       ))}
                     </div>
+                  </Setting>
+
+                  <Setting label={t("Font")} sub={t("Typeface used across the app.")}>
+                    <FontDropdown value={s.font} onChange={s.setFont} />
                   </Setting>
 
                   <Setting label={t("Glass intensity")} sub={t("Backdrop blur in surfaces.")}>
@@ -649,6 +654,43 @@ function LanguageDropdown({
               <p className="text-[11px] text-muted-foreground leading-tight">{l.native}</p>
             </div>
             {value === l.code && <Check className="size-4 text-primary shrink-0" />}
+          </DropdownMenuItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/* ───────────── Font dropdown ───────────── */
+function FontDropdown({
+  value,
+  onChange
+}: {
+  value: string;
+  onChange: (id: string) => void;
+}) {
+  const current = FONT_OPTIONS.find((f) => f.id === value) ?? FONT_OPTIONS[0];
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button className="inline-flex items-center gap-2 rounded-xl glass-subtle pl-3 pr-2 py-1.5 text-sm hover:bg-foreground/[0.06] transition">
+          <span className="font-medium" style={{ fontFamily: current.family }}>
+            {current.label}
+          </span>
+          <ChevronDown className="size-3.5 text-muted-foreground" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="!w-auto !min-w-[14rem] max-h-[320px] overflow-y-auto">
+        {FONT_OPTIONS.map((f) => (
+          <DropdownMenuItem
+            key={f.id}
+            onSelect={() => onChange(f.id)}
+            className="gap-2.5"
+          >
+            <span className="flex-1 text-[15px]" style={{ fontFamily: f.family }}>
+              {f.label}
+            </span>
+            {value === f.id && <Check className="size-4 text-primary shrink-0" />}
           </DropdownMenuItem>
         ))}
       </DropdownMenuContent>

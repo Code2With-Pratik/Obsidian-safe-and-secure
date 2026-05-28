@@ -16,6 +16,7 @@ import { RTL_LANGS } from "@/lib/i18n";
  */
 export function SettingsEffects({ children }: { children: React.ReactNode }) {
   const accent = useSettingsStore((s) => s.accent);
+  const font = useSettingsStore((s) => s.font);
   const glass = useSettingsStore((s) => s.glass);
   const reduceMotion = useSettingsStore((s) => s.reduceMotion);
   const language = useSettingsStore((s) => s.language);
@@ -27,6 +28,20 @@ export function SettingsEffects({ children }: { children: React.ReactNode }) {
     root.style.setProperty("--primary", found.hsl);
     root.style.setProperty("--ring", found.hsl);
   }, [accent]);
+
+  // Font → repoints `--font-sans` / `--font-display` at the chosen font's
+  // `--font-<id>` token (all of which are mounted on <html>). "default" clears
+  // the override so the base Inter (set via the next/font class) takes over.
+  React.useEffect(() => {
+    const root = document.documentElement;
+    if (!font || font === "default") {
+      root.style.removeProperty("--font-sans");
+      root.style.removeProperty("--font-display");
+    } else {
+      root.style.setProperty("--font-sans", `var(--font-${font})`);
+      root.style.setProperty("--font-display", `var(--font-${font})`);
+    }
+  }, [font]);
 
   // Glass intensity → scale factor. 80 (the default) maps to 1.0; 0 removes
   // the blur entirely, 100 pushes it a touch further.

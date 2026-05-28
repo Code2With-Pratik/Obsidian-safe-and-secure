@@ -105,6 +105,8 @@ export interface AiPrefs {
 interface SettingsState {
   /* ---- appearance ---- */
   accent: string;
+  /** Selected UI font id (see FONT_OPTIONS in app/fonts). "default" = Inter. */
+  font: string;
   /** Glass intensity 0–100 (80 ≈ the original default). */
   glass: number;
   reduceMotion: boolean;
@@ -125,6 +127,7 @@ interface SettingsState {
 
   /* ---- actions ---- */
   setAccent: (id: string) => void;
+  setFont: (id: string) => void;
   setGlass: (v: number) => void;
   setReduceMotion: (v: boolean) => void;
   toggleNotification: (key: keyof NotificationPrefs, v: boolean) => void;
@@ -141,6 +144,7 @@ export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
       accent: "violet",
+      font: "default",
       glass: 80,
       reduceMotion: false,
 
@@ -178,6 +182,7 @@ export const useSettingsStore = create<SettingsState>()(
       devices: SEED_DEVICES,
 
       setAccent: (id) => set({ accent: id }),
+      setFont: (id) => set({ font: id }),
       setGlass: (v) => set({ glass: Math.max(0, Math.min(100, v)) }),
       setReduceMotion: (v) => set({ reduceMotion: v }),
       toggleNotification: (key, v) =>

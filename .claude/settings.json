@@ -33,7 +33,16 @@
       "Bash(curl -s -o /dev/null -w \"page=%{http_code} sprite=\" http://localhost:3000/chats/c1)",
       "Bash(curl -s -o /dev/null -w \"%{http_code} \\(%{size_download} bytes\\)\\\\n\" http://localhost:3000/emoji-mart/facebook-64.png)",
       "Bash(findstr /n \"function \" \"e:\\\\Nova Chat App\\\\features\\\\chat\\\\message-input.tsx\")",
-      "Bash(del \"e:\\\\Nova Chat App\\\\lib\\\\tenor.ts\")"
+      "Bash(del \"e:\\\\Nova Chat App\\\\lib\\\\tenor.ts\")",
+      "Bash(awk 'NR>=500 && NR<=560' components/layout/sidebar.tsx)",
+      "Bash(grep -nv \"import { NovaLogo }\\\\|import { cn, initials }\\\\|import { useT }\")",
+      "Read(//tmp/**)",
+      "Bash(git --no-pager diff -- \"components/layout/sidebar.tsx\")",
+      "Bash(node -e \"const d=require\\('next/dist/compiled/@next/font/dist/google/font-data.json'\\); ['Arima','Doto','Grape Nuts','Lora','Montserrat Alternates','Poppins','Inter'].forEach\\(f=>console.log\\(f.padEnd\\(24\\), !!d[f]\\)\\)\")",
+      "Bash(node -e \"const d=require\\('next/dist/compiled/@next/font/dist/google/font-data.json'\\); ['Arima','Doto','Grape Nuts','Lora','Montserrat Alternates','Poppins'].forEach\\(f=>{const x=d[f]; console.log\\(f\\); console.log\\('  weights:', JSON.stringify\\(x.weights\\)\\); console.log\\('  styles :', JSON.stringify\\(x.styles\\)\\); console.log\\('  axes   :', x.axes? JSON.stringify\\(x.axes.map\\(a=>a.tag\\)\\) : 'none'\\);}\\)\")",
+      "Bash(node -e \"const d=require\\('next/dist/compiled/@next/font/dist/google/font-data.json'\\); ['Arima','Doto','Grape Nuts','Lora','Montserrat Alternates','Poppins'].forEach\\(f=>console.log\\(f.padEnd\\(24\\), JSON.stringify\\(d[f].subsets\\)\\)\\)\")",
+      "Bash(curl -s -o /dev/null -w \"HTTP %{http_code}\\\\n\" http://localhost:3001/settings)",
+      "Bash(node -e \"const d=require\\('next/dist/compiled/@next/font/dist/google/font-data.json'\\); const x=d['Satisfy']; console.log\\('exists:', !!x\\); if\\(x\\){console.log\\('weights:', JSON.stringify\\(x.weights\\)\\); console.log\\('styles :', JSON.stringify\\(x.styles\\)\\); console.log\\('subsets:', JSON.stringify\\(x.subsets\\)\\);}\")"
     ]
   }
 }

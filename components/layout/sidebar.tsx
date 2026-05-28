@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -20,6 +19,7 @@ import { Badge } from "@/components/ui/badge";
 import { useAuthStore } from "@/store/use-auth-store";
 import { useT } from "@/lib/i18n";
 import { cn, initials } from "@/lib/utils";
+import { NovaMascot } from "../../components/nova-mascot";
 
 const navItems = [
   { href: "/chats", label: "Chats", icon: MessageCircle, badge: 9 },
@@ -85,16 +85,12 @@ export function Sidebar() {
           expanded && "shadow-floating"
         )}
       >
-        <div className={cn("flex items-center gap-2.5 px-2 py-3", !expanded && "justify-center")}>
+        {/* No justify-center toggle (same as the nav items): the mascot stays
+            pinned at a fixed left offset that reads as centered in the 64px
+            rail, so it doesn't drift/shake while the panel width animates. */}
+        <div className="flex items-center gap-2.5 px-3 py-3">
           <Link href="/chats" className="flex items-center gap-2.5 shrink-0">
-            <Image
-              src="/Logo.png"
-              alt="Obsidian"
-              width={48}
-              height={48}
-              priority
-              className="size-11 shrink-0 rounded-xl object-contain"
-            />
+            <NovaMascot size={40} className="shrink-0" />
             <AnimatePresence initial={false}>
               {expanded && (
                 <motion.div
