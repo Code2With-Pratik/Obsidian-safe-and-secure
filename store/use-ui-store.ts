@@ -68,7 +68,7 @@ export const useUIStore = create<UIState>((set) => ({
   miniCallOpen: false,
   setMiniCallOpen: (v) => set({ miniCallOpen: v }),
 
-  rightPanel: "details",
+  rightPanel: null,
   setRightPanel: (p) => set({ rightPanel: p }),
 
   splitMode: false,

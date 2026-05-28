@@ -4,8 +4,10 @@ import * as React from "react";
 import { ChatList } from "@/features/chat/chat-list";
 import { motion } from "framer-motion";
 import { Sparkles } from "lucide-react";
+import { useT } from "@/lib/i18n";
 
 export default function ChatsIndex() {
+  const t = useT();
   return (
     <div className="flex h-[calc(100dvh-4rem)]">
       <div className="w-full md:w-[400px] lg:w-[420px] shrink-0 md:border-r border-border/40 bg-card/30 backdrop-blur-xl">
@@ -26,17 +28,17 @@ export default function ChatsIndex() {
             <Sparkles className="size-8 text-white" />
           </motion.div>
           <h2 className="mt-6 text-2xl font-semibold tracking-tight">
-            Select a conversation
+            {t("Select a conversation")}
           </h2>
           <p className="mt-2 text-sm text-muted-foreground">
-            Or start a new one. Obsidian chats are private by default and encrypted edge to edge.
+            {t("Or start a new one. Obsidian chats are private by default and encrypted edge to edge.")}
           </p>
           <div className="mt-6 flex items-center justify-center gap-4 text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5">
-              <span className="size-1.5 rounded-full bg-emerald-400" /> 6 online
+              <span className="size-1.5 rounded-full bg-emerald-400" /> 6 {t("online")}
             </span>
             <span>·</span>
-            <span>2 unread threads</span>
+            <span>2 {t("unread threads")}</span>
           </div>
         </motion.div>
       </div>

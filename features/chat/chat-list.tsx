@@ -320,7 +320,7 @@ export function ChatList({
 
       {/* Filter chips — swap based on the active view. */}
       {!isEmpty && view === "messages" && (
-        <div className="flex gap-1.5 px-4 mt-2 overflow-x-auto no-scrollbar">
+        <div className="flex gap-1.5 px-4 mt-4 overflow-x-auto no-scrollbar">
           {(
             [
               { id: "all", label: "All" },
@@ -346,7 +346,7 @@ export function ChatList({
         </div>
       )}
       {view === "community" && (
-        <div className="flex gap-1.5 px-4 mt-2 overflow-x-auto no-scrollbar">
+        <div className="flex gap-1.5 px-4 mt-4 overflow-x-auto no-scrollbar">
           {COMMUNITY_FILTERS.map((f) => (
             <button
               key={f.id}

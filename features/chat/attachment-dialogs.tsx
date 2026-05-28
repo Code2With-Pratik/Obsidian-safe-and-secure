@@ -20,6 +20,7 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { users } from "@/lib/mock-data";
+import { useT } from "@/lib/i18n";
 import { initials, cn } from "@/lib/utils";
 
 /** Shared modal scaffold — backdrop, glass card, close button. */
@@ -91,7 +92,7 @@ function DialogShell({
                 <X className="size-4" />
               </button>
             </div>
-            <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pb-5">
+            <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-5 pt-1 pb-5">
               {children}
             </div>
             </motion.div>
@@ -121,6 +122,7 @@ export function CameraCaptureDialog({
   const [facing, setFacing] = React.useState<"user" | "environment">("user");
   const [shot, setShot] = React.useState<string | null>(null); // captured preview before send
   const isDesktop = useMediaQuery("(min-width: 768px)");
+  const t = useT();
   const [mounted, setMounted] = React.useState(false);
   React.useEffect(() => setMounted(true), []);
 
@@ -226,7 +228,7 @@ export function CameraCaptureDialog({
                 <X className="size-5" />
               </button>
               <span className="text-white/90 text-sm font-medium tracking-wide">
-                {shot ? "Preview" : "Camera"}
+                {shot ? t("Preview") : t("Camera")}
               </span>
               <button
                 onClick={() => setFacing((f) => (f === "user" ? "environment" : "user"))}
@@ -260,7 +262,7 @@ export function CameraCaptureDialog({
                   />
                   {!ready && !error && (
                     <div className="absolute inset-0 grid place-items-center text-white/70 text-sm">
-                      Starting camera…
+                      {t("Starting camera…")}
                     </div>
                   )}
                   {error && (
@@ -327,6 +329,7 @@ export function ContactPickerDialog({
   onClose: () => void;
   onPick: (contacts: { name: string; username: string; avatar?: string }[]) => void;
 }) {
+  const t = useT();
   const [q, setQ] = React.useState("");
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
 
@@ -370,19 +373,19 @@ export function ContactPickerDialog({
     <DialogShell
       open={open}
       onClose={onClose}
-      title="Share contacts"
+      title={t("Share contacts")}
       subtitle={
         selected.size > 0
-          ? `${selected.size} selected`
-          : "Tap to pick — multi-select supported"
+          ? `${selected.size} ${t("selected")}`
+          : t("Tap to pick — multi-select supported")
       }
     >
-      <div className="relative mb-3">
+      <div className="relative mt-2 mb-3">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
         <input
           value={q}
           onChange={(e) => setQ(e.target.value)}
-          placeholder="Search contacts"
+          placeholder={t("Search contacts")}
           autoFocus
           className="w-full h-10 pl-9 pr-3 rounded-full glass border border-border/60 bg-transparent text-sm outline-none placeholder:text-muted-foreground/70 focus:ring-2 focus:ring-cyan-400/60"
         />
@@ -390,7 +393,7 @@ export function ContactPickerDialog({
       <div className="space-y-1">
         {filtered.length === 0 ? (
           <p className="text-center text-sm text-muted-foreground py-8">
-            No matches for &quot;{q}&quot;.
+            {t("No matches")} · &quot;{q}&quot;
           </p>
         ) : (
           filtered.map((u) => {
@@ -435,8 +438,8 @@ export function ContactPickerDialog({
         variant="gradient"
         className="w-full mt-4 sticky bottom-0"
       >
-        Share {selected.size > 0 ? `${selected.size} ` : ""}
-        {selected.size === 1 ? "contact" : "contacts"}
+        {t("Share")} {selected.size > 0 ? `${selected.size} ` : ""}
+        {selected.size === 1 ? t("contact") : t("contacts")}
       </Button>
     </DialogShell>
   );
@@ -453,6 +456,7 @@ export function LocationPickerDialog({
   onClose: () => void;
   onPick: (loc: { lat: number; lng: number; live: boolean }) => void;
 }) {
+  const t = useT();
   const [coords, setCoords] = React.useState<{ lat: number; lng: number } | null>(
     null
   );
@@ -489,13 +493,13 @@ export function LocationPickerDialog({
     <DialogShell
       open={open}
       onClose={onClose}
-      title="Share location"
+      title={t("Share location")}
       subtitle={
         loading
-          ? "Finding your location…"
+          ? t("Finding your location…")
           : coords
             ? `${coords.lat.toFixed(5)}, ${coords.lng.toFixed(5)}`
-            : "Allow location access to continue"
+            : t("Allow location access to continue")
       }
     >
       <div className="aspect-[5/4] rounded-2xl overflow-hidden ring-1 ring-border/60 bg-foreground/[0.04] relative">
@@ -508,7 +512,7 @@ export function LocationPickerDialog({
           />
         ) : (
           <div className="absolute inset-0 grid place-items-center text-sm text-muted-foreground text-center px-6">
-            {error ?? "Locating you…"}
+            {error ?? t("Locating you…")}
           </div>
         )}
       </div>
@@ -519,7 +523,7 @@ export function LocationPickerDialog({
           disabled={!coords}
         >
           <Navigation className="size-4" />
-          Live location
+          {t("Live location")}
         </Button>
         <Button
           variant="gradient"
@@ -527,7 +531,7 @@ export function LocationPickerDialog({
           disabled={!coords}
         >
           <MapPin className="size-4" />
-          Send current
+          {t("Send current")}
         </Button>
       </div>
     </DialogShell>
@@ -545,6 +549,7 @@ export function ScheduleMessageDialog({
   onClose: () => void;
   onSchedule: (when: Date, message: string) => void;
 }) {
+  const t = useT();
   const initial = React.useMemo(() => {
     const d = new Date(Date.now() + 60 * 60 * 1000);
     d.setSeconds(0, 0);
@@ -566,20 +571,20 @@ export function ScheduleMessageDialog({
     <DialogShell
       open={open}
       onClose={onClose}
-      title="Schedule message"
-      subtitle="Pick when this should send"
+      title={t("Schedule message")}
+      subtitle={t("Pick when this should send")}
     >
       <textarea
         value={msg}
         onChange={(e) => setMsg(e.target.value)}
-        placeholder="Type the message to schedule…"
+        placeholder={t("Type the message to schedule…")}
         rows={3}
         autoFocus
         className="w-full rounded-2xl glass-subtle px-4 py-3 text-sm outline-none resize-none focus:ring-2 focus:ring-cyan-400/60"
       />
       <div className="grid grid-cols-2 gap-2 mt-3">
         <label className="flex flex-col gap-1">
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Date</span>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("Date")}</span>
           <input
             type="date"
             value={date}
@@ -589,7 +594,7 @@ export function ScheduleMessageDialog({
           />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Time</span>
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("Time")}</span>
           <input
             type="time"
             value={time}
@@ -600,7 +605,7 @@ export function ScheduleMessageDialog({
       </div>
       <Button onClick={submit} disabled={!msg.trim()} variant="gradient" className="w-full mt-4">
         <CalendarClock className="size-4" />
-        Schedule for {date} {time}
+        {t("Schedule for")} {date} {time}
       </Button>
     </DialogShell>
   );
@@ -617,6 +622,7 @@ export function PollCreatorDialog({
   onClose: () => void;
   onCreate: (poll: { question: string; options: string[]; multi: boolean }) => void;
 }) {
+  const t = useT();
   const [question, setQuestion] = React.useState("");
   const [options, setOptions] = React.useState<string[]>(["", ""]);
   const [multi, setMulti] = React.useState(false);
@@ -645,26 +651,26 @@ export function PollCreatorDialog({
   };
 
   return (
-    <DialogShell open={open} onClose={onClose} title="Create poll" subtitle="Ask a question, get answers">
+    <DialogShell open={open} onClose={onClose} title={t("Create poll")} subtitle={t("Ask a question, get answers")}>
       <label className="block">
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Question</span>
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("Question")}</span>
         <input
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
           autoFocus
-          placeholder="What's the plan tonight?"
+          placeholder={t("What's the plan tonight?")}
           className="mt-1 w-full h-11 px-3.5 rounded-xl glass-subtle bg-transparent text-sm outline-none focus:ring-2 focus:ring-cyan-400/60"
         />
       </label>
       <div className="mt-4">
-        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">Options</span>
+        <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("Options")}</span>
         <div className="space-y-2 mt-1">
           {options.map((opt, i) => (
             <div key={i} className="flex items-center gap-2">
               <input
                 value={opt}
                 onChange={(e) => setOption(i, e.target.value)}
-                placeholder={`Option ${i + 1}`}
+                placeholder={`${t("Option")} ${i + 1}`}
                 className="flex-1 h-10 px-3 rounded-xl glass-subtle bg-transparent text-sm outline-none focus:ring-2 focus:ring-cyan-400/60"
               />
               {options.length > 2 && (
@@ -684,7 +690,7 @@ export function PollCreatorDialog({
               className="w-full h-10 rounded-xl glass-subtle text-sm text-muted-foreground hover:text-foreground hover:bg-foreground/5 inline-flex items-center justify-center gap-1.5"
             >
               <Plus className="size-3.5" />
-              Add option
+              {t("Add option")}
             </button>
           )}
         </div>
@@ -696,11 +702,11 @@ export function PollCreatorDialog({
           onChange={(e) => setMulti(e.target.checked)}
           className="size-4 rounded accent-cyan-400"
         />
-        Allow multiple answers
+        {t("Allow multiple answers")}
       </label>
       <Button onClick={submit} disabled={!canCreate} variant="gradient" className="w-full mt-5">
         <ArrowUp className="size-4" />
-        Create poll
+        {t("Create poll")}
       </Button>
     </DialogShell>
   );
