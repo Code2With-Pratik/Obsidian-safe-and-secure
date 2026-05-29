@@ -27,9 +27,10 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuthStore } from "@/store/use-auth-store";
-import { initials } from "@/lib/utils";
+import { initials, cn } from "@/lib/utils";
 import { EditProfileDialog } from "@/features/profile/edit-profile-dialog";
 import { useT } from "@/lib/i18n";
+import { useStoriesStore } from "@/store/use-stories-store";
 
 const gallery = [
   "https://images.unsplash.com/photo-1502920917128-1aa500764cbd?w=400&q=80",
@@ -45,6 +46,10 @@ export default function ProfilePage() {
   const user = useAuthStore((s) => s.user);
   const name = user?.name ?? "Aria Vance";
   const [editOpen, setEditOpen] = React.useState(false);
+  // Current user's own story → gradient ring on the profile avatar.
+  const meHasStory = useStoriesStore((s) => !!s.byUser["me"]?.slides.length);
+  const meViewed = useStoriesStore((s) => s.byUser["me"]?.viewed);
+  const openViewer = useStoriesStore((s) => s.openViewer);
 
   const banner = user?.banner;
   const bannerIsUrl = banner?.startsWith("http");
@@ -89,10 +94,25 @@ export default function ProfilePage() {
         <div className="max-w-5xl mx-auto px-4 md:px-8 -mt-16 md:-mt-20 relative">
           <div className="flex flex-col md:flex-row items-start md:items-end gap-4">
             <div className="relative">
-              <Avatar className="size-28 md:size-36 ring-4 ring-background shadow-floating">
-                <AvatarImage src={user?.avatar} />
-                <AvatarFallback>{initials(name)}</AvatarFallback>
-              </Avatar>
+              <button
+                type="button"
+                onClick={() => meHasStory && openViewer("me")}
+                aria-label={meHasStory ? t("View story") : undefined}
+                className={cn(
+                  "block rounded-full",
+                  meHasStory && "p-[3px] bg-gradient-to-tr",
+                  meHasStory &&
+                    (meViewed
+                      ? "from-foreground/30 to-foreground/30"
+                      : "from-violet-500 via-fuchsia-500 to-cyan-400"),
+                  !meHasStory && "cursor-default"
+                )}
+              >
+                <Avatar className="size-28 md:size-36 ring-4 ring-background shadow-floating">
+                  <AvatarImage src={user?.avatar} />
+                  <AvatarFallback>{initials(name)}</AvatarFallback>
+                </Avatar>
+              </button>
               <button
                 onClick={() => setEditOpen(true)}
                 aria-label={t("Edit profile")}
