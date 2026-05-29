@@ -50,6 +50,7 @@ export default function ProfilePage() {
   const meHasStory = useStoriesStore((s) => !!s.byUser["me"]?.slides.length);
   const meViewed = useStoriesStore((s) => s.byUser["me"]?.viewed);
   const openViewer = useStoriesStore((s) => s.openViewer);
+  const openPhoto = useStoriesStore((s) => s.openPhoto);
 
   const banner = user?.banner;
   const bannerIsUrl = banner?.startsWith("http");
@@ -96,19 +97,26 @@ export default function ProfilePage() {
             <div className="relative">
               <button
                 type="button"
-                onClick={() => meHasStory && openViewer("me")}
-                aria-label={meHasStory ? t("View story") : undefined}
-                className={cn(
-                  "block rounded-full",
-                  meHasStory && "p-[3px] bg-gradient-to-tr",
-                  meHasStory &&
-                    (meViewed
-                      ? "from-foreground/30 to-foreground/30"
-                      : "from-violet-500 via-fuchsia-500 to-cyan-400"),
-                  !meHasStory && "cursor-default"
-                )}
+                // With a story → watch it; otherwise show the enlarged photo
+                // (WhatsApp-style DP view).
+                onClick={() => (meHasStory ? openViewer("me") : openPhoto("me"))}
+                aria-label={meHasStory ? t("View story") : t("View profile photo")}
+                className="relative block rounded-full"
               >
-                <Avatar className="size-28 md:size-36 ring-4 ring-background shadow-floating">
+                {/* Story ring sits OUTSIDE the photo (it keeps its full size);
+                    a slow gradient spin when unwatched, dimmed once viewed. */}
+                {meHasStory &&
+                  (meViewed ? (
+                    <span className="absolute rounded-full bg-foreground/30" style={{ inset: -8 }} />
+                  ) : (
+                    <motion.span
+                      className="absolute rounded-full bg-gradient-to-tr from-violet-500 via-fuchsia-500 to-cyan-400"
+                      style={{ inset: -8 }}
+                      animate={{ rotate: [0, 360] }}
+                      transition={{ duration: 6, repeat: Infinity, ease: "linear" }}
+                    />
+                  ))}
+                <Avatar className="relative size-28 md:size-36 ring-4 ring-background shadow-floating">
                   <AvatarImage src={user?.avatar} />
                   <AvatarFallback>{initials(name)}</AvatarFallback>
                 </Avatar>

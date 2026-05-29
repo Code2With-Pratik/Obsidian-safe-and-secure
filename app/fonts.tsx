@@ -4,6 +4,7 @@ import {
   Grape_Nuts,
   Lora,
   Montserrat_Alternates,
+  Noto_Color_Emoji,
   Poppins,
   Satisfy
 } from "next/font/google";
@@ -65,6 +66,24 @@ export const poppins = Poppins({
   display: "swap"
 });
 
+/**
+ * Self-hosted color-emoji font. The OS emoji font (e.g. Windows' Segoe UI
+ * Emoji) only covers older Unicode emoji, so newer ones render as tofu (□).
+ * Rendering emoji with this bundled font instead makes the full set show
+ * consistently on every platform. Exposed as `--font-emoji` and used first in
+ * the emoji font stack.
+ */
+export const notoColorEmoji = Noto_Color_Emoji({
+  weight: "400",
+  subsets: ["emoji"],
+  variable: "--font-emoji",
+  display: "swap"
+});
+
+/** Concrete family string (CSS vars don't resolve in <canvas>) for baking
+ *  emoji stickers into the exported story PNG. */
+export const emojiFontFamily = notoColorEmoji.style.fontFamily;
+
 /** Space-joined `.variable` classNames, applied together on <html> so every
  *  `--font-*` token is live and selectable without a reload. */
 export const fontVariables = [
@@ -74,7 +93,8 @@ export const fontVariables = [
   grapeNuts.variable,
   satisfy.variable,
   montserratAlternates.variable,
-  poppins.variable
+  poppins.variable,
+  notoColorEmoji.variable
 ].join(" ");
 
 export interface FontOption {

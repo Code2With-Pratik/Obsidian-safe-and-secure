@@ -1,16 +1,17 @@
 "use client";
 
 import * as React from "react";
+import { motion } from "framer-motion";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useStoriesStore } from "@/store/use-stories-store";
 import { cn, initials } from "@/lib/utils";
 
 /**
- * Avatar wrapped in a story ring. When the user has an active reel the ring is
- * a bright gradient (unwatched) or dimmed (watched). Tapping a story avatar
- * opens the "story or profile?" prompt; otherwise it falls through to `onClick`.
- *
- * Sized in px so the ring + gap layer cleanly regardless of where it's dropped.
+ * Avatar wrapped in a story ring. The ring is drawn OUTSIDE the avatar (the
+ * photo keeps its full `size`), a bright gradient that slowly rotates when the
+ * reel is unwatched, or a dimmed static ring once watched. Tapping a story
+ * avatar opens the "story or profile?" prompt; otherwise it falls through to
+ * `onClick`.
  */
 export function StoryAvatar({
   userId,
@@ -44,27 +45,8 @@ export function StoryAvatar({
   };
 
   const interactive = has || !!onClick;
-  const pad = has ? 4 : 0; // ring(2) + gap(2)
-
-  const inner = (
-    <>
-      {has && (
-        <span
-          className={cn(
-            "absolute inset-0 rounded-full",
-            viewed
-              ? "bg-foreground/25"
-              : "bg-gradient-to-tr from-violet-500 via-fuchsia-500 to-cyan-400"
-          )}
-        />
-      )}
-      {has && <span className="absolute rounded-full bg-background" style={{ inset: 2 }} />}
-      <Avatar className="absolute overflow-hidden rounded-full" style={{ inset: pad }}>
-        <AvatarImage src={src} alt={name} />
-        <AvatarFallback>{initials(name ?? "")}</AvatarFallback>
-      </Avatar>
-    </>
-  );
+  const RING = 3.5; // gradient thickness
+  const GAP = 2.5; // gap between the ring and the photo
 
   // Rendered as a <span> (not <button>) so it's valid even nested inside an
   // <a> (e.g. the chat-list row Link) or another button (chat header).
@@ -81,14 +63,40 @@ export function StoryAvatar({
           : undefined
       }
       aria-label={interactive ? name : undefined}
+      // overflow-visible so the negatively-inset ring can extend past the box
+      // without clipping (and without shrinking the photo).
       className={cn(
-        "relative inline-block shrink-0 rounded-full align-middle",
+        "relative inline-block shrink-0 rounded-full align-middle overflow-visible",
         interactive && "cursor-pointer",
         className
       )}
       style={{ width: size, height: size }}
     >
-      {inner}
+      {has &&
+        (viewed ? (
+          <span
+            className="absolute rounded-full bg-foreground/25"
+            style={{ inset: -(RING + GAP) }}
+          />
+        ) : (
+          <motion.span
+            className="absolute rounded-full bg-gradient-to-tr from-violet-500 via-fuchsia-500 to-cyan-400"
+            style={{ inset: -(RING + GAP) }}
+            animate={{ rotate: [0, 360] }}
+            transition={{ duration: 6, repeat: Infinity, ease: "linear" }}
+          />
+        ))}
+      {/* background-colored gap ring between the gradient and the photo */}
+      {has && <span className="absolute rounded-full bg-background" style={{ inset: -GAP }} />}
+      {/* Explicit width/height — the Avatar primitive hardcodes h-10 w-10, which
+          would otherwise override `inset-0` and pin the photo to 40px. */}
+      <Avatar
+        className="absolute inset-0 overflow-hidden rounded-full"
+        style={{ width: size, height: size }}
+      >
+        <AvatarImage src={src} alt={name} />
+        <AvatarFallback>{initials(name ?? "")}</AvatarFallback>
+      </Avatar>
     </span>
   );
 }

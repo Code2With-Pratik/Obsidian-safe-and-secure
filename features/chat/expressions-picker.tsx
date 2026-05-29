@@ -23,9 +23,6 @@ import {
 } from "@/lib/klipy";
 import {
   EMOJI_CATEGORIES,
-  GIFS,
-  STICKER_PACKS,
-  MEMES,
   type EmojiCategory,
   type GifItem,
   type MemeItem
@@ -184,53 +181,16 @@ export function ExpressionsPicker({ open, onClose, onPick, anchorRef, placement 
       .filter((c) => c.items.length > 0);
   }, [q]);
 
-  /* ---- All three media tabs are powered by Klipy. The bundled mock data
-          is kept around as a fallback in case the API call fails. ---- */
+  /* ---- GIF / sticker / meme tabs are fetched live from Klipy. There is no
+          bundled fallback — empty results show an empty/error state. ---- */
   const klipyGifs = useKlipyFeed(fetchKlipyGifs, q, open && tab === "gif");
   const klipyStickers = useKlipyFeed(fetchKlipyStickers, q, open && tab === "sticker");
   const klipyMemes = useKlipyFeed(fetchKlipyMemes, q, open && tab === "meme");
 
-  const localGifs = React.useMemo(
-    () =>
-      q.trim() === ""
-        ? GIFS
-        : GIFS.filter(
-            (g) =>
-              g.alt.toLowerCase().includes(q.toLowerCase()) ||
-              g.tags.some((t) => t.toLowerCase().includes(q.toLowerCase()))
-          ),
-    [q]
-  );
-
-  const localMemes = React.useMemo(
-    () =>
-      q.trim() === ""
-        ? MEMES
-        : MEMES.filter(
-            (m) =>
-              m.caption.toLowerCase().includes(q.toLowerCase()) ||
-              m.tag.toLowerCase().includes(q.toLowerCase())
-          ),
-    [q]
-  );
-
-  const filteredStickers = React.useMemo(() => {
-    if (!q.trim()) return STICKER_PACKS;
-    const needle = q.trim().toLowerCase();
-    return STICKER_PACKS
-      .map((p) => ({
-        ...p,
-        stickers: p.name.toLowerCase().includes(needle)
-          ? p.stickers
-          : p.stickers.filter((s) => s.emoji.includes(q.trim()))
-      }))
-      .filter((p) => p.stickers.length > 0);
-  }, [q]);
-
   const useDesktopFloat = isDesktop && pos !== null;
 
   const desktopStyle: React.CSSProperties | undefined = useDesktopFloat
-    ? { left: pos!.left, top: pos!.top, bottom: pos!.bottom, width: 380 }
+    ? { left: pos!.left, top: pos!.top, bottom: pos!.bottom, width: 380, willChange: "transform, opacity" }
     : undefined;
 
   // On desktop we wait for the anchored popover position so it doesn't flash
@@ -321,33 +281,25 @@ export function ExpressionsPicker({ open, onClose, onPick, anchorRef, placement 
             )}
             {tab === "gif" && (
               <GifPanel
-                gifs={KLIPY_AVAILABLE && klipyGifs.data.length > 0 ? klipyGifs.data : localGifs}
-                loading={KLIPY_AVAILABLE && klipyGifs.loading}
-                error={KLIPY_AVAILABLE && klipyGifs.error && klipyGifs.data.length === 0}
+                gifs={klipyGifs.data}
+                loading={klipyGifs.loading}
+                error={klipyGifs.error}
                 onPick={(gif) => onPick({ kind: "gif", gif })}
               />
             )}
             {tab === "sticker" && (
-              KLIPY_AVAILABLE ? (
-                <ApiStickerPanel
-                  stickers={klipyStickers.data}
-                  loading={klipyStickers.loading}
-                  error={klipyStickers.error}
-                  fallbackPacks={filteredStickers}
-                  onPick={(sticker) => onPick({ kind: "sticker", sticker })}
-                />
-              ) : (
-                <StickerPanel
-                  packs={filteredStickers}
-                  onPick={(sticker) => onPick({ kind: "sticker", sticker })}
-                />
-              )
+              <ApiStickerPanel
+                stickers={klipyStickers.data}
+                loading={klipyStickers.loading}
+                error={klipyStickers.error}
+                onPick={(sticker) => onPick({ kind: "sticker", sticker })}
+              />
             )}
             {tab === "meme" && (
               <MemePanel
-                memes={KLIPY_AVAILABLE && klipyMemes.data.length > 0 ? klipyMemes.data : localMemes}
-                loading={KLIPY_AVAILABLE && klipyMemes.loading}
-                error={KLIPY_AVAILABLE && klipyMemes.error && klipyMemes.data.length === 0}
+                memes={klipyMemes.data}
+                loading={klipyMemes.loading}
+                error={klipyMemes.error}
                 onPick={(meme) => onPick({ kind: "meme", meme })}
               />
             )}
@@ -383,20 +335,24 @@ export function ExpressionsPicker({ open, onClose, onPick, anchorRef, placement 
           <motion.div
             key="panel"
             ref={panelRef}
+            // Animate opacity + a small translate only (NOT scale): scaling a
+            // backdrop-blur surface forces a full blur re-raster every frame,
+            // which is the main cause of the choppy open. A short ease-out
+            // tween on transform/opacity stays smooth.
             initial={
               useDesktopFloat
-                ? { opacity: 0, y: 8, scale: 0.97 }
+                ? { opacity: 0, y: placement === "bottom" ? -8 : 8 }
                 : { opacity: 0, y: 40 }
             }
-            animate={{ opacity: 1, y: 0, scale: 1 }}
+            animate={{ opacity: 1, y: 0 }}
             exit={
               useDesktopFloat
-                ? { opacity: 0, y: 8, scale: 0.97 }
+                ? { opacity: 0, y: placement === "bottom" ? -8 : 8 }
                 : { opacity: 0, y: 40 }
             }
             transition={
               useDesktopFloat
-                ? { type: "spring", stiffness: 280, damping: 28 }
+                ? { duration: 0.2, ease: [0.22, 1, 0.36, 1] }
                 : { duration: 0.28, ease: [0.22, 1, 0.36, 1] }
             }
             style={desktopStyle}
@@ -419,7 +375,7 @@ export function ExpressionsPicker({ open, onClose, onPick, anchorRef, placement 
 /* ───────── EMOJI — hardcoded grid, no external library ───────── */
 
 const EMOJI_FONT =
-  '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla","EmojiOne Color",sans-serif';
+  'var(--font-emoji),"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla","EmojiOne Color",sans-serif';
 
 function EmojiPanel({
   categories,
@@ -659,23 +615,25 @@ function useKlipyFeed<T>(
   return { data, loading, error };
 }
 
-/** Klipy-driven sticker grid: flat image tiles (no pack grouping). */
+/** Klipy-driven sticker grid: flat image tiles fetched live (no fallback). */
 function ApiStickerPanel({
   stickers,
   loading,
   error,
-  fallbackPacks,
   onPick
 }: {
   stickers: StickerApiItem[];
   loading: boolean;
   error: boolean;
-  fallbackPacks: typeof STICKER_PACKS;
   onPick: (sticker: StickerPickPayload) => void;
 }) {
-  // network errored AND we don't have cached results → use the bundled packs
+  const t = useT();
   if (error && stickers.length === 0) {
-    return <StickerPanel packs={fallbackPacks} onPick={onPick} />;
+    return (
+      <p className="flex-1 grid place-items-center text-center text-xs text-muted-foreground px-6">
+        {t("Couldn't reach Klipy — check your connection.")}
+      </p>
+    );
   }
   if (loading && stickers.length === 0) {
     return (
@@ -692,7 +650,11 @@ function ApiStickerPanel({
     );
   }
   if (stickers.length === 0) {
-    return <StickerPanel packs={fallbackPacks} onPick={onPick} />;
+    return (
+      <p className="flex-1 grid place-items-center text-center text-xs text-muted-foreground px-6">
+        {t("No stickers match.")}
+      </p>
+    );
   }
   return (
     <div className="flex-1 overflow-y-auto no-scrollbar px-3 pb-3 pt-1">
@@ -716,58 +678,6 @@ function ApiStickerPanel({
           </motion.button>
         ))}
       </div>
-    </div>
-  );
-}
-
-/* ───────── STICKERS ───────── */
-
-function StickerPanel({
-  packs,
-  onPick
-}: {
-  packs: typeof STICKER_PACKS;
-  onPick: (sticker: { id: string; emoji: string; gradient: string }) => void;
-}) {
-  const t = useT();
-  return (
-    <div className="flex-1 overflow-y-auto no-scrollbar px-3 pb-3 pt-1">
-      {packs.length === 0 ? (
-        <p className="text-center text-xs text-muted-foreground py-6">
-          {t("No stickers match.")}
-        </p>
-      ) : (
-        packs.map((p) => (
-          <div key={p.id} className="pt-2">
-            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5">
-              {p.name}
-            </h4>
-            <div className="grid grid-cols-4 gap-2">
-              {p.stickers.map((s) => (
-                <motion.button
-                  key={s.id}
-                  whileHover={{ y: -2, rotate: -3 }}
-                  whileTap={{ scale: 0.92 }}
-                  onClick={() => onPick(s)}
-                  className="relative aspect-square rounded-2xl overflow-hidden ring-1 ring-white/15 shadow-[0_8px_20px_-8px_rgba(0,0,0,0.45)] grid place-items-center"
-                  style={{ background: s.gradient }}
-                >
-                  <span
-                    className="text-3xl drop-shadow"
-                    style={{
-                      fontFamily:
-                        '"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji","Twemoji Mozilla","EmojiOne Color",sans-serif'
-                    }}
-                  >
-                    {s.emoji}
-                  </span>
-                  <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-white/20 to-transparent" />
-                </motion.button>
-              ))}
-            </div>
-          </div>
-        ))
-      )}
     </div>
   );
 }

@@ -547,7 +547,16 @@ export function MessageInput({
         {/* Left: + / trash */}
         <motion.button
           whileTap={{ scale: 0.9, rotate: isVoiceMode ? 0 : 45 }}
-          onClick={() => (isVoiceMode ? cancelRecording() : setAttachOpen(true))}
+          onClick={() => {
+            if (isVoiceMode) {
+              cancelRecording();
+              return;
+            }
+            // Emoji + attachment are mutually exclusive — opening one closes
+            // the other.
+            setExprOpen(false);
+            setAttachOpen(true);
+          }}
           className={cn(
             "size-10 rounded-full grid place-items-center transition shrink-0",
             "hover:bg-foreground/10 text-foreground dark:text-white",
@@ -609,7 +618,10 @@ export function MessageInput({
         {!isVoiceMode && (
           <button
             ref={emojiBtnRef}
-            onClick={() => setExprOpen((v) => !v)}
+            onClick={() => {
+              setAttachOpen(false);
+              setExprOpen((v) => !v);
+            }}
             className={cn(
               "size-10 rounded-full grid place-items-center hover:bg-foreground/10 text-foreground dark:text-white transition shrink-0",
               exprOpen && "bg-foreground/10"

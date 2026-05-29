@@ -46,6 +46,7 @@ import { CommunityGridCard, CommunityGridEmpty } from "@/features/community/comm
 import { InterestMatchPopup } from "@/features/community/interest-match-popup";
 import { CreateCommunityDialog } from "@/features/community/create-community-dialog";
 import { StoriesRail } from "./stories-rail";
+import { StoryUploadBar } from "./story-upload-bar";
 import { NewGroupDialog } from "./new-group-dialog";
 import { EmptyChatList } from "./empty-chat-list";
 import type { Chat, ChatHint, Community } from "@/types";
@@ -319,6 +320,9 @@ export function ChatList({
           </DropdownMenu>
         </div>
       </div>
+
+      {/* Story upload progress — sits between the title and the filter tabs. */}
+      <StoryUploadBar />
 
       {/* Filter chips — swap based on the active view. */}
       {!isEmpty && view === "messages" && (

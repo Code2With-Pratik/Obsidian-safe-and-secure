@@ -19,6 +19,24 @@ export interface StoryMusic {
   rotate: number;
 }
 
+/** An image/GIF overlay rendered LIVE (as an <img>) in the viewer instead of
+ *  being flattened into the static PNG — so animated GIFs keep playing. */
+export interface StoryOverlay {
+  id: string;
+  src: string;
+  /** Center position as a % of the canvas. */
+  x: number;
+  y: number;
+  /** Size as a % of the canvas width / height (preserves aspect across the
+   *  editor and viewer canvases, which share the 9:16 ratio). */
+  wPct: number;
+  hPct: number;
+  scale: number;
+  rotate: number;
+  /** Resolved CSS filter string (so the viewer needn't know filter ids). */
+  filter?: string;
+}
+
 /** One frame of a user's story reel. */
 export interface StorySlide {
   id: string;
@@ -28,10 +46,12 @@ export interface StorySlide {
   /** Gradient background for text slides. */
   bg?: string;
   text?: string;
-  /** Epoch ms the slide was posted — drives the "2h ago" label. */
+  /** Epoch ms the slide was posted — drives the "2h ago" label + 24h expiry. */
   postedAt: number;
   /** Optional live music overlay (spins / plays in the viewer). */
   music?: StoryMusic;
+  /** Live image/GIF overlays (animate in the viewer). */
+  overlays?: StoryOverlay[];
 }
 
 export interface UserStories {
@@ -39,7 +59,13 @@ export interface UserStories {
   slides: StorySlide[];
   /** Whether the current viewer has already watched this reel (dims the ring). */
   viewed: boolean;
+  /** Whether the current user has liked this reel (others' stories only). */
+  likedByMe?: boolean;
 }
+
+/** Stories live for 24h after posting, then disappear. */
+export const STORY_TTL_MS = 24 * 60 * 60 * 1000;
+export const isFreshStory = (postedAt: number) => Date.now() - postedAt < STORY_TTL_MS;
 
 interface StoriesState {
   byUser: Record<string, UserStories>;
@@ -47,6 +73,17 @@ interface StoriesState {
   viewerUserId: string | null;
   /** User whose "story or profile?" prompt is open (null = closed). */
   promptUserId: string | null;
+  /** User whose profile photo is open in the enlarged viewer (null = closed). */
+  photoUserId: string | null;
+  /** A story being "uploaded" — drives the progress bar in the chat-list
+   *  header. `slide` is null while the canvas is still composing in the
+   *  background; once attached AND the bar reaches 100% it's committed. */
+  pendingStory:
+    | {
+        userId: string;
+        slide: (Omit<StorySlide, "id" | "postedAt"> & { postedAt?: number }) | null;
+      }
+    | null;
 
   addStory: (userId: string, slide: Omit<StorySlide, "id" | "postedAt"> & { postedAt?: number }) => void;
   markViewed: (userId: string) => void;
@@ -54,6 +91,17 @@ interface StoriesState {
   closePrompt: () => void;
   openViewer: (userId: string) => void;
   closeViewer: () => void;
+  openPhoto: (userId: string) => void;
+  closePhoto: () => void;
+  /** Begin the upload animation (slide attached later once composed). */
+  startStoryUpload: (userId: string) => void;
+  /** Attach the composed slide to the in-flight upload. */
+  attachStorySlide: (slide: Omit<StorySlide, "id" | "postedAt"> & { postedAt?: number }) => void;
+  clearPendingStory: () => void;
+  /** Like / unlike another user's reel. */
+  toggleLike: (userId: string) => void;
+  /** Drop slides (and empty reels) older than 24h. */
+  pruneExpired: () => void;
   hasStory: (userId: string) => boolean;
 }
 
@@ -87,6 +135,8 @@ export const useStoriesStore = create<StoriesState>((set, get) => ({
   byUser: seed(),
   viewerUserId: null,
   promptUserId: null,
+  photoUserId: null,
+  pendingStory: null,
 
   addStory: (userId, slide) =>
     set((st) => {
@@ -97,7 +147,8 @@ export const useStoriesStore = create<StoriesState>((set, get) => ({
         src: slide.src,
         bg: slide.bg,
         text: slide.text,
-        music: slide.music
+        music: slide.music,
+        overlays: slide.overlays
       };
       const existing = st.byUser[userId];
       const entry: UserStories = existing
@@ -117,6 +168,35 @@ export const useStoriesStore = create<StoriesState>((set, get) => ({
   closePrompt: () => set({ promptUserId: null }),
   openViewer: (userId) => set({ viewerUserId: userId, promptUserId: null }),
   closeViewer: () => set({ viewerUserId: null }),
+  openPhoto: (userId) => set({ photoUserId: userId, promptUserId: null }),
+  closePhoto: () => set({ photoUserId: null }),
+  startStoryUpload: (userId) => set({ pendingStory: { userId, slide: null } }),
+  attachStorySlide: (slide) =>
+    set((st) => (st.pendingStory ? { pendingStory: { ...st.pendingStory, slide } } : {})),
+  clearPendingStory: () => set({ pendingStory: null }),
+
+  toggleLike: (userId) =>
+    set((st) => {
+      const e = st.byUser[userId];
+      if (!e) return {};
+      return { byUser: { ...st.byUser, [userId]: { ...e, likedByMe: !e.likedByMe } } };
+    }),
+
+  pruneExpired: () =>
+    set((st) => {
+      let changed = false;
+      const next: Record<string, UserStories> = {};
+      for (const [uid, reel] of Object.entries(st.byUser)) {
+        const fresh = reel.slides.filter((s) => isFreshStory(s.postedAt));
+        if (fresh.length === 0) {
+          changed = true; // whole reel expired → drop it
+          continue;
+        }
+        if (fresh.length !== reel.slides.length) changed = true;
+        next[uid] = fresh.length === reel.slides.length ? reel : { ...reel, slides: fresh };
+      }
+      return changed ? { byUser: next } : {};
+    }),
 
   hasStory: (userId) => !!get().byUser[userId]?.slides.length
 }));

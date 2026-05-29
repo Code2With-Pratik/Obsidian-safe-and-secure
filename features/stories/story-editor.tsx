@@ -12,6 +12,7 @@ import {
   Palette,
   Music,
   Pencil,
+  Pipette,
   Eraser,
   Trash2,
   Bold,
@@ -34,9 +35,11 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
+import { useMediaQuery } from "@/hooks/use-media-query";
 import { useStoriesStore } from "@/store/use-stories-store";
+import { VinylDisc } from "@/components/stories/vinyl-disc";
 import { currentUser } from "@/lib/mock-data";
-import { FONT_OPTIONS, DEFAULT_FONT } from "@/app/fonts";
+import { FONT_OPTIONS, DEFAULT_FONT, emojiFontFamily } from "@/app/fonts";
 import { ExpressionsPicker, type ExpressionPick } from "@/features/chat/expressions-picker";
 
 /* ----------------------------- types ----------------------------- */
@@ -319,7 +322,13 @@ function roundedRect(
 export function StoryEditor() {
   const t = useT();
   const router = useRouter();
-  const addStory = useStoriesStore((s) => s.addStory);
+  // ≥lg shows the three-pane layout (left tools · canvas · inspector). Set via
+  // inline style rather than an arbitrary Tailwind class so the exact column
+  // widths always apply (no JIT/arbitrary-value surprises).
+  const isWide = useMediaQuery("(min-width: 1024px)");
+  const startStoryUpload = useStoriesStore((s) => s.startStoryUpload);
+  const attachStorySlide = useStoriesStore((s) => s.attachStorySlide);
+  const clearPendingStory = useStoriesStore((s) => s.clearPendingStory);
   const [bg, setBg] = React.useState<Background>({ kind: "gradient", value: GRADIENTS[0] });
   const [filter, setFilter] = React.useState<string>("none");
   const [layers, setLayers] = React.useState<Layer[]>([]);
@@ -527,17 +536,20 @@ export function StoryEditor() {
 
   /* ----- compose / download / share story ----- */
   const [downloading, setDownloading] = React.useState(false);
-  const [sharing, setSharing] = React.useState(false);
 
   /** Render the current story (background + drawing + layers) onto a
    *  1080×1920 canvas. Shared by Download (→ PNG) and Share (→ data URL).
    *  When `skipMusic` is set the music sticker is left out so it can be
    *  re-rendered as a live (spinning / playing) overlay in the viewer. */
   const composeCanvas = async (
-    opts?: { skipMusic?: boolean }
+    opts?: { skipMusic?: boolean; skipImages?: boolean; dispRect?: DOMRect }
   ): Promise<HTMLCanvasElement | null> => {
     const skipMusic = opts?.skipMusic ?? false;
-    if (!canvasRef.current) return null;
+    const skipImages = opts?.skipImages ?? false;
+    // dispRect can be captured before navigating away, so compose still works
+    // after the editor unmounts (Share closes the editor instantly).
+    const dispRect = opts?.dispRect ?? canvasRef.current?.getBoundingClientRect();
+    if (!dispRect) return null;
     {
       const W = 1080;
       const H = 1920;
@@ -581,7 +593,6 @@ export function StoryEditor() {
       }
 
       // Scale factors (display → export)
-      const dispRect = canvasRef.current.getBoundingClientRect();
       const sx = W / dispRect.width;
       const sy = H / dispRect.height;
 
@@ -645,11 +656,11 @@ export function StoryEditor() {
           ctx.fillText(t.text, 0, 0);
         } else if (l.type === "sticker") {
           const s = l as StickerLayer;
-          ctx.font = `${s.size * sx}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+          ctx.font = `${s.size * sx}px ${emojiFontFamily}, "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           ctx.fillText(s.emoji, 0, 0);
-        } else if (l.type === "image") {
+        } else if (l.type === "image" && !skipImages) {
           const im = l as ImageLayer;
           try {
             const img = await loadImage(im.src);
@@ -788,38 +799,67 @@ export function StoryEditor() {
     }
   };
 
-  /** Post the composed story to the current user's reel, then jump to Stories.
-   *  Music is kept out of the baked PNG and re-attached as live metadata so it
-   *  spins / plays in the viewer (Instagram-style). */
-  const shareStory = async () => {
-    if (sharing) return;
-    setSharing(true);
-    try {
-      const out = await composeCanvas({ skipMusic: true });
+  /** Share: close the editor instantly and let the chat-list progress bar run
+   *  the "upload". The canvas rect is captured synchronously so composing can
+   *  finish in the background after this component unmounts; the composed slide
+   *  is attached and committed once the bar completes. Music is kept out of the
+   *  baked PNG and re-attached as live metadata so it spins / plays in the
+   *  viewer (Instagram-style). */
+  const shareStory = () => {
+    const dispRect = canvasRef.current?.getBoundingClientRect();
+    const music = musicLayer
+      ? {
+          title: musicLayer.title,
+          artist: musicLayer.artist,
+          cover: musicLayer.cover,
+          preview: musicLayer.preview,
+          variant: musicLayer.variant,
+          x: musicLayer.x,
+          y: musicLayer.y,
+          scale: musicLayer.scale,
+          rotate: musicLayer.rotate
+        }
+      : undefined;
+
+    // Image / GIF layers are kept OUT of the baked PNG and re-rendered live in
+    // the viewer so GIFs keep animating. Capture them as % positions/sizes.
+    const overlays =
+      dispRect && dispRect.width > 0
+        ? layers
+            .filter((l) => l.type === "image")
+            .map((l) => {
+              const im = l as ImageLayer;
+              return {
+                id: im.id,
+                src: im.src,
+                x: im.x,
+                y: im.y,
+                wPct: (im.width / dispRect.width) * 100,
+                hPct: (im.height / dispRect.height) * 100,
+                scale: im.scale,
+                rotate: im.rotate,
+                filter: FILTERS.find((f) => f.id === im.filter)?.filter ?? "none"
+              };
+            })
+        : [];
+
+    startStoryUpload(currentUser.id);
+    router.push("/chats");
+
+    // Bake images into the PNG too (so the rail thumbnail shows them) — the
+    // live overlay then animates on top of that identical static frame.
+    void composeCanvas({ skipMusic: true, dispRect }).then((out) => {
       if (out) {
-        const music = musicLayer
-          ? {
-              title: musicLayer.title,
-              artist: musicLayer.artist,
-              cover: musicLayer.cover,
-              preview: musicLayer.preview,
-              variant: musicLayer.variant,
-              x: musicLayer.x,
-              y: musicLayer.y,
-              scale: musicLayer.scale,
-              rotate: musicLayer.rotate
-            }
-          : undefined;
-        addStory(currentUser.id, {
+        attachStorySlide({
           kind: "image",
           src: out.toDataURL("image/png"),
-          music
+          music,
+          overlays
         });
+      } else {
+        clearPendingStory();
       }
-      router.push("/stories");
-    } finally {
-      setSharing(false);
-    }
+    });
   };
 
   /* ----- tap canvas to add text (Instagram-style) ----- */
@@ -837,12 +877,17 @@ export function StoryEditor() {
 
   /* ----- render ----- */
   return (
-    <div className="fixed inset-0 z-[120] grid lg:grid-cols-[300px_1fr_320px] grid-cols-1 bg-black/80 backdrop-blur-xl overflow-hidden">
+    // Sits inside the app shell (below the Topbar, beside the Sidebar) rather
+    // than as a full-viewport overlay, so the global top bar stays visible.
+    <div
+      className="relative isolate h-[calc(100dvh-4rem)] w-full grid grid-cols-1 bg-background/80 backdrop-blur-xl overflow-hidden"
+      style={isWide ? { gridTemplateColumns: "380px 1fr 380px" } : undefined}
+    >
       <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={onFile} />
       <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" hidden onChange={onFile} />
 
       {/* ───── Left rail (desktop only) ───── */}
-      <aside className="hidden lg:flex flex-col glass-strong glass-specular border-r border-white/10 h-full overflow-hidden">
+      <aside className="hidden lg:flex flex-col glass-strong glass-specular border-r border-border/60 h-full overflow-hidden">
         <div className="p-4 flex items-center justify-between">
           <Button variant="ghost" size="icon-sm" onClick={() => router.back()}>
             <ArrowLeft />
@@ -929,22 +974,14 @@ export function StoryEditor() {
               <motion.span
                 animate={{ rotate: 360 }}
                 transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                className="block size-4 border-2 border-white/30 border-t-white rounded-full"
+                className="block size-4 border-2 border-foreground/30 border-t-foreground rounded-full"
               />
             ) : (
               <Download />
             )}
           </Button>
-          <Button variant="gradient" onClick={shareStory} disabled={sharing}>
-            {sharing ? (
-              <motion.span
-                animate={{ rotate: 360 }}
-                transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                className="block size-4 border-2 border-white/30 border-t-white rounded-full"
-              />
-            ) : (
-              <Send />
-            )}
+          <Button variant="gradient" onClick={shareStory}>
+            <Send />
             {t("Share")}
           </Button>
         </div>
@@ -1013,7 +1050,7 @@ export function StoryEditor() {
           <motion.div
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            className="absolute bottom-36 lg:bottom-6 inline-flex items-center gap-1 glass-strong rounded-full px-2 py-1.5 border border-white/15 z-10"
+            className="absolute bottom-36 lg:bottom-6 inline-flex items-center gap-1 glass-strong rounded-full px-2 py-1.5 border border-border/50 z-10"
           >
             <Button variant="ghost" size="icon-sm" onClick={() => updateSelected({ rotate: (selected?.rotate ?? 0) - 15 })}>
               ↺
@@ -1027,7 +1064,7 @@ export function StoryEditor() {
             <Button variant="ghost" size="icon-sm" onClick={() => updateSelected({ scale: Math.min(3, (selected?.scale ?? 1) + 0.1) })}>
               +
             </Button>
-            <div className="w-px h-5 bg-white/15 mx-1" />
+            <div className="w-px h-5 bg-border mx-1" />
             <Button variant="ghost" size="icon-sm" onClick={removeSelected}>
               <Trash2 className="size-3.5" />
             </Button>
@@ -1039,7 +1076,7 @@ export function StoryEditor() {
           <motion.div
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            className="absolute bottom-52 lg:bottom-20 inline-flex items-center gap-1 glass-strong rounded-full px-2 py-1.5 border border-white/15 z-10"
+            className="absolute bottom-52 lg:bottom-20 inline-flex items-center gap-1 glass-strong rounded-full px-2 py-1.5 border border-border/50 z-10"
           >
             {(
               [
@@ -1056,7 +1093,7 @@ export function StoryEditor() {
                   "px-3 h-8 rounded-full text-xs font-medium transition-colors",
                   (selected as MusicLayer).variant === v.id
                     ? "bg-foreground text-background"
-                    : "text-white/80 hover:bg-white/10"
+                    : "text-foreground/80 hover:bg-foreground/10"
                 )}
               >
                 {t(v.label)}
@@ -1120,10 +1157,10 @@ export function StoryEditor() {
       </main>
 
       {/* ───── Right rail (desktop only) ───── */}
-      <aside className="hidden lg:flex flex-col glass-strong glass-specular border-l border-white/10 h-full overflow-hidden">
+      <aside className="hidden lg:flex flex-col glass-strong glass-specular border-l border-border/60 h-full overflow-hidden">
         <div className="p-4 flex items-center justify-between">
-          <h3 className="text-sm font-semibold">{t("Inspector")}</h3>
-          <span className="text-[10px] text-muted-foreground">{layers.length} {t("layers")}</span>
+          <h3 className="text-lg font-semibold text-foreground">{t("Inspector")}</h3>
+          <span className="text-xs font-medium text-foreground/70">{layers.length} {t("layers")}</span>
         </div>
 
         <div className="px-3 flex-1 overflow-y-auto no-scrollbar pb-6">
@@ -1134,16 +1171,16 @@ export function StoryEditor() {
               remove={removeSelected}
             />
           ) : (
-            <div className="text-center text-xs text-muted-foreground py-12 px-4">
-              <Sparkles className="size-6 mx-auto mb-2 text-violet-400" />
+            <div className="text-center text-sm text-foreground/80 py-12 px-4">
+              <Sparkles className="size-7 mx-auto mb-2 text-violet-400" />
               {t("Tap a layer on the canvas to fine-tune position, font, color, and rotation.")}
             </div>
           )}
 
           <div className="mt-6">
-            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">{t("Layers")}</h4>
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground/70 mb-2">{t("Layers")}</h4>
             {layers.length === 0 ? (
-              <p className="text-xs text-muted-foreground">{t("No layers yet.")}</p>
+              <p className="text-sm text-foreground/80">{t("No layers yet.")}</p>
             ) : (
               <Reorder.Group
                 axis="y"
@@ -1534,7 +1571,7 @@ function DesktopLayerRow({
         <span className="size-7 rounded-lg glass-subtle grid place-items-center text-sm shrink-0">
           {layer.type === "text" ? "T" : layer.type === "sticker" ? (layer as StickerLayer).emoji : "♪"}
         </span>
-        <span className="text-xs truncate flex-1">
+        <span className="text-sm font-medium text-foreground truncate flex-1">
           {layer.type === "text" ? (layer as TextLayer).text : layer.type === "music" ? (layer as MusicLayer).title : t("Sticker")}
         </span>
       </button>
@@ -1791,6 +1828,7 @@ function MobileTextSheet({
                   style={{ background: c }}
                 />
               ))}
+              <EyeDropperButton className="size-9" onPick={(hex) => update({ color: hex })} />
             </div>
           </div>
 
@@ -1805,7 +1843,7 @@ function MobileTextSheet({
                     onClick={() => update({ bg: b.value, color: b.fg })}
                     className={cn(
                       "h-11 rounded-xl text-xs grid place-items-center transition border",
-                      isTransparent ? "glass-subtle border-border/40" : "border-white/10",
+                      isTransparent ? "glass-subtle border-border/40" : "border-border/40",
                       selected.bg === b.value ? "ring-2 ring-foreground" : ""
                     )}
                     style={
@@ -1881,6 +1919,7 @@ function MobileDrawSheet({
                 style={{ background: c }}
               />
             ))}
+            <EyeDropperButton className="aspect-square w-full" onPick={(hex) => setColor(hex)} />
           </div>
         </div>
 
@@ -2177,6 +2216,51 @@ function DesktopMediaPanel({
   );
 }
 
+/** Eyedropper — samples any on-screen pixel (e.g. a color from the story
+ *  image) via the native EyeDropper API. Hidden where unsupported (Safari /
+ *  Firefox). Rendered as an extra "swatch" beside the preset colors. */
+function EyeDropperButton({
+  onPick,
+  className = "size-7"
+}: {
+  onPick: (hex: string) => void;
+  className?: string;
+}) {
+  const t = useT();
+  const [supported, setSupported] = React.useState(false);
+  React.useEffect(() => {
+    setSupported(typeof window !== "undefined" && "EyeDropper" in window);
+  }, []);
+  if (!supported) return null;
+  const open = async () => {
+    try {
+      const Ctor = (
+        window as unknown as {
+          EyeDropper: new () => { open: () => Promise<{ sRGBHex: string }> };
+        }
+      ).EyeDropper;
+      const res = await new Ctor().open();
+      if (res?.sRGBHex) onPick(res.sRGBHex);
+    } catch {
+      /* user cancelled the picker */
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={open}
+      title={t("Pick color from image")}
+      aria-label={t("Pick color from image")}
+      className={cn(
+        "rounded-full grid place-items-center glass-subtle border border-border/50 text-foreground hover:bg-foreground/10 transition",
+        className
+      )}
+    >
+      <Pipette className="size-3.5" />
+    </button>
+  );
+}
+
 function TextPanel({
   addText,
   selected,
@@ -2234,11 +2318,12 @@ function TextPanel({
                   onClick={() => updateSelected({ color: c })}
                   className={cn(
                     "size-7 rounded-full ring-2 ring-offset-2 ring-offset-transparent transition",
-                    selected.color === c ? "ring-white" : "ring-transparent"
+                    selected.color === c ? "ring-foreground" : "ring-transparent"
                   )}
                   style={{ background: c }}
                 />
               ))}
+              <EyeDropperButton onPick={(hex) => updateSelected({ color: hex })} />
             </div>
           </div>
 
@@ -2251,7 +2336,7 @@ function TextPanel({
                   onClick={() => updateSelected({ bg: b.value, color: b.fg })}
                   className={cn(
                     "h-8 rounded-md text-[10px] grid place-items-center transition",
-                    selected.bg === b.value ? "ring-2 ring-white" : ""
+                    selected.bg === b.value ? "ring-2 ring-foreground" : ""
                   )}
                   style={{
                     background: b.value === "transparent" ? "rgba(255,255,255,0.06)" : b.value,
@@ -2301,7 +2386,7 @@ function FilterPanel({
   preview: Background;
 }) {
   return (
-    <div className="grid grid-cols-3 gap-2">
+    <div className="grid grid-cols-3 gap-2 pt-3">
       {FILTERS.map((f) => (
         <button
           key={f.id}
@@ -2359,11 +2444,12 @@ function DrawPanel({
               onClick={() => setColor(c)}
               className={cn(
                 "size-7 rounded-full ring-2 ring-offset-2 ring-offset-transparent transition",
-                color === c ? "ring-white" : "ring-transparent"
+                color === c ? "ring-foreground" : "ring-transparent"
               )}
               style={{ background: c }}
             />
           ))}
+          <EyeDropperButton onPick={(hex) => setColor(hex)} />
         </div>
       </div>
       <div>
@@ -2390,7 +2476,7 @@ function MusicPanel({ onPick }: { onPick: (t: Track) => void }) {
   React.useEffect(() => () => stop(), [stop]);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 pt-3">
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
         <Input
@@ -2513,7 +2599,11 @@ function Inspector({
 
 /* ----------------------------- music layer (3 variants) ----------------------------- */
 
-function MusicLayerView({ m }: { m: MusicLayer }) {
+// Memoised: the parent LayerView re-renders on select / drag / restyle, and a
+// fresh render would restart the framer rotate/marquee. With memo it only
+// re-renders when the music layer's own data changes, so the vinyl keeps
+// spinning continuously.
+const MusicLayerView = React.memo(function MusicLayerView({ m }: { m: MusicLayer }) {
   // Square cover art only.
   if (m.variant === "square") {
     return (
@@ -2535,21 +2625,7 @@ function MusicLayerView({ m }: { m: MusicLayer }) {
 
   // Spinning circular cover — like a vinyl record.
   if (m.variant === "circle") {
-    return (
-      <motion.div
-        className="relative size-24 rounded-full overflow-hidden ring-2 ring-white/30 shadow-floating"
-        animate={{ rotate: [0, 360] }}
-        transition={{ duration: 8, repeat: Infinity, ease: "linear", repeatType: "loop" }}
-      >
-        {m.cover ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={m.cover} alt="" draggable={false} className="w-full h-full object-cover" />
-        ) : (
-          <div className="w-full h-full bg-white/15" />
-        )}
-        <span className="absolute inset-0 m-auto size-5 rounded-full bg-black/80 ring-2 ring-white/50" />
-      </motion.div>
-    );
+    return <VinylDisc cover={m.cover} />;
   }
 
   // "Music only" — nothing rendered on the story; the track just plays. It
@@ -2586,7 +2662,7 @@ function MusicLayerView({ m }: { m: MusicLayer }) {
       </div>
     </div>
   );
-}
+});
 
 /* ----------------------------- layer view ----------------------------- */
 
@@ -2641,9 +2717,22 @@ function LayerView({
       // on (x%, y%) — matching how the PNG export anchors each layer. Without
       // this the on-screen (top-left-anchored) and exported (center-anchored)
       // positions diverge by half the element size.
-      transformTemplate={(_, generated) => `translate(-50%, -50%) ${generated}`}
+      //
+      // At rest framer emits `generated === "none"`; `translate(...) none` is
+      // INVALID CSS, so the browser drops the whole transform (losing the
+      // centering + scale) until you interact — which made layers visibly jump
+      // / resize when grabbed. Only append a real transform.
+      transformTemplate={(_, generated) =>
+        generated && generated !== "none"
+          ? `translate(-50%, -50%) ${generated}`
+          : "translate(-50%, -50%)"
+      }
       className={cn(
-        "absolute cursor-grab active:cursor-grabbing touch-none",
+        // `w-max` (width: max-content) sizes the layer to its own content so it
+        // never gets squeezed by the space remaining to the canvas edge — without
+        // it, a layer near the right edge wraps/shrinks because `left: X%` caps
+        // its available width.
+        "absolute w-max cursor-grab active:cursor-grabbing touch-none",
         selected && "outline outline-2 outline-cyan-400 outline-offset-2 rounded-md"
       )}
     >
@@ -2665,7 +2754,14 @@ function LayerView({
           {(layer as TextLayer).text}
         </div>
       ) : layer.type === "sticker" ? (
-        <span style={{ fontSize: (layer as StickerLayer).size }}>{(layer as StickerLayer).emoji}</span>
+        <span
+          style={{
+            fontSize: (layer as StickerLayer).size,
+            fontFamily: 'var(--font-emoji),"Apple Color Emoji","Segoe UI Emoji",sans-serif'
+          }}
+        >
+          {(layer as StickerLayer).emoji}
+        </span>
       ) : layer.type === "image" ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
