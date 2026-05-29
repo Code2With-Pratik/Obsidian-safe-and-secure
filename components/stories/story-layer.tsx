@@ -450,16 +450,19 @@ function OtherStoryBar({
   const liked = !!reel.likedByMe;
   const [reply, setReply] = React.useState("");
   const [sent, setSent] = React.useState(false);
-  const [hearts, setHearts] = React.useState<number[]>([]);
-  const heartKey = React.useRef(0);
+  // The button's fill is delayed until the flying heart drops back down, so it
+  // reads as "a heart jumps up, then falls back to fill the like button".
+  const [filled, setFilled] = React.useState(liked);
+  const [pops, setPops] = React.useState(0);
 
   const like = () => {
-    if (!liked) {
-      const k = heartKey.current++;
-      setHearts((h) => [...h, k]);
-      window.setTimeout(() => setHearts((h) => h.filter((x) => x !== k)), 900);
-    }
     toggleLike(reel.userId);
+    if (!liked) {
+      setPops((p) => p + 1); // launch the flying heart
+      window.setTimeout(() => setFilled(true), 430); // fill on its return
+    } else {
+      setFilled(false);
+    }
   };
 
   const sendReply = () => {
@@ -512,20 +515,27 @@ function OtherStoryBar({
           aria-label={t("Like")}
           className="relative size-11 rounded-full grid place-items-center bg-black/25 backdrop-blur border border-white/40 shrink-0"
         >
-          <Heart
-            className={liked ? "size-5 fill-rose-500 text-rose-500" : "size-5 text-white"}
-          />
-          {hearts.map((k) => (
+          {/* the button heart fills smoothly when the flying heart returns */}
+          <motion.span
+            animate={{ scale: filled ? [1, 1.25, 1] : 1 }}
+            transition={{ duration: 0.32, ease: "easeOut" }}
+            className="grid place-items-center"
+          >
+            <Heart className={filled ? "size-6 fill-rose-500 text-rose-500" : "size-6 text-white"} />
+          </motion.span>
+
+          {/* a small heart jumps up (scaling), then drops back into the button */}
+          {pops > 0 && (
             <motion.span
-              key={k}
-              initial={{ y: 6, scale: 0.4, opacity: 0 }}
-              animate={{ y: -46, scale: [0.4, 1.35, 1], opacity: [0, 1, 1, 0] }}
-              transition={{ duration: 0.85, ease: "easeOut" }}
-              className="absolute inset-x-0 -bottom-1 grid place-items-center pointer-events-none"
+              key={pops}
+              className="absolute inset-0 grid place-items-center pointer-events-none"
+              initial={{ y: 0, scale: 0.4, opacity: 0 }}
+              animate={{ y: [0, -42, 0], scale: [0.4, 1.3, 1], opacity: [0, 1, 0] }}
+              transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1], times: [0, 0.45, 1] }}
             >
               <Heart className="size-6 fill-rose-500 text-rose-500" />
             </motion.span>
-          ))}
+          )}
         </button>
       </div>
     </div>
