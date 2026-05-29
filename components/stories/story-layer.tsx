@@ -4,10 +4,10 @@ import * as React from "react";
 import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
-import { X, ChevronLeft, ChevronRight, User2, PlayCircle } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, User2, PlayCircle, Music } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { useStoriesStore } from "@/store/use-stories-store";
+import { useStoriesStore, type StoryMusic } from "@/store/use-stories-store";
 import { users, currentUser } from "@/lib/mock-data";
 import { initials, formatRelative } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
@@ -149,6 +149,14 @@ function Viewer({ userId }: { userId: string }) {
         )}
         <div className="absolute inset-0 bg-gradient-to-b from-black/55 via-transparent to-black/50" />
 
+        {/* live music overlay — spins (vinyl) / scrolls (card); plays the
+            30s preview on loop while the slide is open. */}
+        {slide.music && <StoryMusicOverlay m={slide.music} />}
+        {slide.music?.preview && (
+          // eslint-disable-next-line jsx-a11y/media-has-caption
+          <audio key={`audio-${slide.id}`} src={slide.music.preview} autoPlay loop className="hidden" />
+        )}
+
         {/* progress bars */}
         <div className="absolute top-2.5 left-2.5 right-2.5 flex gap-1 z-10">
           {slides.map((_, i) => (
@@ -222,3 +230,90 @@ function Viewer({ userId }: { userId: string }) {
     </motion.div>
   );
 }
+
+/* ───────── live music sticker (mirrors the editor's MusicLayerView) ─────────
+ * Memoised so the viewer's per-frame progress re-render doesn't restart the
+ * spin / marquee animation. */
+const StoryMusicOverlay = React.memo(function StoryMusicOverlay({ m }: { m: StoryMusic }) {
+  if (m.variant === "note") return null;
+
+  let inner: React.ReactNode;
+  if (m.variant === "square") {
+    inner = (
+      <div className="relative size-24 rounded-2xl overflow-hidden ring-2 ring-white/30 shadow-floating">
+        {m.cover ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={m.cover} alt="" className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full bg-white/15 grid place-items-center text-white">
+            <Music className="size-7" />
+          </div>
+        )}
+        <span className="absolute bottom-1.5 right-1.5 size-6 rounded-full bg-black/55 backdrop-blur grid place-items-center text-white">
+          <Music className="size-3" />
+        </span>
+      </div>
+    );
+  } else if (m.variant === "circle") {
+    inner = (
+      <motion.div
+        className="relative size-24 rounded-full overflow-hidden ring-2 ring-white/30 shadow-floating"
+        animate={{ rotate: [0, 360] }}
+        transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+      >
+        {m.cover ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={m.cover} alt="" className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full bg-white/15" />
+        )}
+        <span className="absolute inset-0 m-auto size-5 rounded-full bg-black/80 ring-2 ring-white/50" />
+      </motion.div>
+    );
+  } else {
+    // card
+    inner = (
+      <div className="inline-flex items-center gap-3 pl-2 pr-4 py-2 rounded-2xl bg-black/55 backdrop-blur-md ring-1 ring-white/15 text-white">
+        {m.cover ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={m.cover} alt="" className="size-11 rounded-xl object-cover shrink-0" />
+        ) : (
+          <span className="size-11 rounded-xl bg-white/15 grid place-items-center shrink-0">
+            <Music className="size-4" />
+          </span>
+        )}
+        <div className="min-w-0">
+          <div className="overflow-hidden w-[150px]">
+            <motion.div
+              className="inline-flex whitespace-nowrap gap-10"
+              animate={{ x: ["0%", "-50%"] }}
+              transition={{ duration: 7, repeat: Infinity, ease: "linear" }}
+            >
+              <span className="text-sm font-bold">{m.title}</span>
+              <span className="text-sm font-bold" aria-hidden>
+                {m.title}
+              </span>
+            </motion.div>
+          </div>
+          <span className="block text-[11px] opacity-75 truncate w-[150px]">{m.artist}</span>
+        </div>
+      </div>
+    );
+  }
+
+  // Vinyl rotates continuously, so don't bake the captured rotation into the
+  // wrapper for that variant.
+  const baseRotate = m.variant === "circle" ? 0 : m.rotate;
+  return (
+    <div
+      className="absolute z-[6] pointer-events-none"
+      style={{
+        left: `${m.x}%`,
+        top: `${m.y}%`,
+        transform: `translate(-50%, -50%) rotate(${baseRotate}deg) scale(${m.scale})`
+      }}
+    >
+      {inner}
+    </div>
+  );
+});

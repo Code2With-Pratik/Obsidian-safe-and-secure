@@ -33,7 +33,7 @@ export function StoryAvatar({
   const has = !!entry?.slides.length;
   const viewed = entry?.viewed;
 
-  const handle = (e: React.MouseEvent) => {
+  const handle = (e: React.MouseEvent | React.KeyboardEvent) => {
     if (has) {
       e.stopPropagation();
       e.preventDefault();
@@ -66,23 +66,29 @@ export function StoryAvatar({
     </>
   );
 
-  if (!interactive) {
-    return (
-      <span className={cn("relative inline-block shrink-0", className)} style={{ width: size, height: size }}>
-        {inner}
-      </span>
-    );
-  }
-
+  // Rendered as a <span> (not <button>) so it's valid even nested inside an
+  // <a> (e.g. the chat-list row Link) or another button (chat header).
   return (
-    <button
-      type="button"
-      onClick={handle}
-      aria-label={name}
-      className={cn("relative inline-block shrink-0 rounded-full", className)}
+    <span
+      role={interactive ? "button" : undefined}
+      tabIndex={interactive ? 0 : undefined}
+      onClick={interactive ? handle : undefined}
+      onKeyDown={
+        interactive
+          ? (e) => {
+              if (e.key === "Enter" || e.key === " ") handle(e);
+            }
+          : undefined
+      }
+      aria-label={interactive ? name : undefined}
+      className={cn(
+        "relative inline-block shrink-0 rounded-full align-middle",
+        interactive && "cursor-pointer",
+        className
+      )}
       style={{ width: size, height: size }}
     >
       {inner}
-    </button>
+    </span>
   );
 }

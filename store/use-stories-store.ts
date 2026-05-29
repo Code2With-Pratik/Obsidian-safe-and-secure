@@ -3,6 +3,22 @@
 import { create } from "zustand";
 import { stories as seedStories } from "@/lib/mock-data";
 
+/** A music sticker carried live on a slide (so it can spin / play in the
+ *  viewer instead of being baked flat into the exported image). */
+export interface StoryMusic {
+  title: string;
+  artist: string;
+  cover?: string;
+  /** 30s preview mp3 — auto-plays in the viewer, Instagram-style. */
+  preview?: string;
+  variant: "card" | "square" | "circle" | "note";
+  /** Center position + transform, as captured in the editor. */
+  x: number;
+  y: number;
+  scale: number;
+  rotate: number;
+}
+
 /** One frame of a user's story reel. */
 export interface StorySlide {
   id: string;
@@ -14,6 +30,8 @@ export interface StorySlide {
   text?: string;
   /** Epoch ms the slide was posted — drives the "2h ago" label. */
   postedAt: number;
+  /** Optional live music overlay (spins / plays in the viewer). */
+  music?: StoryMusic;
 }
 
 export interface UserStories {
@@ -78,7 +96,8 @@ export const useStoriesStore = create<StoriesState>((set, get) => ({
         kind: slide.kind,
         src: slide.src,
         bg: slide.bg,
-        text: slide.text
+        text: slide.text,
+        music: slide.music
       };
       const existing = st.byUser[userId];
       const entry: UserStories = existing

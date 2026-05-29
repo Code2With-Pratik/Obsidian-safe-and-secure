@@ -58,14 +58,19 @@ interface Props {
   onPick: (pick: ExpressionPick) => void;
   /** anchor element for desktop popover positioning */
   anchorRef?: React.RefObject<HTMLElement | null>;
+  /** desktop popover placement relative to the anchor (default "top") */
+  placement?: "top" | "bottom";
+  /** Render embedded in the parent (no portal / no floating popover). Fills
+   *  its container — used by the story editor's sidebar rail. */
+  inline?: boolean;
 }
 
-export function ExpressionsPicker({ open, onClose, onPick, anchorRef }: Props) {
+export function ExpressionsPicker({ open, onClose, onPick, anchorRef, placement = "top", inline = false }: Props) {
   const t = useT();
   const [mounted, setMounted] = React.useState(false);
   const [tab, setTab] = React.useState<Tab>("emoji");
   const [q, setQ] = React.useState("");
-  const [pos, setPos] = React.useState<{ left: number; bottom: number } | null>(null);
+  const [pos, setPos] = React.useState<{ left: number; top?: number; bottom?: number } | null>(null);
   const [activeEmojiCat, setActiveEmojiCat] = React.useState(EMOJI_CATEGORIES[0].id);
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const panelRef = React.useRef<HTMLDivElement>(null);
@@ -85,12 +90,23 @@ export function ExpressionsPicker({ open, onClose, onPick, anchorRef }: Props) {
     const update = () => {
       const r = anchorRef.current!.getBoundingClientRect();
       const panelWidth = 380;
-      const left = Math.min(
-        Math.max(12, r.right - panelWidth),
-        window.innerWidth - panelWidth - 12
-      );
-      const bottom = window.innerHeight - r.top + 12;
-      setPos({ left, bottom });
+      if (placement === "bottom") {
+        // Left-rail trigger (e.g. story editor): align the panel's LEFT edge
+        // to the button and drop it just below.
+        const left = Math.min(
+          Math.max(12, r.left),
+          window.innerWidth - panelWidth - 12
+        );
+        setPos({ left, top: r.bottom + 8 });
+      } else {
+        // Composer trigger (chat): align the panel's RIGHT edge to the button
+        // and float it just above.
+        const left = Math.min(
+          Math.max(12, r.right - panelWidth),
+          window.innerWidth - panelWidth - 12
+        );
+        setPos({ left, bottom: window.innerHeight - r.top + 12 });
+      }
     };
     update();
     window.addEventListener("resize", update);
@@ -99,7 +115,7 @@ export function ExpressionsPicker({ open, onClose, onPick, anchorRef }: Props) {
       window.removeEventListener("resize", update);
       window.removeEventListener("scroll", update, true);
     };
-  }, [open, isDesktop, anchorRef]);
+  }, [open, isDesktop, anchorRef, placement]);
 
   React.useEffect(() => {
     if (!open) {
@@ -138,6 +154,10 @@ export function ExpressionsPicker({ open, onClose, onPick, anchorRef }: Props) {
       onClose();
     };
 
+    // Embedded (inline) picker has no concept of "closing" — it lives in the
+    // rail — so skip the global keydown / outside-click handlers.
+    if (inline) return;
+
     window.addEventListener("keydown", onKey);
     if (isDesktop) {
       document.addEventListener("mousedown", onDown);
@@ -148,7 +168,7 @@ export function ExpressionsPicker({ open, onClose, onPick, anchorRef }: Props) {
         document.removeEventListener("mousedown", onDown);
       }
     };
-  }, [open, onClose, anchorRef, isDesktop]);
+  }, [open, onClose, anchorRef, isDesktop, inline]);
 
   /* ---------- search filters ---------- */
   const filteredEmojiCategories = React.useMemo(() => {
@@ -210,12 +230,151 @@ export function ExpressionsPicker({ open, onClose, onPick, anchorRef }: Props) {
   const useDesktopFloat = isDesktop && pos !== null;
 
   const desktopStyle: React.CSSProperties | undefined = useDesktopFloat
-    ? { left: pos!.left, bottom: pos!.bottom, width: 380 }
+    ? { left: pos!.left, top: pos!.top, bottom: pos!.bottom, width: 380 }
     : undefined;
 
-  const shouldRender = open && mounted && (!isDesktop || pos !== null);
+  // On desktop we wait for the anchored popover position so it doesn't flash
+  // the mobile (bottom-sheet) layout first. But when NO anchor is supplied
+  // (e.g. the story editor), fall back to the bottom-sheet layout so the picker
+  // still opens instead of silently never rendering.
+  const shouldRender = open && mounted && (!isDesktop || pos !== null || !anchorRef);
 
   if (!mounted) return null;
+
+  const body = (
+    <>
+      {/* grab handle — only on the floating bottom-sheet layout */}
+      {!inline && !useDesktopFloat && (
+        <div className="mx-auto mt-2 mb-1 h-1 w-10 rounded-full bg-white/20" />
+      )}
+
+      {/* tab pills */}
+      <div className="px-3 pt-3 pb-2 flex items-center gap-1.5">
+        <div className="flex-1 flex items-center gap-1 p-1 rounded-full glass-subtle">
+          {TABS.map((tb) => (
+            <button
+              key={tb.id}
+              onClick={() => setTab(tb.id)}
+              className={cn(
+                "flex-1 inline-flex items-center justify-center gap-1.5 h-8 rounded-full text-xs font-medium transition",
+                tab === tb.id
+                  ? "bg-foreground text-background"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {tb.icon}
+              {t(tb.label)}
+            </button>
+          ))}
+        </div>
+        {!inline && (
+          <button
+            onClick={onClose}
+            className="size-8 rounded-full grid place-items-center hover:bg-foreground/5"
+            aria-label={t("Close")}
+          >
+            <X className="size-4" />
+          </button>
+        )}
+      </div>
+
+      {/* search */}
+      <div className="px-3 pb-2">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            autoFocus={!inline}
+            placeholder={
+              tab === "emoji"
+                ? t("Search emoji")
+                : tab === "gif"
+                  ? t("Search GIFs")
+                  : tab === "sticker"
+                    ? t("Search stickers")
+                    : t("Search memes")
+            }
+            className="w-full h-9 pl-9 pr-3 rounded-full glass border border-border/60 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground/70 focus:ring-2 focus:ring-cyan-400/60"
+          />
+        </div>
+      </div>
+
+      {/* sliding tab content */}
+      <div className="relative flex-1 min-h-0 overflow-hidden">
+        <AnimatePresence mode="wait" initial={false}>
+          <motion.div
+            key={tab}
+            initial={{ opacity: 0, x: 30 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -30 }}
+            transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+            className="absolute inset-0 flex flex-col"
+          >
+            {tab === "emoji" && (
+              <EmojiPanel
+                categories={filteredEmojiCategories}
+                activeId={activeEmojiCat}
+                setActiveId={setActiveEmojiCat}
+                onPick={(value) => onPick({ kind: "emoji", value })}
+              />
+            )}
+            {tab === "gif" && (
+              <GifPanel
+                gifs={KLIPY_AVAILABLE && klipyGifs.data.length > 0 ? klipyGifs.data : localGifs}
+                loading={KLIPY_AVAILABLE && klipyGifs.loading}
+                error={KLIPY_AVAILABLE && klipyGifs.error && klipyGifs.data.length === 0}
+                onPick={(gif) => onPick({ kind: "gif", gif })}
+              />
+            )}
+            {tab === "sticker" && (
+              KLIPY_AVAILABLE ? (
+                <ApiStickerPanel
+                  stickers={klipyStickers.data}
+                  loading={klipyStickers.loading}
+                  error={klipyStickers.error}
+                  fallbackPacks={filteredStickers}
+                  onPick={(sticker) => onPick({ kind: "sticker", sticker })}
+                />
+              ) : (
+                <StickerPanel
+                  packs={filteredStickers}
+                  onPick={(sticker) => onPick({ kind: "sticker", sticker })}
+                />
+              )
+            )}
+            {tab === "meme" && (
+              <MemePanel
+                memes={KLIPY_AVAILABLE && klipyMemes.data.length > 0 ? klipyMemes.data : localMemes}
+                loading={KLIPY_AVAILABLE && klipyMemes.loading}
+                error={KLIPY_AVAILABLE && klipyMemes.error && klipyMemes.data.length === 0}
+                onPick={(meme) => onPick({ kind: "meme", meme })}
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      {/* footer hint */}
+      <div className="border-t border-white/10 px-4 py-1 text-[10px] text-muted-foreground flex justify-between">
+        <span>{tab === "emoji" ? t("Tap to insert") : t("Tap to send")}</span>
+        {!inline && <span className="hidden md:inline">{t("Esc to close")}</span>}
+      </div>
+    </>
+  );
+
+  // Inline: embed directly in the parent (e.g. the story editor's sidebar
+  // rail). No portal, no fixed positioning — fills its container.
+  if (inline) {
+    return (
+      <div
+        ref={panelRef}
+        className="relative flex flex-col w-full h-full min-h-[340px] rounded-2xl glass-subtle border border-white/10 overflow-hidden"
+      >
+        {body}
+      </div>
+    );
+  }
 
   return createPortal(
     <AnimatePresence>
@@ -248,121 +407,7 @@ export function ExpressionsPicker({ open, onClose, onPick, anchorRef }: Props) {
                 : "inset-x-0 bottom-0 w-full h-[52dvh] rounded-t-3xl pb-[max(0.5rem,env(safe-area-inset-bottom))]"
             )}
           >
-            {/* mobile grab handle */}
-            {!useDesktopFloat && (
-              <div className="mx-auto mt-2 mb-1 h-1 w-10 rounded-full bg-white/20" />
-            )}
-
-            {/* tab pills */}
-            <div className="px-3 pt-3 pb-2 flex items-center gap-1.5">
-              <div className="flex-1 flex items-center gap-1 p-1 rounded-full glass-subtle">
-                {TABS.map((tb) => (
-                  <button
-                    key={tb.id}
-                    onClick={() => setTab(tb.id)}
-                    className={cn(
-                      "flex-1 inline-flex items-center justify-center gap-1.5 h-8 rounded-full text-xs font-medium transition",
-                      tab === tb.id
-                        ? "bg-foreground text-background"
-                        : "text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {tb.icon}
-                    {t(tb.label)}
-                  </button>
-                ))}
-              </div>
-              <button
-                onClick={onClose}
-                className="size-8 rounded-full grid place-items-center hover:bg-foreground/5"
-                aria-label={t("Close")}
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-
-            {/* search */}
-            <div className="px-3 pb-2">
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                <input
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  autoFocus
-                  placeholder={
-                    tab === "emoji"
-                      ? t("Search emoji")
-                      : tab === "gif"
-                        ? t("Search GIFs")
-                        : tab === "sticker"
-                          ? t("Search stickers")
-                          : t("Search memes")
-                  }
-                  className="w-full h-9 pl-9 pr-3 rounded-full glass border border-border/60 bg-transparent text-[13px] outline-none placeholder:text-muted-foreground/70 focus:ring-2 focus:ring-cyan-400/60"
-                />
-              </div>
-            </div>
-
-            {/* sliding tab content */}
-            <div className="relative flex-1 min-h-0 overflow-hidden">
-              <AnimatePresence mode="wait" initial={false}>
-                <motion.div
-                  key={tab}
-                  initial={{ opacity: 0, x: 30 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -30 }}
-                  transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
-                  className="absolute inset-0 flex flex-col"
-                >
-                  {tab === "emoji" && (
-                    <EmojiPanel
-                      categories={filteredEmojiCategories}
-                      activeId={activeEmojiCat}
-                      setActiveId={setActiveEmojiCat}
-                      onPick={(value) => onPick({ kind: "emoji", value })}
-                    />
-                  )}
-                  {tab === "gif" && (
-                    <GifPanel
-                      gifs={KLIPY_AVAILABLE && klipyGifs.data.length > 0 ? klipyGifs.data : localGifs}
-                      loading={KLIPY_AVAILABLE && klipyGifs.loading}
-                      error={KLIPY_AVAILABLE && klipyGifs.error && klipyGifs.data.length === 0}
-                      onPick={(gif) => onPick({ kind: "gif", gif })}
-                    />
-                  )}
-                  {tab === "sticker" && (
-                    KLIPY_AVAILABLE ? (
-                      <ApiStickerPanel
-                        stickers={klipyStickers.data}
-                        loading={klipyStickers.loading}
-                        error={klipyStickers.error}
-                        fallbackPacks={filteredStickers}
-                        onPick={(sticker) => onPick({ kind: "sticker", sticker })}
-                      />
-                    ) : (
-                      <StickerPanel
-                        packs={filteredStickers}
-                        onPick={(sticker) => onPick({ kind: "sticker", sticker })}
-                      />
-                    )
-                  )}
-                  {tab === "meme" && (
-                    <MemePanel
-                      memes={KLIPY_AVAILABLE && klipyMemes.data.length > 0 ? klipyMemes.data : localMemes}
-                      loading={KLIPY_AVAILABLE && klipyMemes.loading}
-                      error={KLIPY_AVAILABLE && klipyMemes.error && klipyMemes.data.length === 0}
-                      onPick={(meme) => onPick({ kind: "meme", meme })}
-                    />
-                  )}
-                </motion.div>
-              </AnimatePresence>
-            </div>
-
-            {/* footer hint */}
-            <div className="border-t border-white/10 px-4 py-1 text-[10px] text-muted-foreground flex justify-between">
-              <span>{tab === "emoji" ? t("Tap to insert") : t("Tap to send")}</span>
-              <span className="hidden md:inline">{t("Esc to close")}</span>
-            </div>
+            {body}
           </motion.div>
         </>
       )}

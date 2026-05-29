@@ -129,14 +129,6 @@ const FILTERS: { id: string; label: string; filter: string }[] = [
   { id: "noir", label: "Noir", filter: "grayscale(1) contrast(1.3) brightness(0.9)" }
 ];
 
-const STICKER_PACKS: { name: string; items: string[] }[] = [
-  { name: "Mood", items: ["✨", "💜", "🔥", "🥲", "🤍", "🌙", "☀️", "⚡", "🌈", "💫", "🌸", "🪩"] },
-  { name: "Faces", items: ["😂", "😎", "🥹", "😌", "🤯", "😴", "🤝", "🫶", "👀", "🙌", "🫧", "🤗"] },
-  { name: "Music", items: ["🎧", "🎶", "🎹", "🪕", "🎤", "🥁", "🎚️", "🎛️"] },
-  { name: "Travel", items: ["✈️", "🌍", "🗺️", "🚀", "🏝️", "🏔️", "🌌", "🚆"] },
-  { name: "Love", items: ["❤️", "💖", "💘", "💝", "💗", "💓", "💞", "💕"] }
-];
-
 /** CSS font-family for a FONT_OPTIONS id (used for on-screen rendering). */
 const fontFamilyFor = (id: string) =>
   FONT_OPTIONS.find((f) => f.id === id)?.family ?? "var(--font-sans)";
@@ -191,13 +183,8 @@ function useItunesSearch() {
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    const q = query.trim();
-    if (!q) {
-      setResults([]);
-      setError(null);
-      setLoading(false);
-      return;
-    }
+    // Empty query → show a trending/popular default set instead of a blank list.
+    const q = query.trim() || "top hits";
     setLoading(true);
     setError(null);
     const controller = new AbortController();
@@ -353,6 +340,9 @@ export function StoryEditor() {
   // Set right before opening the file/camera picker, read back in onFile.
   const uploadTargetRef = React.useRef<"background" | "overlay">("background");
   const [showLayers, setShowLayers] = React.useState(false);
+  // Mobile-only: opens the emoji/GIF/sticker picker as a bottom sheet. On
+  // desktop the picker is embedded inline in the left rail (always visible
+  // while the Stickers tool is active).
   const [stickerPickerOpen, setStickerPickerOpen] = React.useState(false);
 
   // Lock body scroll while editor is mounted so the underlying page's
@@ -367,6 +357,7 @@ export function StoryEditor() {
   }, []);
 
   const selected = layers.find((l) => l.id === selectedId);
+  const musicLayer = layers.find((l) => l.type === "music") as MusicLayer | undefined;
   const filterCss = FILTERS.find((f) => f.id === filter)?.filter ?? "none";
 
   /* ----- layer ops ----- */
@@ -539,8 +530,13 @@ export function StoryEditor() {
   const [sharing, setSharing] = React.useState(false);
 
   /** Render the current story (background + drawing + layers) onto a
-   *  1080×1920 canvas. Shared by Download (→ PNG) and Share (→ data URL). */
-  const composeCanvas = async (): Promise<HTMLCanvasElement | null> => {
+   *  1080×1920 canvas. Shared by Download (→ PNG) and Share (→ data URL).
+   *  When `skipMusic` is set the music sticker is left out so it can be
+   *  re-rendered as a live (spinning / playing) overlay in the viewer. */
+  const composeCanvas = async (
+    opts?: { skipMusic?: boolean }
+  ): Promise<HTMLCanvasElement | null> => {
+    const skipMusic = opts?.skipMusic ?? false;
     if (!canvasRef.current) return null;
     {
       const W = 1080;
@@ -671,7 +667,7 @@ export function StoryEditor() {
           } catch {
             /* skip on load failure */
           }
-        } else if (l.type === "music") {
+        } else if (l.type === "music" && !skipMusic) {
           const m = l as MusicLayer;
           let coverImg: HTMLImageElement | null = null;
           if (m.cover && m.variant !== "note") {
@@ -792,14 +788,33 @@ export function StoryEditor() {
     }
   };
 
-  /** Post the composed story to the current user's reel, then jump to Stories. */
+  /** Post the composed story to the current user's reel, then jump to Stories.
+   *  Music is kept out of the baked PNG and re-attached as live metadata so it
+   *  spins / plays in the viewer (Instagram-style). */
   const shareStory = async () => {
     if (sharing) return;
     setSharing(true);
     try {
-      const out = await composeCanvas();
+      const out = await composeCanvas({ skipMusic: true });
       if (out) {
-        addStory(currentUser.id, { kind: "image", src: out.toDataURL("image/png") });
+        const music = musicLayer
+          ? {
+              title: musicLayer.title,
+              artist: musicLayer.artist,
+              cover: musicLayer.cover,
+              preview: musicLayer.preview,
+              variant: musicLayer.variant,
+              x: musicLayer.x,
+              y: musicLayer.y,
+              scale: musicLayer.scale,
+              rotate: musicLayer.rotate
+            }
+          : undefined;
+        addStory(currentUser.id, {
+          kind: "image",
+          src: out.toDataURL("image/png"),
+          music
+        });
       }
       router.push("/stories");
     } finally {
@@ -851,7 +866,7 @@ export function StoryEditor() {
           </TabsList>
         </Tabs>
 
-        <div className="px-3 mt-3 flex-1 overflow-y-auto no-scrollbar pb-6">
+        <div className="px-3 mt-5 flex-1 overflow-y-auto no-scrollbar pb-6">
           {tool === "media" && (
             <DesktopMediaPanel
               onPickStock={(src) => setBg({ kind: "image", value: src })}
@@ -871,14 +886,7 @@ export function StoryEditor() {
             />
           )}
           {tool === "stickers" && (
-            <div className="space-y-3">
-              <Button variant="gradient" className="w-full" onClick={() => setStickerPickerOpen(true)}>
-                <Smile /> {t("Emoji, GIFs & stickers")}
-              </Button>
-              <p className="text-[11px] text-muted-foreground">
-                {t("Search emoji, GIFs and stickers, then tap to drop them on your story.")}
-              </p>
-            </div>
+            <ExpressionsPicker inline open onClose={() => {}} onPick={onExpression} />
           )}
           {tool === "filters" && <FilterPanel value={filter} onChange={setFilter} preview={bg} />}
           {tool === "draw" && (
@@ -1257,7 +1265,8 @@ export function StoryEditor() {
         <audio key={musicLayer.id} src={musicLayer.preview} autoPlay loop className="hidden" />
       )}
 
-      {/* Shared emoji / GIF / sticker picker (tabs + search). */}
+      {/* Mobile emoji / GIF / sticker picker (bottom sheet). Desktop uses the
+          inline picker embedded in the left rail instead. */}
       <ExpressionsPicker
         open={stickerPickerOpen}
         onClose={() => setStickerPickerOpen(false)}
@@ -1324,7 +1333,7 @@ function MobileSheetWrapper({
             </button>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto px-5 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div className="flex-1 overflow-y-auto px-5 pt-3.5 pb-[max(1rem,env(safe-area-inset-bottom))]">
           {children}
         </div>
       </motion.div>
@@ -1819,78 +1828,6 @@ function MobileTextSheet({
   );
 }
 
-function MobileStickersSheet({
-  onClose,
-  onPick
-}: {
-  onClose: () => void;
-  onPick: (s: string) => void;
-}) {
-  const t = useT();
-  const [q, setQ] = React.useState("");
-  const all = React.useMemo(() => STICKER_PACKS.flatMap((p) => p.items.map((i) => ({ pack: p.name, emoji: i }))), []);
-  const filtered = q.trim()
-    ? all.filter((x) => x.pack.toLowerCase().includes(q.toLowerCase()))
-    : null;
-
-  return (
-    <MobileSheetWrapper title={t("Stickers")} onClose={onClose} height="72vh">
-      <div className="relative mb-4">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-        <Input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder={t("Search stickers")}
-          className="pl-10 h-11 glass-subtle text-foreground placeholder:text-muted-foreground border-border/40"
-        />
-      </div>
-
-      {filtered ? (
-        <div className="grid grid-cols-6 gap-2">
-          {filtered.length === 0 ? (
-            <p className="col-span-6 text-center text-sm text-muted-foreground py-8">
-              {t("No matches")} · &quot;{q}&quot;
-            </p>
-          ) : (
-            filtered.map((x, i) => (
-              <motion.button
-                key={`${x.pack}-${i}`}
-                whileTap={{ scale: 0.85 }}
-                onClick={() => onPick(x.emoji)}
-                className="aspect-square text-3xl rounded-2xl glass-subtle grid place-items-center"
-              >
-                {x.emoji}
-              </motion.button>
-            ))
-          )}
-        </div>
-      ) : (
-        <div className="space-y-5">
-          {STICKER_PACKS.map((pack) => (
-            <div key={pack.name}>
-              <h4 className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 px-1">
-                {pack.name}
-              </h4>
-              <div className="grid grid-cols-6 gap-2">
-                {pack.items.map((s) => (
-                  <motion.button
-                    key={s}
-                    whileTap={{ scale: 0.85 }}
-                    onClick={() => onPick(s)}
-                    className="aspect-square text-3xl rounded-2xl glass-subtle grid place-items-center"
-                  >
-                    {s}
-                  </motion.button>
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </MobileSheetWrapper>
-  );
-}
-
 function MobileDrawSheet({
   onClose,
   color,
@@ -1996,18 +1933,17 @@ function MobileMusicSheet({
 
       {error ? (
         <p className="text-center text-sm text-rose-400 py-8">{t(error)}</p>
-      ) : !query.trim() ? (
-        <div className="text-center py-12">
-          <Music className="size-10 mx-auto text-muted-foreground/60 mb-3" />
-          <p className="text-sm text-muted-foreground">{t("Search for any song or artist.")}</p>
-          <p className="text-xs text-muted-foreground/70 mt-1">{t("Powered by Apple Music.")}</p>
-        </div>
       ) : results.length === 0 && !loading ? (
         <p className="text-center text-sm text-muted-foreground py-8">
-          {t("No tracks match")} &quot;{query}&quot;
+          {query.trim() ? `${t("No tracks match")} "${query}"` : t("Powered by Apple Music.")}
         </p>
       ) : (
         <div className="space-y-2">
+          {!query.trim() && (
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground px-1 mb-1">
+              {t("Trending now")}
+            </p>
+          )}
           {results.map((tr) => {
             const isPlaying = playingId === tr.id;
             return (
@@ -2355,33 +2291,6 @@ function TextPanel({
   );
 }
 
-function StickerPanel({ onPick }: { onPick: (e: string) => void }) {
-  return (
-    <div className="space-y-5">
-      {STICKER_PACKS.map((pack) => (
-        <div key={pack.name}>
-          <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
-            {pack.name}
-          </h4>
-          <div className="grid grid-cols-5 gap-1.5">
-            {pack.items.map((s) => (
-              <motion.button
-                key={s}
-                whileHover={{ scale: 1.2, rotate: 6 }}
-                whileTap={{ scale: 0.9 }}
-                onClick={() => onPick(s)}
-                className="aspect-square text-2xl rounded-xl glass-subtle hover:bg-foreground/5"
-              >
-                {s}
-              </motion.button>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function FilterPanel({
   value,
   onChange,
@@ -2497,18 +2406,17 @@ function MusicPanel({ onPick }: { onPick: (t: Track) => void }) {
 
       {error ? (
         <p className="text-center text-xs text-rose-400 py-8">{t(error)}</p>
-      ) : !query.trim() ? (
-        <div className="text-center py-10 px-4">
-          <Music className="size-8 mx-auto text-muted-foreground/60 mb-2" />
-          <p className="text-xs text-muted-foreground">{t("Search for any song or artist.")}</p>
-          <p className="text-[10px] text-muted-foreground/70 mt-1">{t("Powered by Apple Music.")}</p>
-        </div>
       ) : results.length === 0 && !loading ? (
         <p className="text-center text-xs text-muted-foreground py-8">
-          {t("No tracks match")} &quot;{query}&quot;
+          {query.trim() ? `${t("No tracks match")} "${query}"` : t("Powered by Apple Music.")}
         </p>
       ) : (
         <div className="space-y-2">
+          {!query.trim() && (
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground px-1 mb-1">
+              {t("Trending now")}
+            </p>
+          )}
           {results.map((tr) => {
             const isPlaying = playingId === tr.id;
             return (
@@ -2630,8 +2538,8 @@ function MusicLayerView({ m }: { m: MusicLayer }) {
     return (
       <motion.div
         className="relative size-24 rounded-full overflow-hidden ring-2 ring-white/30 shadow-floating"
-        animate={{ rotate: 360 }}
-        transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+        animate={{ rotate: [0, 360] }}
+        transition={{ duration: 8, repeat: Infinity, ease: "linear", repeatType: "loop" }}
       >
         {m.cover ? (
           // eslint-disable-next-line @next/next/no-img-element

@@ -4,18 +4,34 @@ import * as React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
-import { stories, users, currentUser } from "@/lib/mock-data";
+import { users, currentUser } from "@/lib/mock-data";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { useStoriesStore, type UserStories } from "@/store/use-stories-store";
 
 export function StoriesRail() {
+  const byUser = useStoriesStore((s) => s.byUser);
+  const openViewer = useStoriesStore((s) => s.openViewer);
+  const reels = Object.values(byUser)
+    .filter((r) => r.slides.length > 0)
+    // your own reel first, then everyone else
+    .sort((a, b) => (a.userId === "me" ? -1 : b.userId === "me" ? 1 : 0));
+
   return (
     <div className="flex gap-2.5 overflow-x-auto px-4 py-3 no-scrollbar">
       <CreateTile />
-      {stories.map((s) => {
-        const author = users.find((u) => u.id === s.authorId);
-        return <StoryTile key={s.id} story={s} authorName={author?.name.split(" ")[0]} authorAvatar={author?.avatar} />;
+      {reels.map((r) => {
+        const author = users.find((u) => u.id === r.userId);
+        return (
+          <StoryTile
+            key={r.userId}
+            reel={r}
+            authorName={author?.name.split(" ")[0]}
+            authorAvatar={author?.avatar}
+            onOpen={() => openViewer(r.userId)}
+          />
+        );
       })}
     </div>
   );
@@ -28,7 +44,6 @@ function CreateTile() {
       href="/stories/create"
       className="relative shrink-0 w-[88px] h-[112px] rounded-[26px] overflow-hidden ring-1 ring-white/10 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.4)] group"
     >
-      {/* dark glass gradient backdrop */}
       <div
         className="absolute inset-0"
         style={{
@@ -59,30 +74,34 @@ function CreateTile() {
 }
 
 function StoryTile({
-  story,
+  reel,
   authorName,
-  authorAvatar
+  authorAvatar,
+  onOpen
 }: {
-  story: (typeof stories)[number];
+  reel: UserStories;
   authorName?: string;
   authorAvatar?: string;
+  onOpen: () => void;
 }) {
+  const first = reel.slides[0];
   return (
-    <motion.div
+    <motion.button
+      onClick={onOpen}
       whileHover={{ y: -3, scale: 1.02 }}
       transition={{ type: "spring", stiffness: 240, damping: 20 }}
       className={cn(
         "relative shrink-0 w-[88px] h-[112px] rounded-[26px] overflow-hidden cursor-pointer",
         "ring-1 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.4)]",
-        story.viewed ? "ring-white/10" : "ring-white/20"
+        reel.viewed ? "ring-white/10" : "ring-white/20"
       )}
     >
-      {story.type === "text" ? (
-        <div className="absolute inset-0" style={{ background: story.bg }} />
+      {first.kind === "text" ? (
+        <div className="absolute inset-0" style={{ background: first.bg }} />
       ) : (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={story.preview}
+          src={first.src}
           alt=""
           className="absolute inset-0 w-full h-full object-cover"
         />
@@ -90,7 +109,7 @@ function StoryTile({
 
       <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/60" />
 
-      {!story.viewed && (
+      {!reel.viewed && (
         <div className="absolute inset-0 rounded-[26px] ring-2 ring-cyan-400/70 pointer-events-none" />
       )}
 
@@ -98,7 +117,7 @@ function StoryTile({
         <div
           className={cn(
             "rounded-full p-[1.5px]",
-            story.viewed
+            reel.viewed
               ? "bg-white/60"
               : "bg-gradient-to-tr from-violet-500 via-fuchsia-500 to-cyan-400"
           )}
@@ -111,15 +130,15 @@ function StoryTile({
         </div>
       </div>
 
-      {story.type === "text" && story.text && (
+      {first.kind === "text" && first.text && (
         <p className="absolute inset-x-1.5 bottom-7 text-[10px] font-medium text-white leading-tight drop-shadow line-clamp-3">
-          {story.text}
+          {first.text}
         </p>
       )}
 
       <span className="absolute bottom-1.5 left-2 right-2 text-[11px] font-semibold text-white drop-shadow truncate">
         {authorName}
       </span>
-    </motion.div>
+    </motion.button>
   );
 }
