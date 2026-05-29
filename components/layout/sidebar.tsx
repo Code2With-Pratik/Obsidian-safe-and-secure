@@ -17,6 +17,8 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { useAuthStore } from "@/store/use-auth-store";
+import { useStoriesStore } from "@/store/use-stories-store";
+import { StoryAvatar } from "@/components/stories/story-avatar";
 import { useT } from "@/lib/i18n";
 import { cn, initials } from "@/lib/utils";
 import { NovaMascot } from "../../components/nova-mascot";
@@ -36,6 +38,7 @@ const EXPANDED = 260;
 export function Sidebar() {
   const pathname = usePathname();
   const user = useAuthStore((s) => s.user);
+  const meHasStory = useStoriesStore((s) => !!s.byUser["me"]?.slides.length);
   const t = useT();
   const [hovered, setHovered] = React.useState(false);
   const expanded = hovered;
@@ -214,10 +217,14 @@ export function Sidebar() {
               "flex items-center gap-3 rounded-xl p-2 mt-1 hover:bg-foreground/[0.04] transition"
             )}
           >
-            <Avatar className="size-9 ring-2 ring-emerald-400/60 ring-offset-2 ring-offset-background shrink-0">
-              <AvatarImage src={user?.avatar} alt={user?.name} />
-              <AvatarFallback>{initials(user?.name ?? "Aria")}</AvatarFallback>
-            </Avatar>
+            {meHasStory ? (
+              <StoryAvatar userId="me" src={user?.avatar} name={user?.name} size={36} />
+            ) : (
+              <Avatar className="size-9 ring-2 ring-emerald-400/60 ring-offset-2 ring-offset-background shrink-0">
+                <AvatarImage src={user?.avatar} alt={user?.name} />
+                <AvatarFallback>{initials(user?.name ?? "Aria")}</AvatarFallback>
+              </Avatar>
+            )}
             <AnimatePresence initial={false}>
               {expanded && (
                 <motion.div

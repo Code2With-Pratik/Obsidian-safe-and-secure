@@ -10,6 +10,9 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { initials } from "@/lib/utils";
 import { useUIStore } from "@/store/use-ui-store";
+import { useStoriesStore } from "@/store/use-stories-store";
+import { StoryAvatar } from "@/components/stories/story-avatar";
+import { users as allUsers } from "@/lib/mock-data";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useT } from "@/lib/i18n";
 import { MediaViewer, type MediaItem } from "./media-viewer";
@@ -45,6 +48,12 @@ export function ChatDetailsPanel({ chat }: { chat: Chat }) {
   const [viewerIndex, setViewerIndex] = React.useState<number | null>(null);
   const isDesktop = useMediaQuery("(min-width: 1280px)");
 
+  const storyUserId =
+    chat.type === "dm" ? allUsers.find((u) => u.name === chat.name)?.id : undefined;
+  const hasStory = useStoriesStore((s) =>
+    storyUserId ? !!s.byUser[storyUserId]?.slides.length : false
+  );
+
   // Index of the first pdf in the combined media set — the Files tab opens the
   // shared viewer here so pdf/music are reachable via the same prev/next strip.
   const firstPdf = mediaItems.findIndex((m) => m.kind === "pdf");
@@ -60,10 +69,14 @@ export function ChatDetailsPanel({ chat }: { chat: Chat }) {
 
       <div className="flex-1 min-h-0 overflow-y-auto scroll-fade-y px-4 py-5">
         <div className="flex flex-col items-center text-center">
-          <Avatar className="size-20 ring-4 ring-primary/30 ring-offset-2 ring-offset-background">
-            <AvatarImage src={chat.avatar} />
-            <AvatarFallback>{initials(chat.name)}</AvatarFallback>
-          </Avatar>
+          {hasStory && storyUserId ? (
+            <StoryAvatar userId={storyUserId} src={chat.avatar} name={chat.name} size={84} />
+          ) : (
+            <Avatar className="size-20 ring-4 ring-primary/30 ring-offset-2 ring-offset-background">
+              <AvatarImage src={chat.avatar} />
+              <AvatarFallback>{initials(chat.name)}</AvatarFallback>
+            </Avatar>
+          )}
           <h3 className="mt-3 text-lg font-semibold">{chat.name}</h3>
           {chat.encrypted && (
             <Badge variant="success" className="mt-1.5">

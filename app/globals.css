@@ -223,7 +223,11 @@
     @apply hover:scale-110 hover:-translate-y-1;
   }
 
-  /* Shimmer skeleton */
+  /* Shimmer skeleton (YouTube-style sweeping highlight) */
+  @keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
   .shimmer {
     background: linear-gradient(
       90deg,

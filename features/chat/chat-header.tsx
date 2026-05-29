@@ -43,6 +43,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useUIStore } from "@/store/use-ui-store";
 import { useChatStore } from "@/store/use-chat-store";
+import { useStoriesStore } from "@/store/use-stories-store";
+import { StoryAvatar } from "@/components/stories/story-avatar";
+import { users as allUsers } from "@/lib/mock-data";
 import { useChatThemeStore } from "@/store/use-chat-theme-store";
 import { useMessageSelectionStore } from "@/store/use-message-selection-store";
 import { copyText } from "@/lib/utils";
@@ -86,6 +89,13 @@ export function ChatHeader({
   // sheet has been removed to avoid two competing profile UIs.
   const openProfile = () => setRightPanel(rightPanel === "details" ? null : "details");
   const [themeOpen, setThemeOpen] = React.useState(false);
+
+  // DM → resolve the single user to show their story ring on the header avatar.
+  const storyUserId =
+    chat.type === "dm" ? allUsers.find((u) => u.name === chat.name)?.id : undefined;
+  const hasStory = useStoriesStore((s) =>
+    storyUserId ? !!s.byUser[storyUserId]?.slides.length : false
+  );
 
   const startCall = (video: boolean) => {
     // Group / channel / ghost-room chats start a multi-party call; a DM is 1-on-1.
@@ -224,39 +234,46 @@ export function ChatHeader({
             </Button>
           </Link>
 
-          <button
-            onClick={openProfile}
-            className="flex items-center gap-3 flex-1 min-w-0 hover:bg-foreground/[0.03] -ml-2 pl-2 py-1.5 rounded-xl transition group"
-          >
-            <AnimatedAvatar
-              src={chat.avatar}
-              name={chat.name}
-              size={40}
-              status={chat.online ? "online" : "offline"}
-              pulse={false}
-              breathe={false}
-              ring={false}
-              hoverLift={false}
-            />
-            <div className="flex-1 min-w-0 text-left">
-              <div className="flex items-center gap-2">
-                <span className="font-semibold truncate">{chat.name}</span>
-                {chat.encrypted && <Lock className="size-3.5 text-emerald-400" />}
-                {chat.type === "ghost" && (
-                  <Badge variant="glass" className="!text-[10px]">
-                    <Ghost className="size-2.5" /> ghost
-                  </Badge>
-                )}
+          <div className="flex items-center gap-3 flex-1 min-w-0 -ml-2 pl-2 py-1.5">
+            {hasStory && storyUserId && (
+              <StoryAvatar userId={storyUserId} src={chat.avatar} name={chat.name} size={40} />
+            )}
+            <button
+              onClick={openProfile}
+              className="flex items-center gap-3 flex-1 min-w-0 hover:bg-foreground/[0.03] rounded-xl py-1 transition group"
+            >
+              {!(hasStory && storyUserId) && (
+                <AnimatedAvatar
+                  src={chat.avatar}
+                  name={chat.name}
+                  size={40}
+                  status={chat.online ? "online" : "offline"}
+                  pulse={false}
+                  breathe={false}
+                  ring={false}
+                  hoverLift={false}
+                />
+              )}
+              <div className="flex-1 min-w-0 text-left">
+                <div className="flex items-center gap-2">
+                  <span className="font-semibold truncate">{chat.name}</span>
+                  {chat.encrypted && <Lock className="size-3.5 text-emerald-400" />}
+                  {chat.type === "ghost" && (
+                    <Badge variant="glass" className="!text-[10px]">
+                      <Ghost className="size-2.5" /> ghost
+                    </Badge>
+                  )}
+                </div>
+                <div className="text-[11px] text-muted-foreground truncate">
+                  {chat.type === "group" || chat.type === "channel"
+                    ? `${chat.membersCount} ${t("members")} · ${Math.floor((chat.membersCount ?? 0) / 5)} ${t("online")}`
+                    : chat.online
+                    ? `${t("online")} · ${t("typing…")}`
+                    : t("last seen 2h ago")}
+                </div>
               </div>
-              <div className="text-[11px] text-muted-foreground truncate">
-                {chat.type === "group" || chat.type === "channel"
-                  ? `${chat.membersCount} ${t("members")} · ${Math.floor((chat.membersCount ?? 0) / 5)} ${t("online")}`
-                  : chat.online
-                  ? `${t("online")} · ${t("typing…")}`
-                  : t("last seen 2h ago")}
-              </div>
-            </div>
-          </button>
+            </button>
+          </div>
         </>
       )}
 

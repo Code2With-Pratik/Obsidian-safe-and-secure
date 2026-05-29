@@ -12,6 +12,7 @@ import {
   Palette,
   Music,
   Pencil,
+  Pipette,
   Eraser,
   Trash2,
   Bold,
@@ -34,6 +35,12 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
+import { useMediaQuery } from "@/hooks/use-media-query";
+import { useStoriesStore } from "@/store/use-stories-store";
+import { VinylDisc } from "@/components/stories/vinyl-disc";
+import { currentUser } from "@/lib/mock-data";
+import { FONT_OPTIONS, DEFAULT_FONT, emojiFontFamily } from "@/app/fonts";
+import { ExpressionsPicker, type ExpressionPick } from "@/features/chat/expressions-picker";
 
 /* ----------------------------- types ----------------------------- */
 
@@ -50,7 +57,8 @@ interface TextLayer extends BaseLayer {
   text: string;
   color: string;
   bg: string;
-  font: "sans" | "serif" | "mono" | "display";
+  /** FONT_OPTIONS id (shared with the appearance setting). */
+  font: string;
   bold: boolean;
   align: "left" | "center" | "right";
 }
@@ -65,6 +73,9 @@ interface MusicLayer extends BaseLayer {
   type: "music";
   title: string;
   artist: string;
+  cover?: string;
+  preview?: string;
+  variant: MusicVariant;
 }
 
 interface ImageLayer extends BaseLayer {
@@ -121,20 +132,17 @@ const FILTERS: { id: string; label: string; filter: string }[] = [
   { id: "noir", label: "Noir", filter: "grayscale(1) contrast(1.3) brightness(0.9)" }
 ];
 
-const STICKER_PACKS: { name: string; items: string[] }[] = [
-  { name: "Mood", items: ["✨", "💜", "🔥", "🥲", "🤍", "🌙", "☀️", "⚡", "🌈", "💫", "🌸", "🪩"] },
-  { name: "Faces", items: ["😂", "😎", "🥹", "😌", "🤯", "😴", "🤝", "🫶", "👀", "🙌", "🫧", "🤗"] },
-  { name: "Music", items: ["🎧", "🎶", "🎹", "🪕", "🎤", "🥁", "🎚️", "🎛️"] },
-  { name: "Travel", items: ["✈️", "🌍", "🗺️", "🚀", "🏝️", "🏔️", "🌌", "🚆"] },
-  { name: "Love", items: ["❤️", "💖", "💘", "💝", "💗", "💓", "💞", "💕"] }
-];
+/** CSS font-family for a FONT_OPTIONS id (used for on-screen rendering). */
+const fontFamilyFor = (id: string) =>
+  FONT_OPTIONS.find((f) => f.id === id)?.family ?? "var(--font-sans)";
 
-const FONT_FAMILIES: Record<TextLayer["font"], string> = {
-  sans: "var(--font-sans)",
-  display: "var(--font-display)",
-  mono: "var(--font-mono)",
-  serif: "'Times New Roman', Georgia, serif"
-};
+/** Canvas-safe family for the PNG export. CSS vars don't resolve in canvas,
+ *  so the default maps to a concrete Inter stack; the rest use their concrete
+ *  next/font family string (which the browser has already loaded). */
+const canvasFontFor = (id: string) =>
+  id === DEFAULT_FONT
+    ? "Inter, sans-serif"
+    : FONT_OPTIONS.find((f) => f.id === id)?.family ?? "Inter, sans-serif";
 
 const TEXT_BGS: { label: string; value: string; fg: string }[] = [
   { label: "None", value: "transparent", fg: "#ffffff" },
@@ -146,111 +154,109 @@ const TEXT_BGS: { label: string; value: string; fg: string }[] = [
 
 const TEXT_COLORS = ["#ffffff", "#000000", "#8B5CF6", "#22D3EE", "#EC4899", "#FBBF24", "#A3E635", "#FB923C"];
 
-// Each track carries a root frequency (Hz) + waveform so the preview synth
-// generates a recognisable, distinct ambient pad per track.
-const MUSIC_TRACKS = [
-  { id: "m1", title: "Glass Cathedrals", artist: "Obsidian FM",       duration: "3:24", root: 220.00, wave: "sine"     as OscillatorType },
-  { id: "m2", title: "Aurora Drift",     artist: "Synth Citizens", duration: "2:51", root: 261.63, wave: "triangle" as OscillatorType },
-  { id: "m3", title: "Midnight Lounge",  artist: "Kai Nakamura",  duration: "4:08", root: 174.61, wave: "sine"     as OscillatorType },
-  { id: "m4", title: "Neon Pulse",       artist: "Lyra Chen",     duration: "3:12", root: 329.63, wave: "sawtooth" as OscillatorType },
-  { id: "m5", title: "Vapor Skies",      artist: "Iris Park",     duration: "3:48", root: 246.94, wave: "triangle" as OscillatorType },
-  { id: "m6", title: "Helios",           artist: "Atlas Vega",    duration: "2:34", root: 293.66, wave: "sine"     as OscillatorType }
-];
+/** A music result fetched live from the iTunes Search API. */
+interface Track {
+  id: string;
+  title: string;
+  artist: string;
+  /** Square album artwork (upgraded to 300px). */
+  cover: string;
+  /** 30-second preview mp3 URL. */
+  preview: string;
+}
 
-type Track = (typeof MUSIC_TRACKS)[number];
+/** How a music layer is rendered on the story (mirrors Instagram's options):
+ *  - card:   glass pill, square cover on the left + marquee title + artist
+ *  - square: square cover art only
+ *  - circle: circular cover that spins like a vinyl
+ *  - note:   a music-note badge (no text) */
+type MusicVariant = "card" | "square" | "circle" | "note";
 
 /** Collision-free id generator: many calls inside one ms (e.g. batch-add)
  *  still get distinct ids. */
 const uid = (prefix: string) =>
   `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 
-/** Web Audio preview — synthesises a 30-second ambient pad per track. */
+/** Debounced iTunes Search API query → song results with 30s previews.
+ *  The API responds with CORS headers, so a plain client fetch works. */
+function useItunesSearch() {
+  const [query, setQuery] = React.useState("");
+  const [results, setResults] = React.useState<Track[]>([]);
+  const [loading, setLoading] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    // Empty query → show a trending/popular default set instead of a blank list.
+    const q = query.trim() || "top hits";
+    setLoading(true);
+    setError(null);
+    const controller = new AbortController();
+    const id = window.setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `https://itunes.apple.com/search?term=${encodeURIComponent(
+            q
+          )}&media=music&entity=song&limit=24`,
+          { signal: controller.signal }
+        );
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data: { results?: Record<string, unknown>[] } = await res.json();
+        const list: Track[] = (data.results ?? [])
+          .filter((r) => r.previewUrl)
+          .map((r) => ({
+            id: String(r.trackId),
+            title: String(r.trackName ?? ""),
+            artist: String(r.artistName ?? ""),
+            cover: String(r.artworkUrl100 ?? "").replace("100x100", "300x300"),
+            preview: String(r.previewUrl)
+          }));
+        setResults(list);
+      } catch (err) {
+        if ((err as Error).name === "AbortError") return;
+        setError("Couldn't load music. Check your connection.");
+        setResults([]);
+      } finally {
+        setLoading(false);
+      }
+    }, 350);
+    return () => {
+      window.clearTimeout(id);
+      controller.abort();
+    };
+  }, [query]);
+
+  return { query, setQuery, results, loading, error };
+}
+
+/** Plays a 30-second preview mp3 by URL; tapping the same id toggles off. */
 function useAudioPreview() {
   const [playingId, setPlayingId] = React.useState<string | null>(null);
-  const ctxRef = React.useRef<AudioContext | null>(null);
-  const activeRef = React.useRef<{ stop: () => void } | null>(null);
-  const timerRef = React.useRef<number | null>(null);
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
 
   const stop = React.useCallback(() => {
-    activeRef.current?.stop();
-    activeRef.current = null;
-    if (timerRef.current !== null) {
-      window.clearTimeout(timerRef.current);
-      timerRef.current = null;
-    }
+    audioRef.current?.pause();
     setPlayingId(null);
   }, []);
 
   const play = React.useCallback(
     (track: Track) => {
-      // tapping the same track again toggles off
-      if (activeRef.current && playingId === track.id) {
+      if (playingId === track.id) {
         stop();
         return;
       }
-      activeRef.current?.stop();
-
-      const Ctor =
-        typeof window !== "undefined"
-          ? window.AudioContext ||
-            (window as typeof window & { webkitAudioContext?: typeof AudioContext })
-              .webkitAudioContext
-          : undefined;
-      if (!Ctor) return;
-      const ctx = ctxRef.current ?? (ctxRef.current = new Ctor());
-      if (ctx.state === "suspended") ctx.resume();
-
-      const now = ctx.currentTime;
-      const master = ctx.createGain();
-      master.gain.setValueAtTime(0, now);
-      master.gain.linearRampToValueAtTime(0.14, now + 1.2);
-
-      // Soft low-pass to take the edge off saw/triangle harmonics
-      const filter = ctx.createBiquadFilter();
-      filter.type = "lowpass";
-      filter.frequency.value = 1600;
-      filter.Q.value = 0.5;
-      master.connect(filter).connect(ctx.destination);
-
-      // Root + perfect fifth + octave triad — sounds pleasant for any root
-      const ratios = [1, 1.5, 2];
-      const oscs = ratios.map((r, i) => {
-        const o = ctx.createOscillator();
-        o.type = track.wave;
-        o.frequency.value = track.root * r;
-        const g = ctx.createGain();
-        g.gain.value = i === 0 ? 0.5 : 0.3;
-        o.connect(g).connect(master);
-        o.start(now);
-        return o;
-      });
-
-      // Slow LFO drifting the root pitch for movement
-      const lfo = ctx.createOscillator();
-      lfo.frequency.value = 0.12;
-      const lfoGain = ctx.createGain();
-      lfoGain.gain.value = 2.5;
-      lfo.connect(lfoGain).connect(oscs[0].frequency);
-      lfo.start(now);
-
-      activeRef.current = {
-        stop: () => {
-          const t = ctx.currentTime;
-          master.gain.cancelScheduledValues(t);
-          master.gain.setValueAtTime(master.gain.value, t);
-          master.gain.linearRampToValueAtTime(0, t + 0.35);
-          oscs.forEach((o) => o.stop(t + 0.4));
-          lfo.stop(t + 0.4);
-        }
-      };
-
-      timerRef.current = window.setTimeout(() => stop(), 30_000);
-      setPlayingId(track.id);
+      if (!audioRef.current) audioRef.current = new Audio();
+      const a = audioRef.current;
+      a.src = track.preview;
+      a.currentTime = 0;
+      a.onended = () => setPlayingId(null);
+      a.play()
+        .then(() => setPlayingId(track.id))
+        .catch(() => setPlayingId(null));
     },
     [playingId, stop]
   );
 
-  React.useEffect(() => () => stop(), [stop]);
+  React.useEffect(() => () => audioRef.current?.pause(), []);
 
   return { playingId, play, stop };
 }
@@ -316,6 +322,13 @@ function roundedRect(
 export function StoryEditor() {
   const t = useT();
   const router = useRouter();
+  // ≥lg shows the three-pane layout (left tools · canvas · inspector). Set via
+  // inline style rather than an arbitrary Tailwind class so the exact column
+  // widths always apply (no JIT/arbitrary-value surprises).
+  const isWide = useMediaQuery("(min-width: 1024px)");
+  const startStoryUpload = useStoriesStore((s) => s.startStoryUpload);
+  const attachStorySlide = useStoriesStore((s) => s.attachStorySlide);
+  const clearPendingStory = useStoriesStore((s) => s.clearPendingStory);
   const [bg, setBg] = React.useState<Background>({ kind: "gradient", value: GRADIENTS[0] });
   const [filter, setFilter] = React.useState<string>("none");
   const [layers, setLayers] = React.useState<Layer[]>([]);
@@ -332,7 +345,14 @@ export function StoryEditor() {
   const canvasRef = React.useRef<HTMLDivElement>(null);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   const cameraInputRef = React.useRef<HTMLInputElement>(null);
+  // Whether the next device upload becomes the background or an overlay layer.
+  // Set right before opening the file/camera picker, read back in onFile.
+  const uploadTargetRef = React.useRef<"background" | "overlay">("background");
   const [showLayers, setShowLayers] = React.useState(false);
+  // Mobile-only: opens the emoji/GIF/sticker picker as a bottom sheet. On
+  // desktop the picker is embedded inline in the left rail (always visible
+  // while the Stickers tool is active).
+  const [stickerPickerOpen, setStickerPickerOpen] = React.useState(false);
 
   // Lock body scroll while editor is mounted so the underlying page's
   // scrollbar can't appear/disappear (which would resize the viewport and
@@ -346,6 +366,7 @@ export function StoryEditor() {
   }, []);
 
   const selected = layers.find((l) => l.id === selectedId);
+  const musicLayer = layers.find((l) => l.type === "music") as MusicLayer | undefined;
   const filterCss = FILTERS.find((f) => f.id === filter)?.filter ?? "none";
 
   /* ----- layer ops ----- */
@@ -356,7 +377,7 @@ export function StoryEditor() {
       text: "Type something",
       color: "#ffffff",
       bg: "transparent",
-      font: "display",
+      font: DEFAULT_FONT,
       bold: true,
       align: "center",
       x: 50,
@@ -402,7 +423,20 @@ export function StoryEditor() {
     setSelectedId(l.id);
   };
 
-  const addMusic = (track: (typeof MUSIC_TRACKS)[number]) => {
+  /** Bridge the shared emoji/GIF/sticker picker → story layers. Emoji + bundled
+   *  stickers become sticker layers; API stickers, GIFs and memes (image URLs)
+   *  become image layers. */
+  const onExpression = (pick: ExpressionPick) => {
+    if (pick.kind === "emoji") addSticker(pick.value);
+    else if (pick.kind === "sticker") {
+      if (pick.sticker.src) addImage(pick.sticker.src);
+      else if (pick.sticker.emoji) addSticker(pick.sticker.emoji);
+    } else if (pick.kind === "gif") addImage(pick.gif.src);
+    else if (pick.kind === "meme") addImage(pick.meme.src);
+    setStickerPickerOpen(false);
+  };
+
+  const addMusic = (track: Track) => {
     // Replace any existing music layer (only one allowed)
     const filtered = layers.filter((l) => l.type !== "music");
     const l: MusicLayer = {
@@ -410,6 +444,9 @@ export function StoryEditor() {
       type: "music",
       title: track.title,
       artist: track.artist,
+      cover: track.cover,
+      preview: track.preview,
+      variant: "card",
       x: 50,
       y: 12,
       rotate: 0,
@@ -436,7 +473,9 @@ export function StoryEditor() {
     const file = e.target.files?.[0];
     if (!file) return;
     const url = URL.createObjectURL(file);
-    setBg({ kind: "image", value: url });
+    if (uploadTargetRef.current === "overlay") addImage(url);
+    else setBg({ kind: "image", value: url });
+    uploadTargetRef.current = "background";
     e.target.value = "";
   };
 
@@ -495,19 +534,30 @@ export function StoryEditor() {
       ? filter
       : "none";
 
-  /* ----- download story ----- */
+  /* ----- compose / download / share story ----- */
   const [downloading, setDownloading] = React.useState(false);
-  const downloadStory = async () => {
-    if (!canvasRef.current || downloading) return;
-    setDownloading(true);
-    try {
+
+  /** Render the current story (background + drawing + layers) onto a
+   *  1080×1920 canvas. Shared by Download (→ PNG) and Share (→ data URL).
+   *  When `skipMusic` is set the music sticker is left out so it can be
+   *  re-rendered as a live (spinning / playing) overlay in the viewer. */
+  const composeCanvas = async (
+    opts?: { skipMusic?: boolean; skipImages?: boolean; dispRect?: DOMRect }
+  ): Promise<HTMLCanvasElement | null> => {
+    const skipMusic = opts?.skipMusic ?? false;
+    const skipImages = opts?.skipImages ?? false;
+    // dispRect can be captured before navigating away, so compose still works
+    // after the editor unmounts (Share closes the editor instantly).
+    const dispRect = opts?.dispRect ?? canvasRef.current?.getBoundingClientRect();
+    if (!dispRect) return null;
+    {
       const W = 1080;
       const H = 1920;
       const out = document.createElement("canvas");
       out.width = W;
       out.height = H;
       const ctx = out.getContext("2d");
-      if (!ctx) return;
+      if (!ctx) return null;
 
       // Background
       if (bg.kind === "image") {
@@ -543,7 +593,6 @@ export function StoryEditor() {
       }
 
       // Scale factors (display → export)
-      const dispRect = canvasRef.current.getBoundingClientRect();
       const sx = W / dispRect.width;
       const sy = H / dispRect.height;
 
@@ -579,14 +628,7 @@ export function StoryEditor() {
 
         if (l.type === "text") {
           const t = l as TextLayer;
-          const fontFamily =
-            t.font === "serif"
-              ? '"Times New Roman", Georgia, serif'
-              : t.font === "mono"
-                ? '"JetBrains Mono", monospace'
-                : t.font === "display"
-                  ? 'Inter, sans-serif'
-                  : "Inter, sans-serif";
+          const fontFamily = canvasFontFor(t.font);
           const fontSize = 26 * sx;
           ctx.font = `${t.bold ? "bold " : ""}${fontSize}px ${fontFamily}`;
           ctx.textAlign = t.align as CanvasTextAlign;
@@ -614,11 +656,11 @@ export function StoryEditor() {
           ctx.fillText(t.text, 0, 0);
         } else if (l.type === "sticker") {
           const s = l as StickerLayer;
-          ctx.font = `${s.size * sx}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+          ctx.font = `${s.size * sx}px ${emojiFontFamily}, "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
           ctx.textAlign = "center";
           ctx.textBaseline = "middle";
           ctx.fillText(s.emoji, 0, 0);
-        } else if (l.type === "image") {
+        } else if (l.type === "image" && !skipImages) {
           const im = l as ImageLayer;
           try {
             const img = await loadImage(im.src);
@@ -636,26 +678,105 @@ export function StoryEditor() {
           } catch {
             /* skip on load failure */
           }
-        } else if (l.type === "music") {
+        } else if (l.type === "music" && !skipMusic) {
           const m = l as MusicLayer;
-          const label = `♪ ${m.title} · ${m.artist}`;
-          ctx.font = `bold ${12 * sx}px Inter, sans-serif`;
-          const w = ctx.measureText(label).width;
-          const padX = 14 * sx;
-          const padY = 8 * sy;
-          const h = 14 * sx + padY * 2;
-          ctx.fillStyle = "rgba(0,0,0,0.55)";
-          roundedRect(ctx, -w / 2 - padX, -h / 2, w + padX * 2, h, h / 2);
-          ctx.fill();
-          ctx.fillStyle = "#ffffff";
-          ctx.textAlign = "center";
-          ctx.textBaseline = "middle";
-          ctx.fillText(label, 0, 0);
+          let coverImg: HTMLImageElement | null = null;
+          if (m.cover && m.variant !== "note") {
+            try {
+              coverImg = await loadImage(m.cover);
+            } catch {
+              /* CORS / load failure — fall back to a placeholder block */
+            }
+          }
+          if (m.variant === "square") {
+            const s = 96 * sx;
+            ctx.save();
+            roundedRect(ctx, -s / 2, -s / 2, s, s, 16 * sx);
+            ctx.clip();
+            if (coverImg) ctx.drawImage(coverImg, -s / 2, -s / 2, s, s);
+            else {
+              ctx.fillStyle = "rgba(255,255,255,0.15)";
+              ctx.fillRect(-s / 2, -s / 2, s, s);
+            }
+            ctx.restore();
+          } else if (m.variant === "circle") {
+            const r = 48 * sx;
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(0, 0, r, 0, Math.PI * 2);
+            ctx.clip();
+            if (coverImg) ctx.drawImage(coverImg, -r, -r, r * 2, r * 2);
+            else {
+              ctx.fillStyle = "rgba(255,255,255,0.15)";
+              ctx.fillRect(-r, -r, r * 2, r * 2);
+            }
+            ctx.restore();
+            ctx.fillStyle = "rgba(0,0,0,0.8)";
+            ctx.beginPath();
+            ctx.arc(0, 0, 10 * sx, 0, Math.PI * 2);
+            ctx.fill();
+          } else if (m.variant === "note") {
+            /* "Music only" — no visual on the exported story. */
+          } else {
+            // card
+            const art = 44 * sx;
+            const titleFont = 14 * sx;
+            const artistFont = 11 * sx;
+            ctx.font = `bold ${titleFont}px Inter, sans-serif`;
+            const tW = ctx.measureText(m.title).width;
+            ctx.font = `${artistFont}px Inter, sans-serif`;
+            const aW = ctx.measureText(m.artist).width;
+            const textW = Math.min(160 * sx, Math.max(tW, aW));
+            const padL = 8 * sx;
+            const padR = 16 * sx;
+            const gap = 12 * sx;
+            const boxH = art + 16 * sx;
+            const boxW = padL + art + gap + textW + padR;
+            ctx.fillStyle = "rgba(0,0,0,0.55)";
+            roundedRect(ctx, -boxW / 2, -boxH / 2, boxW, boxH, 16 * sx);
+            ctx.fill();
+            const artX = -boxW / 2 + padL;
+            const artY = -art / 2;
+            if (coverImg) {
+              ctx.save();
+              roundedRect(ctx, artX, artY, art, art, 10 * sx);
+              ctx.clip();
+              ctx.drawImage(coverImg, artX, artY, art, art);
+              ctx.restore();
+            } else {
+              ctx.fillStyle = "rgba(255,255,255,0.15)";
+              roundedRect(ctx, artX, artY, art, art, 10 * sx);
+              ctx.fill();
+            }
+            const textX = artX + art + gap;
+            ctx.save();
+            ctx.beginPath();
+            ctx.rect(textX, -boxH / 2, textW, boxH);
+            ctx.clip();
+            ctx.textAlign = "left";
+            ctx.textBaseline = "middle";
+            ctx.fillStyle = "#ffffff";
+            ctx.font = `bold ${titleFont}px Inter, sans-serif`;
+            ctx.fillText(m.title, textX, -titleFont * 0.5);
+            ctx.fillStyle = "rgba(255,255,255,0.75)";
+            ctx.font = `${artistFont}px Inter, sans-serif`;
+            ctx.fillText(m.artist, textX, artistFont * 0.9);
+            ctx.restore();
+          }
         }
         ctx.restore();
       }
 
-      // Trigger download
+      return out;
+    }
+  };
+
+  const downloadStory = async () => {
+    if (downloading) return;
+    setDownloading(true);
+    try {
+      const out = await composeCanvas();
+      if (!out) return;
       await new Promise<void>((resolve) => {
         out.toBlob((blob) => {
           if (!blob) {
@@ -678,6 +799,69 @@ export function StoryEditor() {
     }
   };
 
+  /** Share: close the editor instantly and let the chat-list progress bar run
+   *  the "upload". The canvas rect is captured synchronously so composing can
+   *  finish in the background after this component unmounts; the composed slide
+   *  is attached and committed once the bar completes. Music is kept out of the
+   *  baked PNG and re-attached as live metadata so it spins / plays in the
+   *  viewer (Instagram-style). */
+  const shareStory = () => {
+    const dispRect = canvasRef.current?.getBoundingClientRect();
+    const music = musicLayer
+      ? {
+          title: musicLayer.title,
+          artist: musicLayer.artist,
+          cover: musicLayer.cover,
+          preview: musicLayer.preview,
+          variant: musicLayer.variant,
+          x: musicLayer.x,
+          y: musicLayer.y,
+          scale: musicLayer.scale,
+          rotate: musicLayer.rotate
+        }
+      : undefined;
+
+    // Image / GIF layers are kept OUT of the baked PNG and re-rendered live in
+    // the viewer so GIFs keep animating. Capture them as % positions/sizes.
+    const overlays =
+      dispRect && dispRect.width > 0
+        ? layers
+            .filter((l) => l.type === "image")
+            .map((l) => {
+              const im = l as ImageLayer;
+              return {
+                id: im.id,
+                src: im.src,
+                x: im.x,
+                y: im.y,
+                wPct: (im.width / dispRect.width) * 100,
+                hPct: (im.height / dispRect.height) * 100,
+                scale: im.scale,
+                rotate: im.rotate,
+                filter: FILTERS.find((f) => f.id === im.filter)?.filter ?? "none"
+              };
+            })
+        : [];
+
+    startStoryUpload(currentUser.id);
+    router.push("/chats");
+
+    // Bake images into the PNG too (so the rail thumbnail shows them) — the
+    // live overlay then animates on top of that identical static frame.
+    void composeCanvas({ skipMusic: true, dispRect }).then((out) => {
+      if (out) {
+        attachStorySlide({
+          kind: "image",
+          src: out.toDataURL("image/png"),
+          music,
+          overlays
+        });
+      } else {
+        clearPendingStory();
+      }
+    });
+  };
+
   /* ----- tap canvas to add text (Instagram-style) ----- */
   const onCanvasClick = (e: React.MouseEvent) => {
     if (e.target !== e.currentTarget) return;
@@ -693,12 +877,17 @@ export function StoryEditor() {
 
   /* ----- render ----- */
   return (
-    <div className="fixed inset-0 z-[120] grid lg:grid-cols-[300px_1fr_320px] grid-cols-1 bg-black/80 backdrop-blur-xl overflow-hidden">
+    // Sits inside the app shell (below the Topbar, beside the Sidebar) rather
+    // than as a full-viewport overlay, so the global top bar stays visible.
+    <div
+      className="relative isolate h-[calc(100dvh-4rem)] w-full grid grid-cols-1 bg-background/80 backdrop-blur-xl overflow-hidden"
+      style={isWide ? { gridTemplateColumns: "380px 1fr 380px" } : undefined}
+    >
       <input ref={fileInputRef} type="file" accept="image/*" hidden onChange={onFile} />
       <input ref={cameraInputRef} type="file" accept="image/*" capture="environment" hidden onChange={onFile} />
 
       {/* ───── Left rail (desktop only) ───── */}
-      <aside className="hidden lg:flex flex-col glass-strong glass-specular border-r border-white/10 h-full overflow-hidden">
+      <aside className="hidden lg:flex flex-col glass-strong glass-specular border-r border-border/60 h-full overflow-hidden">
         <div className="p-4 flex items-center justify-between">
           <Button variant="ghost" size="icon-sm" onClick={() => router.back()}>
             <ArrowLeft />
@@ -722,13 +911,16 @@ export function StoryEditor() {
           </TabsList>
         </Tabs>
 
-        <div className="px-3 mt-3 flex-1 overflow-y-auto no-scrollbar pb-6">
+        <div className="px-3 mt-5 flex-1 overflow-y-auto no-scrollbar pb-6">
           {tool === "media" && (
             <DesktopMediaPanel
               onPickStock={(src) => setBg({ kind: "image", value: src })}
               onPickGradient={(g) => setBg({ kind: "gradient", value: g })}
               onPickOverlay={(src) => addImage(src)}
-              onUpload={() => fileInputRef.current?.click()}
+              onUpload={(mode) => {
+                uploadTargetRef.current = mode;
+                fileInputRef.current?.click();
+              }}
             />
           )}
           {tool === "text" && (
@@ -738,7 +930,9 @@ export function StoryEditor() {
               updateSelected={(p) => updateSelected(p)}
             />
           )}
-          {tool === "stickers" && <StickerPanel onPick={addSticker} />}
+          {tool === "stickers" && (
+            <ExpressionsPicker inline open onClose={() => {}} onPick={onExpression} />
+          )}
           {tool === "filters" && <FilterPanel value={filter} onChange={setFilter} preview={bg} />}
           {tool === "draw" && (
             <DrawPanel
@@ -749,9 +943,7 @@ export function StoryEditor() {
               clear={() => setPaths([])}
             />
           )}
-          {tool === "music" && (
-            <MusicPanel tracks={MUSIC_TRACKS} onPick={addMusic} />
-          )}
+          {tool === "music" && <MusicPanel onPick={addMusic} />}
         </div>
       </aside>
 
@@ -782,14 +974,15 @@ export function StoryEditor() {
               <motion.span
                 animate={{ rotate: 360 }}
                 transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                className="block size-4 border-2 border-white/30 border-t-white rounded-full"
+                className="block size-4 border-2 border-foreground/30 border-t-foreground rounded-full"
               />
             ) : (
               <Download />
             )}
           </Button>
-          <Button variant="gradient">
-            <Send /> {t("Share")}
+          <Button variant="gradient" onClick={shareStory}>
+            <Send />
+            {t("Share")}
           </Button>
         </div>
 
@@ -857,7 +1050,7 @@ export function StoryEditor() {
           <motion.div
             initial={{ y: 20, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
-            className="absolute bottom-36 lg:bottom-6 inline-flex items-center gap-1 glass-strong rounded-full px-2 py-1.5 border border-white/15 z-10"
+            className="absolute bottom-36 lg:bottom-6 inline-flex items-center gap-1 glass-strong rounded-full px-2 py-1.5 border border-border/50 z-10"
           >
             <Button variant="ghost" size="icon-sm" onClick={() => updateSelected({ rotate: (selected?.rotate ?? 0) - 15 })}>
               ↺
@@ -871,10 +1064,41 @@ export function StoryEditor() {
             <Button variant="ghost" size="icon-sm" onClick={() => updateSelected({ scale: Math.min(3, (selected?.scale ?? 1) + 0.1) })}>
               +
             </Button>
-            <div className="w-px h-5 bg-white/15 mx-1" />
+            <div className="w-px h-5 bg-border mx-1" />
             <Button variant="ghost" size="icon-sm" onClick={removeSelected}>
               <Trash2 className="size-3.5" />
             </Button>
+          </motion.div>
+        )}
+
+        {/* Music style switcher — shown when a music layer is selected */}
+        {selected?.type === "music" && (
+          <motion.div
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            className="absolute bottom-52 lg:bottom-20 inline-flex items-center gap-1 glass-strong rounded-full px-2 py-1.5 border border-border/50 z-10"
+          >
+            {(
+              [
+                { id: "card", label: "Card" },
+                { id: "square", label: "Square" },
+                { id: "circle", label: "Vinyl" },
+                { id: "note", label: "Music only" }
+              ] as const
+            ).map((v) => (
+              <button
+                key={v.id}
+                onClick={() => updateSelected({ variant: v.id } as Partial<MusicLayer>)}
+                className={cn(
+                  "px-3 h-8 rounded-full text-xs font-medium transition-colors",
+                  (selected as MusicLayer).variant === v.id
+                    ? "bg-foreground text-background"
+                    : "text-foreground/80 hover:bg-foreground/10"
+                )}
+              >
+                {t(v.label)}
+              </button>
+            ))}
           </motion.div>
         )}
 
@@ -933,10 +1157,10 @@ export function StoryEditor() {
       </main>
 
       {/* ───── Right rail (desktop only) ───── */}
-      <aside className="hidden lg:flex flex-col glass-strong glass-specular border-l border-white/10 h-full overflow-hidden">
+      <aside className="hidden lg:flex flex-col glass-strong glass-specular border-l border-border/60 h-full overflow-hidden">
         <div className="p-4 flex items-center justify-between">
-          <h3 className="text-sm font-semibold">{t("Inspector")}</h3>
-          <span className="text-[10px] text-muted-foreground">{layers.length} {t("layers")}</span>
+          <h3 className="text-lg font-semibold text-foreground">{t("Inspector")}</h3>
+          <span className="text-xs font-medium text-foreground/70">{layers.length} {t("layers")}</span>
         </div>
 
         <div className="px-3 flex-1 overflow-y-auto no-scrollbar pb-6">
@@ -947,16 +1171,16 @@ export function StoryEditor() {
               remove={removeSelected}
             />
           ) : (
-            <div className="text-center text-xs text-muted-foreground py-12 px-4">
-              <Sparkles className="size-6 mx-auto mb-2 text-violet-400" />
+            <div className="text-center text-sm text-foreground/80 py-12 px-4">
+              <Sparkles className="size-7 mx-auto mb-2 text-violet-400" />
               {t("Tap a layer on the canvas to fine-tune position, font, color, and rotation.")}
             </div>
           )}
 
           <div className="mt-6">
-            <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">{t("Layers")}</h4>
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-foreground/70 mb-2">{t("Layers")}</h4>
             {layers.length === 0 ? (
-              <p className="text-xs text-muted-foreground">{t("No layers yet.")}</p>
+              <p className="text-sm text-foreground/80">{t("No layers yet.")}</p>
             ) : (
               <Reorder.Group
                 axis="y"
@@ -983,6 +1207,12 @@ export function StoryEditor() {
         active={sheet}
         filtersOpen={filtersOpen}
         onSelect={(s) => {
+          // Stickers tab opens the shared emoji/GIF/sticker picker.
+          if (s === "stickers") {
+            setTool("stickers");
+            setStickerPickerOpen(true);
+            return;
+          }
           if (s === "text") {
             // Add text directly to center of canvas — Instagram style
             addText();
@@ -1011,11 +1241,13 @@ export function StoryEditor() {
               addImage(src);
               setSheet(null);
             }}
-            onBrowse={() => {
+            onBrowse={(mode) => {
+              uploadTargetRef.current = mode;
               fileInputRef.current?.click();
               setSheet(null);
             }}
-            onCamera={() => {
+            onCamera={(mode) => {
+              uploadTargetRef.current = mode;
               cameraInputRef.current?.click();
               setSheet(null);
             }}
@@ -1041,16 +1273,6 @@ export function StoryEditor() {
             onAdd={() => addText()}
           />
         )}
-        {sheet === "stickers" && (
-          <MobileStickersSheet
-            key="stickers"
-            onClose={() => setSheet(null)}
-            onPick={(s) => {
-              addSticker(s);
-              setSheet(null);
-            }}
-          />
-        )}
         {sheet === "draw" && (
           <MobileDrawSheet
             key="draw"
@@ -1066,7 +1288,6 @@ export function StoryEditor() {
           <MobileMusicSheet
             key="music"
             onClose={() => setSheet(null)}
-            tracks={MUSIC_TRACKS}
             onPick={(t) => {
               addMusic(t);
               setSheet(null);
@@ -1074,6 +1295,20 @@ export function StoryEditor() {
           />
         )}
       </AnimatePresence>
+
+      {/* Auto-play the selected track's 30s preview on loop — like Instagram. */}
+      {musicLayer?.preview && (
+        // eslint-disable-next-line jsx-a11y/media-has-caption
+        <audio key={musicLayer.id} src={musicLayer.preview} autoPlay loop className="hidden" />
+      )}
+
+      {/* Mobile emoji / GIF / sticker picker (bottom sheet). Desktop uses the
+          inline picker embedded in the left rail instead. */}
+      <ExpressionsPicker
+        open={stickerPickerOpen}
+        onClose={() => setStickerPickerOpen(false)}
+        onPick={onExpression}
+      />
     </div>
   );
 }
@@ -1135,7 +1370,7 @@ function MobileSheetWrapper({
             </button>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto px-5 pt-2 pb-[max(1rem,env(safe-area-inset-bottom))]">
+        <div className="flex-1 overflow-y-auto px-5 pt-3.5 pb-[max(1rem,env(safe-area-inset-bottom))]">
           {children}
         </div>
       </motion.div>
@@ -1156,8 +1391,8 @@ function MobileMediaSheet({
   onClose: () => void;
   onPickStock: (src: string) => void;
   onPickGradient: (g: string) => void;
-  onBrowse: () => void;
-  onCamera: () => void;
+  onBrowse: (mode: "background" | "overlay") => void;
+  onCamera: (mode: "background" | "overlay") => void;
   onPickOverlay: (src: string) => void;
 }) {
   const t = useT();
@@ -1219,7 +1454,7 @@ function MobileMediaSheet({
           >
             {/* Camera tile */}
             <button
-              onClick={onCamera}
+              onClick={() => onCamera(mode)}
               className="relative aspect-square rounded-2xl overflow-hidden bg-gradient-to-br from-violet-600 via-fuchsia-500 to-cyan-400 grid place-items-center group"
             >
               <div className="relative z-10 flex flex-col items-center gap-1.5">
@@ -1233,7 +1468,7 @@ function MobileMediaSheet({
 
             {/* Browse tile */}
             <button
-              onClick={onBrowse}
+              onClick={() => onBrowse(mode)}
               className="relative aspect-square rounded-2xl overflow-hidden bg-foreground/[0.04] border border-border/40 grid place-items-center group"
             >
               <div className="flex flex-col items-center gap-1.5">
@@ -1336,7 +1571,7 @@ function DesktopLayerRow({
         <span className="size-7 rounded-lg glass-subtle grid place-items-center text-sm shrink-0">
           {layer.type === "text" ? "T" : layer.type === "sticker" ? (layer as StickerLayer).emoji : "♪"}
         </span>
-        <span className="text-xs truncate flex-1">
+        <span className="text-sm font-medium text-foreground truncate flex-1">
           {layer.type === "text" ? (layer as TextLayer).text : layer.type === "music" ? (layer as MusicLayer).title : t("Sticker")}
         </span>
       </button>
@@ -1517,7 +1752,7 @@ function MobileTextSheet({
             autoFocus
             className="block w-full min-h-[7rem] rounded-2xl glass-subtle px-4 py-3.5 text-base leading-relaxed text-foreground placeholder:text-muted-foreground outline-none resize-none focus:ring-2 focus:ring-cyan-400/60"
             placeholder={t("Type your story…")}
-            style={{ fontFamily: FONT_FAMILIES[selected.font] }}
+            style={{ fontFamily: fontFamilyFor(selected.font) }}
           />
 
           <div>
@@ -1560,17 +1795,18 @@ function MobileTextSheet({
           <div>
             <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">{t("Font")}</h4>
             <div className="grid grid-cols-4 gap-2">
-              {(["sans", "display", "serif", "mono"] as const).map((f) => (
+              {FONT_OPTIONS.map((f) => (
                 <button
-                  key={f}
-                  onClick={() => update({ font: f })}
+                  key={f.id}
+                  onClick={() => update({ font: f.id })}
+                  title={f.label}
                   className={cn(
                     "h-12 rounded-xl text-base transition-colors",
-                    selected.font === f
+                    selected.font === f.id
                       ? "bg-foreground text-background"
                       : "glass-subtle text-foreground"
                   )}
-                  style={{ fontFamily: FONT_FAMILIES[f] }}
+                  style={{ fontFamily: f.family }}
                 >
                   Aa
                 </button>
@@ -1592,6 +1828,7 @@ function MobileTextSheet({
                   style={{ background: c }}
                 />
               ))}
+              <EyeDropperButton className="size-9" onPick={(hex) => update({ color: hex })} />
             </div>
           </div>
 
@@ -1606,7 +1843,7 @@ function MobileTextSheet({
                     onClick={() => update({ bg: b.value, color: b.fg })}
                     className={cn(
                       "h-11 rounded-xl text-xs grid place-items-center transition border",
-                      isTransparent ? "glass-subtle border-border/40" : "border-white/10",
+                      isTransparent ? "glass-subtle border-border/40" : "border-border/40",
                       selected.bg === b.value ? "ring-2 ring-foreground" : ""
                     )}
                     style={
@@ -1623,78 +1860,6 @@ function MobileTextSheet({
               })}
             </div>
           </div>
-        </div>
-      )}
-    </MobileSheetWrapper>
-  );
-}
-
-function MobileStickersSheet({
-  onClose,
-  onPick
-}: {
-  onClose: () => void;
-  onPick: (s: string) => void;
-}) {
-  const t = useT();
-  const [q, setQ] = React.useState("");
-  const all = React.useMemo(() => STICKER_PACKS.flatMap((p) => p.items.map((i) => ({ pack: p.name, emoji: i }))), []);
-  const filtered = q.trim()
-    ? all.filter((x) => x.pack.toLowerCase().includes(q.toLowerCase()))
-    : null;
-
-  return (
-    <MobileSheetWrapper title={t("Stickers")} onClose={onClose} height="72vh">
-      <div className="relative mb-4">
-        <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-        <Input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder={t("Search stickers")}
-          className="pl-10 h-11 glass-subtle text-foreground placeholder:text-muted-foreground border-border/40"
-        />
-      </div>
-
-      {filtered ? (
-        <div className="grid grid-cols-6 gap-2">
-          {filtered.length === 0 ? (
-            <p className="col-span-6 text-center text-sm text-muted-foreground py-8">
-              {t("No matches")} · &quot;{q}&quot;
-            </p>
-          ) : (
-            filtered.map((x, i) => (
-              <motion.button
-                key={`${x.pack}-${i}`}
-                whileTap={{ scale: 0.85 }}
-                onClick={() => onPick(x.emoji)}
-                className="aspect-square text-3xl rounded-2xl glass-subtle grid place-items-center"
-              >
-                {x.emoji}
-              </motion.button>
-            ))
-          )}
-        </div>
-      ) : (
-        <div className="space-y-5">
-          {STICKER_PACKS.map((pack) => (
-            <div key={pack.name}>
-              <h4 className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 px-1">
-                {pack.name}
-              </h4>
-              <div className="grid grid-cols-6 gap-2">
-                {pack.items.map((s) => (
-                  <motion.button
-                    key={s}
-                    whileTap={{ scale: 0.85 }}
-                    onClick={() => onPick(s)}
-                    className="aspect-square text-3xl rounded-2xl glass-subtle grid place-items-center"
-                  >
-                    {s}
-                  </motion.button>
-                ))}
-              </div>
-            </div>
-          ))}
         </div>
       )}
     </MobileSheetWrapper>
@@ -1754,6 +1919,7 @@ function MobileDrawSheet({
                 style={{ background: c }}
               />
             ))}
+            <EyeDropperButton className="aspect-square w-full" onPick={(hex) => setColor(hex)} />
           </div>
         </div>
 
@@ -1776,44 +1942,48 @@ function MobileDrawSheet({
 
 function MobileMusicSheet({
   onClose,
-  tracks,
   onPick
 }: {
   onClose: () => void;
-  tracks: typeof MUSIC_TRACKS;
   onPick: (t: Track) => void;
 }) {
   const t = useT();
-  const [q, setQ] = React.useState("");
+  const { query, setQuery, results, loading, error } = useItunesSearch();
   const { playingId, play, stop } = useAudioPreview();
-  const filtered = tracks.filter(
-    (tr) =>
-      tr.title.toLowerCase().includes(q.toLowerCase()) ||
-      tr.artist.toLowerCase().includes(q.toLowerCase())
-  );
 
   // stop audio when sheet unmounts
   React.useEffect(() => () => stop(), [stop]);
 
   return (
-    <MobileSheetWrapper title={t("Music")} onClose={onClose} height="72vh">
+    <MobileSheetWrapper title={t("Music")} onClose={onClose} height="80vh">
       <div className="relative mb-4">
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
         <Input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder={t("Search artists, tracks")}
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          autoFocus
+          placeholder={t("Search Apple Music")}
           className="pl-10 h-11 glass-subtle text-foreground placeholder:text-muted-foreground border-border/40"
         />
+        {loading && (
+          <span className="absolute right-3.5 top-1/2 -translate-y-1/2 block size-4 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
+        )}
       </div>
 
-      <div className="space-y-2">
-        {filtered.length === 0 ? (
-          <p className="text-center text-sm text-muted-foreground py-8">
-            {t("No tracks match")} &quot;{q}&quot;
-          </p>
-        ) : (
-          filtered.map((tr) => {
+      {error ? (
+        <p className="text-center text-sm text-rose-400 py-8">{t(error)}</p>
+      ) : results.length === 0 && !loading ? (
+        <p className="text-center text-sm text-muted-foreground py-8">
+          {query.trim() ? `${t("No tracks match")} "${query}"` : t("Powered by Apple Music.")}
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {!query.trim() && (
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground px-1 mb-1">
+              {t("Trending now")}
+            </p>
+          )}
+          {results.map((tr) => {
             const isPlaying = playingId === tr.id;
             return (
               <div
@@ -1826,14 +1996,17 @@ function MobileMusicSheet({
                 tabIndex={0}
                 className="w-full flex items-center gap-3 p-3 rounded-2xl glass-subtle hover:bg-foreground/5 transition-colors text-left cursor-pointer"
               >
-                <div className="size-12 rounded-xl bg-gradient-to-br from-violet-500 via-fuchsia-500 to-cyan-400 grid place-items-center text-white shadow-glow shrink-0">
-                  <Music className="size-5" />
+                <div className="size-12 rounded-xl overflow-hidden grid place-items-center text-white shadow-glow shrink-0 bg-gradient-to-br from-violet-500 via-fuchsia-500 to-cyan-400">
+                  {tr.cover ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={tr.cover} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <Music className="size-5" />
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold text-foreground truncate">{tr.title}</p>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {tr.artist} · {tr.duration}
-                  </p>
+                  <p className="text-xs text-muted-foreground truncate">{tr.artist}</p>
                 </div>
                 <button
                   onClick={(e) => {
@@ -1852,9 +2025,9 @@ function MobileMusicSheet({
                 </button>
               </div>
             );
-          })
-        )}
-      </div>
+          })}
+        </div>
+      )}
 
       <p className="text-[11px] text-muted-foreground text-center mt-4 pb-4">
         {t("Tap a track to add it to your story. Tap play for a 30-second preview.")}
@@ -1874,7 +2047,7 @@ function DesktopMediaPanel({
   onPickStock: (src: string) => void;
   onPickGradient: (g: string) => void;
   onPickOverlay: (src: string) => void;
-  onUpload: () => void;
+  onUpload: (mode: "background" | "overlay") => void;
 }) {
   const t = useT();
   const [tab, setTab] = React.useState<"images" | "gradients">("images");
@@ -1965,7 +2138,7 @@ function DesktopMediaPanel({
               <div className="grid grid-cols-3 gap-1.5">
                 {/* Upload tile — sits inline with the stock thumbnails */}
                 <button
-                  onClick={onUpload}
+                  onClick={() => onUpload(mode)}
                   className="relative aspect-square rounded-xl border-2 border-dashed border-border/60 grid place-items-center hover:border-foreground/40 transition-colors group"
                   aria-label={t("Upload an image")}
                 >
@@ -2043,6 +2216,51 @@ function DesktopMediaPanel({
   );
 }
 
+/** Eyedropper — samples any on-screen pixel (e.g. a color from the story
+ *  image) via the native EyeDropper API. Hidden where unsupported (Safari /
+ *  Firefox). Rendered as an extra "swatch" beside the preset colors. */
+function EyeDropperButton({
+  onPick,
+  className = "size-7"
+}: {
+  onPick: (hex: string) => void;
+  className?: string;
+}) {
+  const t = useT();
+  const [supported, setSupported] = React.useState(false);
+  React.useEffect(() => {
+    setSupported(typeof window !== "undefined" && "EyeDropper" in window);
+  }, []);
+  if (!supported) return null;
+  const open = async () => {
+    try {
+      const Ctor = (
+        window as unknown as {
+          EyeDropper: new () => { open: () => Promise<{ sRGBHex: string }> };
+        }
+      ).EyeDropper;
+      const res = await new Ctor().open();
+      if (res?.sRGBHex) onPick(res.sRGBHex);
+    } catch {
+      /* user cancelled the picker */
+    }
+  };
+  return (
+    <button
+      type="button"
+      onClick={open}
+      title={t("Pick color from image")}
+      aria-label={t("Pick color from image")}
+      className={cn(
+        "rounded-full grid place-items-center glass-subtle border border-border/50 text-foreground hover:bg-foreground/10 transition",
+        className
+      )}
+    >
+      <Pipette className="size-3.5" />
+    </button>
+  );
+}
+
 function TextPanel({
   addText,
   selected,
@@ -2071,18 +2289,19 @@ function TextPanel({
 
           <div>
             <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">{t("Font")}</h4>
-            <div className="grid grid-cols-4 gap-1">
-              {(["sans", "display", "serif", "mono"] as const).map((f) => (
+            <div className="grid grid-cols-4 gap-1.5">
+              {FONT_OPTIONS.map((f) => (
                 <button
-                  key={f}
-                  onClick={() => updateSelected({ font: f })}
+                  key={f.id}
+                  onClick={() => updateSelected({ font: f.id })}
+                  title={f.label}
                   className={cn(
-                    "h-10 rounded-lg text-xs transition",
-                    selected.font === f
+                    "h-10 rounded-lg text-sm transition",
+                    selected.font === f.id
                       ? "bg-foreground text-background"
                       : "glass-subtle hover:bg-foreground/5"
                   )}
-                  style={{ fontFamily: FONT_FAMILIES[f] }}
+                  style={{ fontFamily: f.family }}
                 >
                   Aa
                 </button>
@@ -2099,11 +2318,12 @@ function TextPanel({
                   onClick={() => updateSelected({ color: c })}
                   className={cn(
                     "size-7 rounded-full ring-2 ring-offset-2 ring-offset-transparent transition",
-                    selected.color === c ? "ring-white" : "ring-transparent"
+                    selected.color === c ? "ring-foreground" : "ring-transparent"
                   )}
                   style={{ background: c }}
                 />
               ))}
+              <EyeDropperButton onPick={(hex) => updateSelected({ color: hex })} />
             </div>
           </div>
 
@@ -2116,7 +2336,7 @@ function TextPanel({
                   onClick={() => updateSelected({ bg: b.value, color: b.fg })}
                   className={cn(
                     "h-8 rounded-md text-[10px] grid place-items-center transition",
-                    selected.bg === b.value ? "ring-2 ring-white" : ""
+                    selected.bg === b.value ? "ring-2 ring-foreground" : ""
                   )}
                   style={{
                     background: b.value === "transparent" ? "rgba(255,255,255,0.06)" : b.value,
@@ -2156,33 +2376,6 @@ function TextPanel({
   );
 }
 
-function StickerPanel({ onPick }: { onPick: (e: string) => void }) {
-  return (
-    <div className="space-y-5">
-      {STICKER_PACKS.map((pack) => (
-        <div key={pack.name}>
-          <h4 className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
-            {pack.name}
-          </h4>
-          <div className="grid grid-cols-5 gap-1.5">
-            {pack.items.map((s) => (
-              <motion.button
-                key={s}
-                whileHover={{ scale: 1.2, rotate: 6 }}
-                whileTap={{ scale: 0.9 }}
-                onClick={() => onPick(s)}
-                className="aspect-square text-2xl rounded-xl glass-subtle hover:bg-foreground/5"
-              >
-                {s}
-              </motion.button>
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function FilterPanel({
   value,
   onChange,
@@ -2193,7 +2386,7 @@ function FilterPanel({
   preview: Background;
 }) {
   return (
-    <div className="grid grid-cols-3 gap-2">
+    <div className="grid grid-cols-3 gap-2 pt-3">
       {FILTERS.map((f) => (
         <button
           key={f.id}
@@ -2251,11 +2444,12 @@ function DrawPanel({
               onClick={() => setColor(c)}
               className={cn(
                 "size-7 rounded-full ring-2 ring-offset-2 ring-offset-transparent transition",
-                color === c ? "ring-white" : "ring-transparent"
+                color === c ? "ring-foreground" : "ring-transparent"
               )}
               style={{ background: c }}
             />
           ))}
+          <EyeDropperButton onPick={(hex) => setColor(hex)} />
         </div>
       </div>
       <div>
@@ -2275,59 +2469,85 @@ function DrawPanel({
   );
 }
 
-function MusicPanel({
-  tracks,
-  onPick
-}: {
-  tracks: typeof MUSIC_TRACKS;
-  onPick: (t: Track) => void;
-}) {
+function MusicPanel({ onPick }: { onPick: (t: Track) => void }) {
   const t = useT();
+  const { query, setQuery, results, loading, error } = useItunesSearch();
   const { playingId, play, stop } = useAudioPreview();
   React.useEffect(() => () => stop(), [stop]);
 
   return (
-    <div className="space-y-2">
-      {tracks.map((tr) => {
-        const isPlaying = playingId === tr.id;
-        return (
-          <div
-            key={tr.id}
-            onClick={() => {
-              stop();
-              onPick(tr);
-            }}
-            role="button"
-            tabIndex={0}
-            className="w-full flex items-center gap-3 p-2.5 rounded-xl glass-subtle hover:bg-foreground/5 transition-colors cursor-pointer"
-          >
-            <div className="size-10 rounded-lg bg-gradient-to-br from-violet-500 to-cyan-400 grid place-items-center text-white shadow-glow shrink-0">
-              <Music className="size-4" />
-            </div>
-            <div className="flex-1 min-w-0 text-left">
-              <p className="text-sm font-medium truncate">{tr.title}</p>
-              <p className="text-[10px] text-muted-foreground truncate">
-                {tr.artist} · {tr.duration}
-              </p>
-            </div>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                play(tr);
-              }}
-              className={cn(
-                "size-8 rounded-full grid place-items-center transition-colors shrink-0",
-                isPlaying
-                  ? "bg-foreground text-background"
-                  : "bg-foreground/10 text-foreground hover:bg-foreground/20"
-              )}
-              aria-label={isPlaying ? t("Stop preview") : t("Play 30s preview")}
-            >
-              {isPlaying ? <Pause className="size-3" /> : <Play className="size-3 ml-0.5" />}
-            </button>
-          </div>
-        );
-      })}
+    <div className="space-y-3 pt-3">
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+        <Input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t("Search Apple Music")}
+          className="pl-9 h-10 glass-subtle border-border/40"
+        />
+        {loading && (
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 block size-4 border-2 border-foreground/30 border-t-foreground rounded-full animate-spin" />
+        )}
+      </div>
+
+      {error ? (
+        <p className="text-center text-xs text-rose-400 py-8">{t(error)}</p>
+      ) : results.length === 0 && !loading ? (
+        <p className="text-center text-xs text-muted-foreground py-8">
+          {query.trim() ? `${t("No tracks match")} "${query}"` : t("Powered by Apple Music.")}
+        </p>
+      ) : (
+        <div className="space-y-2">
+          {!query.trim() && (
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground px-1 mb-1">
+              {t("Trending now")}
+            </p>
+          )}
+          {results.map((tr) => {
+            const isPlaying = playingId === tr.id;
+            return (
+              <div
+                key={tr.id}
+                onClick={() => {
+                  stop();
+                  onPick(tr);
+                }}
+                role="button"
+                tabIndex={0}
+                className="w-full flex items-center gap-3 p-2.5 rounded-xl glass-subtle hover:bg-foreground/5 transition-colors cursor-pointer"
+              >
+                <div className="size-10 rounded-lg overflow-hidden grid place-items-center text-white shadow-glow shrink-0 bg-gradient-to-br from-violet-500 to-cyan-400">
+                  {tr.cover ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={tr.cover} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <Music className="size-4" />
+                  )}
+                </div>
+                <div className="flex-1 min-w-0 text-left">
+                  <p className="text-sm font-medium truncate">{tr.title}</p>
+                  <p className="text-[10px] text-muted-foreground truncate">{tr.artist}</p>
+                </div>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    play(tr);
+                  }}
+                  className={cn(
+                    "size-8 rounded-full grid place-items-center transition-colors shrink-0",
+                    isPlaying
+                      ? "bg-foreground text-background"
+                      : "bg-foreground/10 text-foreground hover:bg-foreground/20"
+                  )}
+                  aria-label={isPlaying ? t("Stop preview") : t("Play 30s preview")}
+                >
+                  {isPlaying ? <Pause className="size-3" /> : <Play className="size-3 ml-0.5" />}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -2377,6 +2597,73 @@ function Inspector({
   );
 }
 
+/* ----------------------------- music layer (3 variants) ----------------------------- */
+
+// Memoised: the parent LayerView re-renders on select / drag / restyle, and a
+// fresh render would restart the framer rotate/marquee. With memo it only
+// re-renders when the music layer's own data changes, so the vinyl keeps
+// spinning continuously.
+const MusicLayerView = React.memo(function MusicLayerView({ m }: { m: MusicLayer }) {
+  // Square cover art only.
+  if (m.variant === "square") {
+    return (
+      <div className="relative size-24 rounded-2xl overflow-hidden ring-2 ring-white/30 shadow-floating">
+        {m.cover ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={m.cover} alt="" draggable={false} className="w-full h-full object-cover" />
+        ) : (
+          <div className="w-full h-full bg-white/15 grid place-items-center text-white">
+            <Music className="size-7" />
+          </div>
+        )}
+        <span className="absolute bottom-1.5 right-1.5 size-6 rounded-full bg-black/55 backdrop-blur grid place-items-center text-white">
+          <Music className="size-3" />
+        </span>
+      </div>
+    );
+  }
+
+  // Spinning circular cover — like a vinyl record.
+  if (m.variant === "circle") {
+    return <VinylDisc cover={m.cover} />;
+  }
+
+  // "Music only" — nothing rendered on the story; the track just plays. It
+  // still appears in the layers list so it can be selected / restyled / removed.
+  if (m.variant === "note") {
+    return null;
+  }
+
+  // card (default): glass pill, square cover + marquee title + artist.
+  return (
+    <div className="inline-flex items-center gap-3 pl-2 pr-4 py-2 rounded-2xl bg-black/55 backdrop-blur-md ring-1 ring-white/15 text-white">
+      {m.cover ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={m.cover} alt="" draggable={false} className="size-11 rounded-xl object-cover shrink-0" />
+      ) : (
+        <span className="size-11 rounded-xl bg-white/15 grid place-items-center shrink-0">
+          <Music className="size-4" />
+        </span>
+      )}
+      <div className="min-w-0">
+        <div className="overflow-hidden w-[150px]">
+          <motion.div
+            className="inline-flex whitespace-nowrap gap-10"
+            animate={{ x: ["0%", "-50%"] }}
+            transition={{ duration: 7, repeat: Infinity, ease: "linear" }}
+          >
+            <span className="text-sm font-bold">{m.title}</span>
+            <span className="text-sm font-bold" aria-hidden>
+              {m.title}
+            </span>
+          </motion.div>
+        </div>
+        <span className="block text-[11px] opacity-75 truncate w-[150px]">{m.artist}</span>
+      </div>
+    </div>
+  );
+});
+
 /* ----------------------------- layer view ----------------------------- */
 
 function LayerView({
@@ -2425,8 +2712,27 @@ function LayerView({
       initial={{ scale: 0.6, opacity: 0 }}
       exit={{ scale: 0.6, opacity: 0 }}
       transition={{ type: "spring", stiffness: 280, damping: 22 }}
+      // framer-motion writes an inline `transform`, which overrides Tailwind's
+      // `-translate-1/2`. Prepend the centering here so the layer's CENTER sits
+      // on (x%, y%) — matching how the PNG export anchors each layer. Without
+      // this the on-screen (top-left-anchored) and exported (center-anchored)
+      // positions diverge by half the element size.
+      //
+      // At rest framer emits `generated === "none"`; `translate(...) none` is
+      // INVALID CSS, so the browser drops the whole transform (losing the
+      // centering + scale) until you interact — which made layers visibly jump
+      // / resize when grabbed. Only append a real transform.
+      transformTemplate={(_, generated) =>
+        generated && generated !== "none"
+          ? `translate(-50%, -50%) ${generated}`
+          : "translate(-50%, -50%)"
+      }
       className={cn(
-        "absolute -translate-x-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing touch-none",
+        // `w-max` (width: max-content) sizes the layer to its own content so it
+        // never gets squeezed by the space remaining to the canvas edge — without
+        // it, a layer near the right edge wraps/shrinks because `left: X%` caps
+        // its available width.
+        "absolute w-max cursor-grab active:cursor-grabbing touch-none",
         selected && "outline outline-2 outline-cyan-400 outline-offset-2 rounded-md"
       )}
     >
@@ -2436,7 +2742,7 @@ function LayerView({
           style={{
             background: (layer as TextLayer).bg,
             color: (layer as TextLayer).color,
-            fontFamily: FONT_FAMILIES[(layer as TextLayer).font],
+            fontFamily: fontFamilyFor((layer as TextLayer).font),
             fontWeight: (layer as TextLayer).bold ? 700 : 400,
             textAlign: (layer as TextLayer).align,
             fontSize: 26,
@@ -2448,7 +2754,14 @@ function LayerView({
           {(layer as TextLayer).text}
         </div>
       ) : layer.type === "sticker" ? (
-        <span style={{ fontSize: (layer as StickerLayer).size }}>{(layer as StickerLayer).emoji}</span>
+        <span
+          style={{
+            fontSize: (layer as StickerLayer).size,
+            fontFamily: 'var(--font-emoji),"Apple Color Emoji","Segoe UI Emoji",sans-serif'
+          }}
+        >
+          {(layer as StickerLayer).emoji}
+        </span>
       ) : layer.type === "image" ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -2467,11 +2780,7 @@ function LayerView({
           className="select-none pointer-events-none shadow-[0_8px_24px_-6px_rgba(0,0,0,0.5)]"
         />
       ) : (
-        <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-black/50 backdrop-blur-md text-white text-xs whitespace-nowrap">
-          <Music className="size-3" />
-          <span className="font-semibold">{(layer as MusicLayer).title}</span>
-          <span className="opacity-70">· {(layer as MusicLayer).artist}</span>
-        </div>
+        <MusicLayerView m={layer as MusicLayer} />
       )}
     </motion.div>
   );

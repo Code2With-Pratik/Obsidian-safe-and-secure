@@ -15,6 +15,7 @@ import {
   Search,
   Compass,
   Sparkles,
+  Camera,
   Sun,
   Moon
 } from "lucide-react";
@@ -27,6 +28,7 @@ const navActions = [
   { label: "Open Chats", href: "/chats", icon: MessageCircle, hint: "G then C" },
   { label: "Ghost Rooms", href: "/ghost-rooms", icon: Ghost, hint: "G then G" },
   { label: "Discover", href: "/discover", icon: Compass },
+  { label: "Create story", href: "/stories/create", icon: Camera },
   { label: "Calls", href: "/calls", icon: Phone },
   { label: "Whiteboard", href: "/whiteboard", icon: PencilRuler },
   { label: "Files & Vault", href: "/files", icon: Folder },

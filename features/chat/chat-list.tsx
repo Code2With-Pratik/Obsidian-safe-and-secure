@@ -37,6 +37,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useChatStore } from "@/store/use-chat-store";
 import { useCommunityStore } from "@/store/use-community-store";
+import { useStoriesStore } from "@/store/use-stories-store";
+import { StoryAvatar } from "@/components/stories/story-avatar";
 import { users as allUsers } from "@/lib/mock-data";
 import { cn, formatRelative } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
@@ -44,6 +46,7 @@ import { CommunityGridCard, CommunityGridEmpty } from "@/features/community/comm
 import { InterestMatchPopup } from "@/features/community/interest-match-popup";
 import { CreateCommunityDialog } from "@/features/community/create-community-dialog";
 import { StoriesRail } from "./stories-rail";
+import { StoryUploadBar } from "./story-upload-bar";
 import { NewGroupDialog } from "./new-group-dialog";
 import { EmptyChatList } from "./empty-chat-list";
 import type { Chat, ChatHint, Community } from "@/types";
@@ -317,6 +320,9 @@ export function ChatList({
           </DropdownMenu>
         </div>
       </div>
+
+      {/* Story upload progress — sits between the title and the filter tabs. */}
+      <StoryUploadBar />
 
       {/* Filter chips — swap based on the active view. */}
       {!isEmpty && view === "messages" && (
@@ -624,6 +630,12 @@ function ChatRow({
   active?: boolean;
   onSelect?: (id: string) => void;
 }) {
+  // DM chats map to a single user → show their story ring on the avatar.
+  const storyUserId =
+    chat.type === "dm" ? allUsers.find((u) => u.name === chat.name)?.id : undefined;
+  const hasStory = useStoriesStore((s) =>
+    storyUserId ? !!s.byUser[storyUserId]?.slides.length : false
+  );
   return (
     <Link
       href={`/chats/${chat.id}`}
@@ -640,16 +652,20 @@ function ChatRow({
       )}
 
         <div className="relative shrink-0">
-          <AnimatedAvatar
-            src={chat.avatar}
-            name={chat.name}
-            size={52}
-            status={chat.online ? "online" : "offline"}
-            pulse={false}
-            breathe={false}
-            ring={false}
-            hoverLift={false}
-          />
+          {hasStory && storyUserId ? (
+            <StoryAvatar userId={storyUserId} src={chat.avatar} name={chat.name} size={52} />
+          ) : (
+            <AnimatedAvatar
+              src={chat.avatar}
+              name={chat.name}
+              size={52}
+              status={chat.online ? "online" : "offline"}
+              pulse={false}
+              breathe={false}
+              ring={false}
+              hoverLift={false}
+            />
+          )}
           {chat.type === "ghost" && (
             <span className="absolute -top-1 -right-1 size-6 rounded-full glass grid place-items-center">
               <Ghost className="size-3 text-violet-400" />

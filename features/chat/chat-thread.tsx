@@ -158,7 +158,10 @@ export function ChatThread({ chat }: { chat: Chat }) {
               aria-hidden
               className="transition-[height] duration-200"
               style={{
-                height: pickerOpen ? "calc(52dvh + 3.5rem)" : 0
+                // Only the mobile bottom-sheet picker covers the messages, so
+                // only reserve scroll space there. On desktop the picker is a
+                // floating popover — the message list must NOT shift up.
+                height: liftForPicker ? "calc(52dvh + 3.5rem)" : 0
               }}
             />
           </div>
@@ -170,10 +173,12 @@ export function ChatThread({ chat }: { chat: Chat }) {
           onSendAttachment={(payload) => sendAttachment(chat.id, payload)}
           onPickerToggle={(picking) => {
             setPickerOpen(picking);
-            if (!picking) return;
-            // Picker just opened — wait for the padding-bottom transition to
-            // expand the scroll area, then scroll the latest bubble to the
-            // new visible bottom (just above the picker).
+            // Desktop popover floats above the composer and doesn't cover the
+            // messages, so there's nothing to scroll past — leave the list put.
+            if (!picking || isDesktop) return;
+            // Mobile only — wait for the padding-bottom transition to expand
+            // the scroll area, then scroll the latest bubble to the new
+            // visible bottom (just above the picker).
             window.setTimeout(() => {
               endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
             }, 50);
