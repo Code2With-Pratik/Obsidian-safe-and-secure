@@ -68,7 +68,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       .from('chats')
       .select(`
         *,
-        chat_members!inner(user_id, role, last_read_at)
+        chat_members!inner(user_id),
+        all_members:chat_members(user_id, role, last_read_at)
       `)
       .eq('chat_members.user_id', user.id)
       .order('created_at', { ascending: false });
@@ -81,7 +82,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         avatar: c.avatar,
         description: c.description,
         banner: c.banner,
-        memberIds: c.chat_members?.map((m: any) => m.user_id) || [],
+        memberIds: c.all_members?.map((m: any) => m.user_id) || [],
         // We'll fetch last message separately or use a view later
       }));
       set({ chats: formattedChats });
@@ -476,14 +477,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   startDM: async (u) => {
     const { data: { user: me } } = await supabase.auth.getUser();
-    if (!me) return null as any;
+    if (!me) return { error: 'Not authenticated' };
 
     const existing = get().chats.find(
       (c) => c.type === "dm" && c.memberIds?.includes(u.id)
     );
     if (existing) {
       get().setActiveChat(existing.id);
-      return existing;
+      return { data: existing };
     }
 
     // Create new DM in DB
@@ -491,20 +492,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
       .from('chats')
       .insert({
         type: 'dm',
-        name: u.name, // For DMs, name is usually the other user's name
+        name: u.name,
         avatar: u.avatar,
         created_by: me.id
       })
       .select()
       .single();
 
-    if (chatError || !chat) return null as any;
+    if (chatError) return { error: chatError.message };
+    if (!chat) return { error: 'Failed to create chat' };
 
     // Add members
-    await supabase.from('chat_members').insert([
+    const { error: memberError } = await supabase.from('chat_members').insert([
       { chat_id: chat.id, user_id: me.id, role: 'owner' },
       { chat_id: chat.id, user_id: u.id, role: 'member' }
     ]);
+
+    if (memberError) return { error: memberError.message };
 
     const newChat: Chat = {
       id: chat.id,
@@ -522,7 +526,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
 
     get().setActiveChat(chat.id);
-    return newChat;
+    return { data: newChat };
   },
 
   scheduleCallWith: (userIds, invite) => {

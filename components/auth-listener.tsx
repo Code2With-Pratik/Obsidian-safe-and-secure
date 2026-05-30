@@ -27,6 +27,7 @@ export default function AuthListener() {
           name: data.name || 'Anonymous',
           username: data.username || 'user',
           avatar: data.avatar || `https://api.dicebear.com/9.x/notionists/svg?seed=${data.id}`,
+          banner: data.banner,
           status: data.status || 'online',
           profession: data.profession,
           bio: data.bio,

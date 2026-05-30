@@ -17,6 +17,7 @@ import {
   Pencil,
   Star,
   CheckCheck,
+  ChevronRight,
   Image as ImageIcon,
   Mic,
   Video as VideoIcon,
@@ -53,6 +54,7 @@ import type { Chat, ChatHint, Community, User } from "@/types";
 import { CheckCircle2, Flame, Sparkles } from "lucide-react";
 import { searchUsers } from "@/lib/supabase/actions";
 import { useAuthStore } from "@/store/use-auth-store";
+import { useToast } from "@/components/ui/toaster";
 
 type Filter = "all" | "unread" | "groups" | "secret" | "favorites";
 type CommunityFilter = "all" | "joined" | "trending" | "mine";
@@ -89,6 +91,7 @@ export function ChatList({
 }) {
   const router = useRouter();
   const t = useT();
+  const { toast } = useToast();
   // `?tab=community` lands the chat list on the Community tab — used by the
   // back button from the community detail page so users return to where they
   // came from.
@@ -174,10 +177,26 @@ export function ChatList({
 
   const markAllRead = () => chats.forEach((c) => markRead(c.id));
 
-  const handleStartDM = (user: User) => {
-    const c = startDM(user);
-    setSearchOpen(false);
-    router.push(`/chats/${c.id}`);
+  const handleStartDM = async (user: User) => {
+    try {
+      const result = await startDM(user);
+      if (result?.data?.id) {
+        setSearchOpen(false);
+        router.push(`/chats/${result.data.id}`);
+      } else if (result?.error) {
+        toast({
+          title: "Error",
+          description: result.error,
+          variant: "destructive",
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to create chat",
+        variant: "destructive",
+      });
+    }
   };
 
   // Filter the community grid by the current query + the active community
@@ -407,8 +426,8 @@ export function ChatList({
             userSuggestions.map((u) => (
               <button
                 key={u.id}
-                onClick={() => handleStartDM(u.id)}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl hover:bg-foreground/[0.04] transition text-left"
+                onClick={() => handleStartDM(u)}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl hover:bg-foreground/[0.04] transition text-left group"
               >
                 <AnimatedAvatar
                   src={u.avatar}
@@ -423,12 +442,10 @@ export function ChatList({
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-semibold truncate">{u.name}</p>
                   <p className="text-[11px] text-muted-foreground truncate">
-                    @{u.username} · {u.bio}
+                    @{u.username}
                   </p>
                 </div>
-                <span className="text-[10px] px-2 py-1 rounded-full bg-gradient-to-br from-violet-500 to-cyan-400 text-white">
-                  Chat
-                </span>
+                <ChevronRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
               </button>
             ))
           ) : (
@@ -640,17 +657,21 @@ function ChatRow({
   active?: boolean;
   onSelect?: (id: string) => void;
 }) {
+  const me = useAuthStore((s) => s.user);
   const onlineUsers = useChatStore((s) => s.onlineUsers);
   const typingMap = useChatStore((s) => s.typing);
-  const isTyping = typingMap[chat.id]?.length > 0;
+  const isTyping = (typingMap[chat.id]?.length ?? 0) > 0;
   
   // DM chats: check if the other member is online
-  const otherMemberId = chat.memberIds?.find(id => id !== 'me');
-  const isOnline = chat.type === 'dm' ? (otherMemberId && onlineUsers.includes(otherMemberId)) : chat.online;
+  const otherMemberId = chat.memberIds?.find(id => id !== me?.id);
+  const isOnline = chat.type === 'dm' 
+    ? (otherMemberId && onlineUsers.includes(otherMemberId)) 
+    : !!chat.online;
 
   // DM chats map to a single user → show their story ring on the avatar.
+  // We check name as a fallback for mock users, but should ideally use IDs.
   const storyUserId =
-    chat.type === "dm" ? allUsers.find((u) => u.name === chat.name)?.id : undefined;
+    chat.type === "dm" ? (otherMemberId || allUsers.find((u) => u.name === chat.name)?.id) : undefined;
   const hasStory = useStoriesStore((s) =>
     storyUserId ? !!s.byUser[storyUserId]?.slides.length : false
   );

@@ -47,7 +47,7 @@ export default function ProfilePage() {
   const openPhoto = useStoriesStore((s) => s.openPhoto);
 
   const banner = user?.banner;
-  const bannerIsUrl = banner?.startsWith("http");
+  const bannerIsUrl = banner?.startsWith("http") || banner?.startsWith("data:");
 
   return (
     <ScrollArea className="h-[calc(100dvh-4rem)]">
@@ -65,18 +65,6 @@ export default function ProfilePage() {
           ) : (
             <div className="absolute inset-0 bg-gradient-to-br from-violet-500 via-fuchsia-500 to-cyan-400" />
           )}
-          <motion.div
-            className="absolute inset-0"
-            animate={{
-              backgroundPosition: ["0% 0%", "100% 100%"]
-            }}
-            transition={{ duration: 20, repeat: Infinity, repeatType: "reverse" }}
-            style={{
-              backgroundImage:
-                "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.4), transparent 40%), radial-gradient(circle at 70% 70%, rgba(0,0,0,0.3), transparent 50%)",
-              backgroundSize: "200% 200%"
-            }}
-          />
           {/* Mobile-only: on web the Settings entry already lives in the
               left sidebar, so a second icon on the banner would be redundant. */}
           <Link

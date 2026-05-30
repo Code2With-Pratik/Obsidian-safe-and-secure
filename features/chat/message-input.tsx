@@ -13,6 +13,7 @@ import {
 } from "./attachment-dialogs";
 import { ExpressionsPicker, type ExpressionPick } from "./expressions-picker";
 import { useUIStore } from "@/store/use-ui-store";
+import { useChatStore } from "@/store/use-chat-store";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
