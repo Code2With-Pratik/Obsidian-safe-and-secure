@@ -5,8 +5,6 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import {
   MessageCircle,
-  Phone,
-  Video,
   Sparkles,
   Pencil,
   Settings,
@@ -14,11 +12,12 @@ import {
   Globe,
   Twitter,
   Music,
-  Image as ImageIcon,
   Lock,
   Shield,
   MapPin,
-  Calendar
+  Calendar,
+  Share2,
+  QrCode
 } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -29,23 +28,18 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuthStore } from "@/store/use-auth-store";
 import { initials, cn } from "@/lib/utils";
 import { EditProfileDialog } from "@/features/profile/edit-profile-dialog";
+import { ShareProfileDialog } from "@/features/profile/share-profile-dialog";
+import { QrProfileDialog } from "@/features/profile/qr-profile-dialog";
 import { useT } from "@/lib/i18n";
 import { useStoriesStore } from "@/store/use-stories-store";
-
-const gallery = [
-  "https://images.unsplash.com/photo-1502920917128-1aa500764cbd?w=400&q=80",
-  "https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=400&q=80",
-  "https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?w=400&q=80",
-  "https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=400&q=80",
-  "https://images.unsplash.com/photo-1614624532983-4ce03382d63d?w=400&q=80",
-  "https://images.unsplash.com/photo-1635776062127-d379bfcba9f8?w=400&q=80"
-];
 
 export default function ProfilePage() {
   const t = useT();
   const user = useAuthStore((s) => s.user);
   const name = user?.name ?? "Aria Vance";
   const [editOpen, setEditOpen] = React.useState(false);
+  const [shareOpen, setShareOpen] = React.useState(false);
+  const [qrOpen, setQrOpen] = React.useState(false);
   // Current user's own story → gradient ring on the profile avatar.
   const meHasStory = useStoriesStore((s) => !!s.byUser["me"]?.slides.length);
   const meViewed = useStoriesStore((s) => s.byUser["me"]?.viewed);
@@ -83,10 +77,12 @@ export default function ProfilePage() {
               backgroundSize: "200% 200%"
             }}
           />
+          {/* Mobile-only: on web the Settings entry already lives in the
+              left sidebar, so a second icon on the banner would be redundant. */}
           <Link
             href="/settings"
             aria-label={t("Open settings")}
-            className="absolute top-4 right-4 size-10 rounded-full glass border border-white/20 backdrop-blur grid place-items-center text-white hover:bg-white/15 hover:scale-105 active:scale-95 transition shadow-floating"
+            className="md:hidden absolute top-4 right-4 size-10 rounded-full glass border border-white/20 backdrop-blur grid place-items-center text-white hover:bg-white/15 hover:scale-105 active:scale-95 transition shadow-floating"
           >
             <Settings className="size-[18px]" />
           </Link>
@@ -131,22 +127,28 @@ export default function ProfilePage() {
             </div>
             <div className="flex-1">
               <div className="flex items-center gap-2 flex-wrap">
-                <h1 className="text-3xl font-display font-semibold tracking-tight">{name}</h1>
+                <h1 className="text-4xl md:text-5xl font-display font-semibold tracking-tight">{name}</h1>
                 <Badge variant="cyan">
                   <Sparkles className="size-3" /> Obsidian Plus
                 </Badge>
               </div>
-              <p className="text-muted-foreground text-sm">
+              {/* `text-muted-foreground` was disappearing against the
+                  banner gradient. Using the theme's `--foreground` token at
+                  reduced opacity stays black in light mode and white in
+                  dark mode while still reading as "secondary" text. */}
+              <p className="text-foreground/75 text-base md:text-lg">
                 @{user?.username ?? "aria"}
                 {user?.pronouns ? ` · ${user.pronouns}` : " · she/her"}
               </p>
               <p className="mt-2 max-w-xl">
-                {user?.bio ?? t("Designing the future, one pixel at a time. Currently building Obsidian ✨")}
+                {user?.profession ?? t("Designing the future, one pixel at a time.")}
               </p>
               <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
-                <span className="inline-flex items-center gap-1.5">
-                  <MapPin className="size-3.5" /> Lisbon, Portugal
-                </span>
+                {user?.location && (
+                  <span className="inline-flex items-center gap-1.5">
+                    <MapPin className="size-3.5" /> {user.location}
+                  </span>
+                )}
                 <span className="inline-flex items-center gap-1.5">
                   <Calendar className="size-3.5" /> {t("Joined")} Mar 2024
                 </span>
@@ -155,15 +157,27 @@ export default function ProfilePage() {
                 </span>
               </div>
             </div>
+            {/* Own-profile actions: Edit (primary), Share, QR. Message/Call/
+                Video belong on *other users'* profiles — you can't message
+                yourself. Make these conditional on `user.id === viewer.id`
+                once non-own-profile rendering is supported. */}
             <div className="flex gap-2">
-              <Button variant="gradient">
-                <MessageCircle /> {t("Message")}
+              <Button variant="gradient" onClick={() => setEditOpen(true)}>
+                <Pencil /> {t("Edit profile")}
               </Button>
-              <Button variant="glass">
-                <Phone />
+              <Button
+                variant="glass"
+                onClick={() => setShareOpen(true)}
+                aria-label={t("Share profile")}
+              >
+                <Share2 />
               </Button>
-              <Button variant="glass">
-                <Video />
+              <Button
+                variant="glass"
+                onClick={() => setQrOpen(true)}
+                aria-label={t("Profile QR")}
+              >
+                <QrCode />
               </Button>
             </div>
           </div>
@@ -178,7 +192,6 @@ export default function ProfilePage() {
           <Tabs defaultValue="about" className="mt-8">
             <TabsList>
               <TabsTrigger value="about">{t("About")}</TabsTrigger>
-              <TabsTrigger value="media">{t("Media")}</TabsTrigger>
               <TabsTrigger value="activity">{t("Activity")}</TabsTrigger>
               <TabsTrigger value="privacy">{t("Privacy")}</TabsTrigger>
             </TabsList>
@@ -187,8 +200,9 @@ export default function ProfilePage() {
               <div className="grid md:grid-cols-2 gap-3">
                 <div className="glass rounded-2xl p-5">
                   <h3 className="font-semibold text-sm mb-3">{t("Bio card")}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {t("Senior product designer, ex-Linear, ex-Arc. I care deeply about the texture of digital experiences. Currently architecting Obsidian — a futuristic OS for communication.")}
+                  <p className="text-sm text-muted-foreground whitespace-pre-line">
+                    {user?.bio ??
+                      t("Senior product designer, ex-Linear, ex-Arc. I care deeply about the texture of digital experiences. Currently architecting Obsidian — a futuristic OS for communication.")}
                   </p>
                   <div className="mt-4 flex flex-wrap gap-2">
                     {["#design", "#motion", "#typography", "#systems", "#synthwave"].map((tag) => (
@@ -200,27 +214,33 @@ export default function ProfilePage() {
                 <div className="glass rounded-2xl p-5">
                   <h3 className="font-semibold text-sm mb-3">{t("Links")}</h3>
                   <div className="space-y-2">
-                    <LinkRow icon={<Globe />} label={t("Personal site")} sub="aria.design" />
-                    <LinkRow icon={<Github />} label="GitHub" sub="@ariavance" />
-                    <LinkRow icon={<Twitter />} label="X" sub="@ariavance" />
-                    <LinkRow icon={<Music />} label="Spotify" sub={`${t("Now playing:")} Glass Cathedrals`} pulse />
+                    {user?.links?.website && (
+                      <LinkRow icon={<Globe />} label={t("Personal site")} sub={user.links.website} />
+                    )}
+                    {user?.links?.github && (
+                      <LinkRow icon={<Github />} label="GitHub" sub={`@${user.links.github}`} />
+                    )}
+                    {user?.links?.twitter && (
+                      <LinkRow icon={<Twitter />} label="X" sub={`@${user.links.twitter}`} />
+                    )}
+                    {user?.links?.spotify && (
+                      <LinkRow
+                        icon={<Music />}
+                        label="Spotify"
+                        sub={`${t("Now playing:")} ${user.links.spotify}`}
+                        pulse
+                      />
+                    )}
+                    {!user?.links?.website &&
+                      !user?.links?.github &&
+                      !user?.links?.twitter &&
+                      !user?.links?.spotify && (
+                        <p className="text-xs text-muted-foreground py-2">
+                          {t("No links yet — add some from Edit profile.")}
+                        </p>
+                      )}
                   </div>
                 </div>
-              </div>
-            </TabsContent>
-
-            <TabsContent value="media" className="mt-5">
-              <div className="grid grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-2">
-                {gallery.map((src, i) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <motion.img
-                    key={i}
-                    src={src}
-                    alt=""
-                    whileHover={{ scale: 1.04 }}
-                    className="aspect-square rounded-2xl object-cover cursor-pointer"
-                  />
-                ))}
               </div>
             </TabsContent>
 
@@ -253,6 +273,20 @@ export default function ProfilePage() {
         </div>
       </div>
       <EditProfileDialog open={editOpen} onOpenChange={setEditOpen} />
+      {user && (
+        <>
+          <ShareProfileDialog
+            profile={user}
+            open={shareOpen}
+            onOpenChange={setShareOpen}
+          />
+          <QrProfileDialog
+            profile={user}
+            open={qrOpen}
+            onOpenChange={setQrOpen}
+          />
+        </>
+      )}
     </ScrollArea>
   );
 }

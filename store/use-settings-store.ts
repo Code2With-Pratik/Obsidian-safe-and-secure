@@ -144,7 +144,7 @@ export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
       accent: "violet",
-      font: "default",
+      font: "arima",
       glass: 80,
       reduceMotion: false,
 

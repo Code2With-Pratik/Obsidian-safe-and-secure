@@ -106,15 +106,19 @@ export interface FontOption {
   family: string;
 }
 
-export const DEFAULT_FONT = "default";
+/** The app's out-of-the-box font. Used as the initial value for the Font
+ *  setting; users can still pick any other option from the picker. */
+export const DEFAULT_FONT = "arima";
 
 // Listed alphabetically by label (A→Z); new fonts stay sorted automatically.
+// "default" is the special id that clears the override and falls back to Inter
+// (still selectable as "Inter"); "arima" carries the "(Default)" tag.
 export const FONT_OPTIONS: FontOption[] = [
-  { id: DEFAULT_FONT, label: "Inter (Default)", family: "var(--font-sans)" },
+  { id: "default", label: "Inter", family: "var(--font-sans)" },
   { id: "poppins", label: "Poppins", family: poppins.style.fontFamily },
   { id: "montserrat-alt", label: "Montserrat Alternates", family: montserratAlternates.style.fontFamily },
   { id: "lora", label: "Lora", family: lora.style.fontFamily },
-  { id: "arima", label: "Arima", family: arima.style.fontFamily },
+  { id: "arima", label: "Arima (Default)", family: arima.style.fontFamily },
   { id: "doto", label: "Doto", family: doto.style.fontFamily },
   { id: "grape-nuts", label: "Grape Nuts", family: grapeNuts.style.fontFamily },
   { id: "satisfy", label: "Satisfy", family: satisfy.style.fontFamily }

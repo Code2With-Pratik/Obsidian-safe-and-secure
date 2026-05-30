@@ -1,5 +1,12 @@
 export type ID = string;
 
+export interface UserLinks {
+  website?: string;
+  github?: string;
+  twitter?: string;
+  spotify?: string;
+}
+
 export interface User {
   id: ID;
   name: string;
@@ -7,8 +14,14 @@ export interface User {
   avatar: string;
   banner?: string;
   status: "online" | "away" | "busy" | "offline";
+  /** Short tagline shown under the name in the profile header
+   *  (e.g. "Designing the future, one pixel at a time."). */
+  profession?: string;
+  /** Longer "About me" text shown in the Bio card on the profile page. */
   bio?: string;
   pronouns?: string;
+  location?: string;
+  links?: UserLinks;
   isGhost?: boolean;
 }
 

@@ -20,8 +20,16 @@ export const currentUser: User = {
   username: "aria.vance",
   avatar: avatar("aria"),
   status: "online",
-  bio: "Designing the future, one pixel at a time.",
-  pronouns: "she/her"
+  profession: "Designing the future, one pixel at a time.",
+  bio: "Senior product designer, ex-Linear, ex-Arc. I care deeply about the texture of digital experiences. Currently architecting Obsidian — a futuristic OS for communication.",
+  pronouns: "she/her",
+  location: "Lisbon, Portugal",
+  links: {
+    website: "aria.design",
+    github: "ariavance",
+    twitter: "ariavance",
+    spotify: "Glass Cathedrals"
+  }
 };
 
 export const users: User[] = [
