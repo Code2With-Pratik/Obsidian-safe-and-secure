@@ -52,9 +52,9 @@ export default function RegisterPage() {
 
     toast({
       title: "Success",
-      description: "Please check your email to verify your account.",
+      description: "Account created! Now pick your username.",
     });
-    router.push("/login");
+    router.push("/username");
   };
 
   return (

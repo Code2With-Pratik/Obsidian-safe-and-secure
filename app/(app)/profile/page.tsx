@@ -36,7 +36,7 @@ import { useStoriesStore } from "@/store/use-stories-store";
 export default function ProfilePage() {
   const t = useT();
   const user = useAuthStore((s) => s.user);
-  const name = user?.name ?? "Aria Vance";
+  const name = user?.name || "New User";
   const [editOpen, setEditOpen] = React.useState(false);
   const [shareOpen, setShareOpen] = React.useState(false);
   const [qrOpen, setQrOpen] = React.useState(false);
@@ -137,8 +137,8 @@ export default function ProfilePage() {
                   reduced opacity stays black in light mode and white in
                   dark mode while still reading as "secondary" text. */}
               <p className="text-foreground/75 text-base md:text-lg">
-                @{user?.username ?? "aria"}
-                {user?.pronouns ? ` · ${user.pronouns}` : " · she/her"}
+                @{user?.username || "user"}
+                {user?.pronouns ? ` · ${user.pronouns}` : ""}
               </p>
               <p className="mt-2 max-w-xl">
                 {user?.profession ?? t("Designing the future, one pixel at a time.")}

@@ -67,6 +67,14 @@ export function ChatHeader({
 }) {
   const router = useRouter();
   const t = useT();
+  const onlineUsers = useChatStore((s) => s.onlineUsers);
+  const typingMap = useChatStore((s) => s.typing);
+  const isTyping = typingMap[chat.id]?.length > 0;
+  
+  // DM chats: check if the other member is online
+  const otherMemberId = chat.memberIds?.find(id => id !== 'me');
+  const isOnline = chat.type === 'dm' ? (otherMemberId && onlineUsers.includes(otherMemberId)) : chat.online;
+
   const startCallStore = useUIStore((s) => s.startCall);
   const chats = useChatStore((s) => s.chats);
   const removeChat = useChatStore((s) => s.removeChat);
@@ -247,7 +255,7 @@ export function ChatHeader({
                   src={chat.avatar}
                   name={chat.name}
                   size={40}
-                  status={chat.online ? "online" : "offline"}
+                  status={isOnline ? "online" : "offline"}
                   pulse={false}
                   breathe={false}
                   ring={false}
@@ -267,9 +275,9 @@ export function ChatHeader({
                 <div className="text-[11px] text-muted-foreground truncate">
                   {chat.type === "group" || chat.type === "channel"
                     ? `${chat.membersCount} ${t("members")} · ${Math.floor((chat.membersCount ?? 0) / 5)} ${t("online")}`
-                    : chat.online
-                    ? `${t("online")} · ${t("typing…")}`
-                    : t("last seen 2h ago")}
+                    : isOnline
+                    ? `${t("online")}${isTyping ? ` · ${t("typing…")}` : ""}`
+                    : t("last seen recently")}
                 </div>
               </div>
             </button>

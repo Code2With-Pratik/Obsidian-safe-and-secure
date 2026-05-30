@@ -168,6 +168,7 @@ export function ChatThread({ chat }: { chat: Chat }) {
         </ScrollArea>
 
         <MessageInput
+          chatId={chat.id}
           onSend={(text) => send(chat.id, text)}
           onSendVoice={(durationSec, waveform) => sendVoice(chat.id, durationSec, waveform)}
           onSendAttachment={(payload) => sendAttachment(chat.id, payload)}

@@ -28,7 +28,6 @@ export default function LoginPage() {
   const t = useT();
   const router = useRouter();
   const { toast } = useToast();
-  const login = useAuthStore((s) => s.login);
   const {
     register,
     handleSubmit,
@@ -50,7 +49,6 @@ export default function LoginPage() {
       return;
     }
 
-    login(); // Sync local store if needed
     router.push("/");
   };
 

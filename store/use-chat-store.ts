@@ -2,21 +2,33 @@
 
 import { create } from "zustand";
 import { chats as seedChats, messagesByChat as seedMsgs, users } from "@/lib/mock-data";
-import type { Chat, Community, Message } from "@/types";
+import type { Chat, Community, Message, User } from "@/types";
+import { createClient } from "@/lib/supabase/client";
+import { RealtimeChannel } from "@supabase/supabase-js";
+
+const supabase = createClient();
 
 interface ChatState {
   chats: Chat[];
   messages: Record<string, Message[]>;
   activeChatId: string | null;
+  typing: Record<string, string[]>; // chatId -> userIds
+  onlineUsers: string[]; // userIds
+  channels: Record<string, RealtimeChannel>;
+  
+  fetchChats: () => Promise<void>;
+  fetchMessages: (chatId: string) => Promise<void>;
+  subscribeToChat: (chatId: string) => void;
+  unsubscribeFromChat: (chatId: string) => void;
+  setTyping: (chatId: string, isTyping: boolean) => void;
+  
   setActiveChat: (id: string | null) => void;
-  sendMessage: (chatId: string, content: string) => void;
-  sendVoice: (chatId: string, durationSec: number, waveform: number[]) => void;
-  /** Generic rich-attachment send. Accepts a partial Message (kind + payload
-   *  fields); the store fills in id / authorId / createdAt / status. */
+  sendMessage: (chatId: string, content: string) => Promise<void>;
+  sendVoice: (chatId: string, durationSec: number, waveform: number[]) => Promise<void>;
   sendAttachment: (
     chatId: string,
     payload: Partial<Message> & { kind: Message["kind"]; content?: string }
-  ) => void;
+  ) => Promise<void>;
   votePoll: (chatId: string, messageId: string, optionId: string) => void;
   toggleReaction: (chatId: string, messageId: string, emoji: string) => void;
   pinMessage: (chatId: string, messageId: string) => void;
@@ -25,9 +37,8 @@ interface ChatState {
   addGroup: (
     group: Pick<Chat, "name" | "description" | "memberIds" | "banner" | "avatar">
   ) => Chat;
-  startDM: (userId: string) => Chat;
+  startDM: (user: any) => Chat;
   joinCommunity: (community: Community) => Chat;
-  /** Drop a "Join call" scheduled-message into each selected user's DM. */
   scheduleCallWith: (
     userIds: string[],
     invite: {
@@ -42,112 +53,311 @@ interface ChatState {
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
-  chats: seedChats,
-  messages: seedMsgs,
-  activeChatId: "c1",
+  chats: [],
+  messages: {},
+  activeChatId: null,
+  typing: {},
+  onlineUsers: [],
+  channels: {},
 
-  setActiveChat: (id) => {
-    set({ activeChatId: id });
-    if (id) get().markRead(id);
+  fetchChats: async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const { data, error } = await supabase
+      .from('chats')
+      .select(`
+        *,
+        chat_members!inner(user_id, role, last_read_at)
+      `)
+      .eq('chat_members.user_id', user.id)
+      .order('created_at', { ascending: false });
+
+    if (!error && data) {
+      const formattedChats: Chat[] = data.map((c: any) => ({
+        id: c.id,
+        type: c.type,
+        name: c.name || 'Chat',
+        avatar: c.avatar,
+        description: c.description,
+        banner: c.banner,
+        memberIds: c.chat_members?.map((m: any) => m.user_id) || [],
+        // We'll fetch last message separately or use a view later
+      }));
+      set({ chats: formattedChats });
+    }
   },
 
-  sendMessage: (chatId, content) => {
-    const m: Message = {
-      id: `m-${Date.now()}`,
+  fetchMessages: async (chatId) => {
+    const { data, error } = await supabase
+      .from('messages')
+      .select('*')
+      .eq('chat_id', chatId)
+      .order('created_at', { ascending: true });
+
+    if (!error && data) {
+      const formattedMessages: Message[] = data.map((m: any) => ({
+        id: m.id,
+        chatId: m.chat_id,
+        authorId: m.author_id,
+        kind: m.kind,
+        content: m.content || '',
+        createdAt: m.created_at,
+        pinned: m.pinned,
+        replyTo: m.reply_to,
+        ...m.payload
+      }));
+      set((s) => ({
+        messages: { ...s.messages, [chatId]: formattedMessages }
+      }));
+    }
+  },
+
+  subscribeToChat: (chatId) => {
+    if (get().channels[chatId]) return;
+
+    const channel = supabase.channel(`chat:${chatId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `chat_id=eq.${chatId}`,
+        },
+        (payload) => {
+          const m = payload.new as any;
+          const newMessage: Message = {
+            id: m.id,
+            chatId: m.chat_id,
+            authorId: m.author_id,
+            kind: m.kind,
+            content: m.content || '',
+            createdAt: m.created_at,
+            pinned: m.pinned,
+            replyTo: m.reply_to,
+            status: 'delivered',
+            ...m.payload
+          };
+          
+          set((s) => {
+            const chatMessages = s.messages[chatId] || [];
+            if (chatMessages.some(x => x.id === newMessage.id)) return s;
+            return {
+              messages: {
+                ...s.messages,
+                [chatId]: [...chatMessages, newMessage]
+              },
+              chats: s.chats.map(c => 
+                c.id === chatId ? { ...c, lastMessage: newMessage.content, lastMessageAt: newMessage.createdAt } : c
+              )
+            };
+          });
+        }
+      )
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        const usersTyping: string[] = [];
+        const usersOnline: string[] = [];
+
+        Object.values(state).forEach((presences: any) => {
+          presences.forEach((p: any) => {
+            if (p.is_typing) usersTyping.push(p.user_id);
+            usersOnline.push(p.user_id);
+          });
+        });
+
+        set((s) => ({
+          typing: { ...s.typing, [chatId]: Array.from(new Set(usersTyping)) },
+          onlineUsers: Array.from(new Set([...s.onlineUsers, ...usersOnline]))
+        }));
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            await channel.track({
+              user_id: user.id,
+              online_at: new Date().toISOString(),
+            });
+          }
+        }
+      });
+
+    set((s) => ({
+      channels: { ...s.channels, [chatId]: channel }
+    }));
+  },
+
+  unsubscribeFromChat: (chatId) => {
+    const channel = get().channels[chatId];
+    if (channel) {
+      channel.unsubscribe();
+      set((s) => {
+        const { [chatId]: _, ...rest } = s.channels;
+        return { channels: rest };
+      });
+    }
+  },
+
+  setTyping: async (chatId, isTyping) => {
+    const channel = get().channels[chatId];
+    if (!channel) return;
+    
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    await channel.track({
+      user_id: user.id,
+      is_typing: isTyping,
+      online_at: new Date().toISOString(),
+    });
+  },
+
+  setActiveChat: (id) => {
+    const oldId = get().activeChatId;
+    if (oldId) get().unsubscribeFromChat(oldId);
+    
+    set({ activeChatId: id });
+    if (id) {
+      get().markRead(id);
+      get().fetchMessages(id);
+      get().subscribeToChat(id);
+    }
+  },
+
+  sendMessage: async (chatId, content) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const tempId = `m-${Date.now()}`;
+    const optimisticMessage: Message = {
+      id: tempId,
       chatId,
-      authorId: "me",
+      authorId: user.id,
       kind: "text",
       content,
       createdAt: new Date().toISOString(),
       status: "sending"
     };
+
     set((s) => ({
       messages: {
         ...s.messages,
-        [chatId]: [...(s.messages[chatId] ?? []), m]
-      },
-      chats: s.chats.map((c) =>
-        c.id === chatId ? { ...c, lastMessage: content, lastMessageAt: m.createdAt } : c
-      )
+        [chatId]: [...(s.messages[chatId] ?? []), optimisticMessage]
+      }
     }));
-    setTimeout(() => {
-      set((s) => ({
-        messages: {
-          ...s.messages,
-          [chatId]: (s.messages[chatId] ?? []).map((x) =>
-            x.id === m.id ? { ...x, status: "delivered" } : x
-          )
-        }
-      }));
-    }, 700);
+
+    const { data, error } = await supabase
+      .from('messages')
+      .insert({
+        chat_id: chatId,
+        author_id: user.id,
+        kind: 'text',
+        content,
+      })
+      .select()
+      .single();
+
+    if (error) {
+      // Handle error (e.g. show toast)
+      return;
+    }
+
+    set((s) => ({
+      messages: {
+        ...s.messages,
+        [chatId]: (s.messages[chatId] ?? []).map((x) =>
+          x.id === tempId ? { ...x, id: data.id, status: "sent" } : x
+        )
+      }
+    }));
   },
 
-  sendVoice: (chatId, durationSec, waveform) => {
-    const id = `m-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  sendVoice: async (chatId, durationSec, waveform) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const tempId = `m-${Date.now()}`;
     const m: Message = {
-      id,
+      id: tempId,
       chatId,
-      authorId: "me",
+      authorId: user.id,
       kind: "voice",
       content: "",
       createdAt: new Date().toISOString(),
       status: "sending",
       voice: { durationSec, waveform }
     };
-    const preview = `🎤 Voice message · ${durationSec}s`;
+    
     set((s) => ({
-      messages: {
-        ...s.messages,
-        [chatId]: [...(s.messages[chatId] ?? []), m]
-      },
-      chats: s.chats.map((c) =>
-        c.id === chatId ? { ...c, lastMessage: preview, lastMessageAt: m.createdAt } : c
-      )
+      messages: { ...s.messages, [chatId]: [...(s.messages[chatId] ?? []), m] }
     }));
-    setTimeout(() => {
+
+    const { data, error } = await supabase
+      .from('messages')
+      .insert({
+        chat_id: chatId,
+        author_id: user.id,
+        kind: 'voice',
+        payload: { voice: { durationSec, waveform } }
+      })
+      .select()
+      .single();
+
+    if (!error && data) {
       set((s) => ({
         messages: {
           ...s.messages,
           [chatId]: (s.messages[chatId] ?? []).map((x) =>
-            x.id === id ? { ...x, status: "delivered" } : x
+            x.id === tempId ? { ...x, id: data.id, status: "sent" } : x
           )
         }
       }));
-    }, 700);
+    }
   },
 
-  sendAttachment: (chatId, payload) => {
-    const id = `m-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  sendAttachment: async (chatId, payload) => {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    const tempId = `m-${Date.now()}`;
     const m: Message = {
-      id,
+      id: tempId,
       chatId,
-      authorId: "me",
+      authorId: user.id,
       content: payload.content ?? "",
       createdAt: new Date().toISOString(),
       status: "sending",
       ...payload
     } as Message;
 
-    const preview = previewFor(m);
     set((s) => ({
-      messages: {
-        ...s.messages,
-        [chatId]: [...(s.messages[chatId] ?? []), m]
-      },
-      chats: s.chats.map((c) =>
-        c.id === chatId ? { ...c, lastMessage: preview, lastMessageAt: m.createdAt } : c
-      )
+      messages: { ...s.messages, [chatId]: [...(s.messages[chatId] ?? []), m] }
     }));
-    setTimeout(() => {
+
+    const { data, error } = await supabase
+      .from('messages')
+      .insert({
+        chat_id: chatId,
+        author_id: user.id,
+        kind: payload.kind,
+        content: payload.content,
+        payload: payload // Spread rest of payload into JSONB column
+      })
+      .select()
+      .single();
+
+    if (!error && data) {
       set((s) => ({
         messages: {
           ...s.messages,
           [chatId]: (s.messages[chatId] ?? []).map((x) =>
-            x.id === id ? { ...x, status: "delivered" } : x
+            x.id === tempId ? { ...x, id: data.id, status: "sent" } : x
           )
         }
       }));
-    }, 600);
+    }
   },
 
   votePoll: (chatId, messageId, optionId) => {
@@ -264,45 +474,54 @@ export const useChatStore = create<ChatState>((set, get) => ({
     return newChat;
   },
 
-  startDM: (userId) => {
+  startDM: async (u) => {
+    const { data: { user: me } } = await supabase.auth.getUser();
+    if (!me) return null as any;
+
     const existing = get().chats.find(
-      (c) => c.type === "dm" && c.memberIds?.includes(userId)
+      (c) => c.type === "dm" && c.memberIds?.includes(u.id)
     );
     if (existing) {
       get().setActiveChat(existing.id);
       return existing;
     }
-    const u = users.find((x) => x.id === userId);
-    if (!u) {
-      throw new Error(`Unknown user ${userId}`);
-    }
-    const id = `dm-${Date.now()}`;
+
+    // Create new DM in DB
+    const { data: chat, error: chatError } = await supabase
+      .from('chats')
+      .insert({
+        type: 'dm',
+        name: u.name, // For DMs, name is usually the other user's name
+        avatar: u.avatar,
+        created_by: me.id
+      })
+      .select()
+      .single();
+
+    if (chatError || !chat) return null as any;
+
+    // Add members
+    await supabase.from('chat_members').insert([
+      { chat_id: chat.id, user_id: me.id, role: 'owner' },
+      { chat_id: chat.id, user_id: u.id, role: 'member' }
+    ]);
+
     const newChat: Chat = {
-      id,
+      id: chat.id,
       type: "dm",
       name: u.name,
       avatar: u.avatar,
-      memberIds: ["me", u.id],
+      memberIds: [me.id, u.id],
       lastMessage: "Say hi 👋",
       lastMessageAt: new Date().toISOString(),
       online: u.status === "online"
     };
+
     set((s) => ({
       chats: [newChat, ...s.chats],
-      messages: {
-        ...s.messages,
-        [id]: [
-          {
-            id: `m-sys-${Date.now()}`,
-            chatId: id,
-            authorId: "me",
-            kind: "system",
-            content: `You connected with ${u.name}`,
-            createdAt: new Date().toISOString()
-          }
-        ]
-      }
     }));
+
+    get().setActiveChat(chat.id);
     return newChat;
   },
 

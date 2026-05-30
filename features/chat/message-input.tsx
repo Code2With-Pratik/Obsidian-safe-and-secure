@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import type { Message, PollOption } from "@/types";
 
 interface Props {
+  chatId: string;
   onSend: (text: string) => void;
   onSendVoice?: (durationSec: number, waveform: number[]) => void;
   onSendAttachment?: (
@@ -44,6 +45,7 @@ const VIS_BARS = 128; // bars in the live visualiser — dense like WhatsApp
 type RecState = "idle" | "recording" | "preview";
 
 export function MessageInput({
+  chatId,
   onSend,
   onSendVoice,
   onSendAttachment,
@@ -52,8 +54,19 @@ export function MessageInput({
   themeAccent
 }: Props) {
   const t = useT();
+  const setTyping = useChatStore((s) => s.setTyping);
   const [text, setText] = React.useState("");
   const [showAi, setShowAi] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!text.trim()) {
+      setTyping(chatId, false);
+      return;
+    }
+    setTyping(chatId, true);
+    const timeout = setTimeout(() => setTyping(chatId, false), 2000);
+    return () => clearTimeout(timeout);
+  }, [text, chatId, setTyping]);
   const [attachOpen, setAttachOpen] = React.useState(false);
   const [exprOpen, setExprOpen] = React.useState(false);
 

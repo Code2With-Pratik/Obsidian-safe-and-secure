@@ -32,6 +32,9 @@ import { NovaMascot } from "@/components/nova-mascot";
 import { useAuthStore } from "@/store/use-auth-store";
 import { cn, initials } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
+import { updateProfile, uploadFile } from "@/lib/supabase/actions";
+import { useToast } from "@/components/ui/toaster";
+import { Loader2 } from "lucide-react";
 
 const BANNER_PRESETS = [
   "linear-gradient(135deg, #8B5CF6, #EC4899, #22D3EE)",
@@ -72,10 +75,15 @@ interface Props {
 
 export function EditProfileDialog({ open, onOpenChange }: Props) {
   const t = useT();
+  const { toast } = useToast();
   const user = useAuthStore((s) => s.user);
   const updateUser = useAuthStore((s) => s.updateUser);
 
   const [step, setStep] = React.useState<StepNum>(1);
+  const [submitting, setSubmitting] = React.useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = React.useState(false);
+  const [uploadingBanner, setUploadingBanner] = React.useState(false);
+
   // Tracks slide direction so the next/back animation animates the right way.
   const dirRef = React.useRef<1 | -1>(1);
   const goNext = () => {
@@ -126,10 +134,11 @@ export function EditProfileDialog({ open, onOpenChange }: Props) {
     }
   }, [open, user]);
 
-  const handleSave = () => {
-    updateUser({
-      name: name.trim() || user?.name || "Aria Vance",
-      username: username.trim().replace(/^@+/, "") || user?.username || "aria",
+  const handleSave = async () => {
+    setSubmitting(true);
+    const profileData = {
+      name: name.trim() || user?.name || "New User",
+      username: username.trim().replace(/^@+/, "") || user?.username || "user",
       pronouns: pronouns.trim(),
       profession: profession.trim(),
       bio: bio.trim(),
@@ -140,29 +149,70 @@ export function EditProfileDialog({ open, onOpenChange }: Props) {
         twitter: twitter.trim().replace(/^@+/, "") || undefined,
         spotify: spotify.trim() || undefined
       },
-      avatar: avatar.trim() || user?.avatar || "",
+      avatar: avatar.trim(),
       banner
-    });
+    };
+
+    const result = await updateProfile(profileData);
+    setSubmitting(false);
+
+    if (result.error) {
+      toast({
+        title: "Update Failed",
+        description: result.error,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    updateUser(profileData);
+    toast({ title: "Profile updated successfully!" });
     onOpenChange(false);
   };
 
-  // File pickers — picked file is read as a data URL so it survives a save
-  // without a backend.
+  // File pickers — now uploading to Supabase Storage
   const bannerInputRef = React.useRef<HTMLInputElement>(null);
   const avatarInputRef = React.useRef<HTMLInputElement>(null);
-  const readAsDataUrl = (file: File, set: (v: string) => void) => {
-    const reader = new FileReader();
-    reader.onload = () => set(String(reader.result ?? ""));
-    reader.readAsDataURL(file);
-  };
-  const onBannerFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+
+  const onBannerFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) readAsDataUrl(file, setBanner);
+    if (!file || !user) return;
+
+    setUploadingBanner(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('bucket', 'stories'); // Use stories bucket for now or dedicated one
+    formData.append('path', `${user.id}/banner-${Date.now()}`);
+
+    const result = await uploadFile(formData);
+    setUploadingBanner(false);
+
+    if (result.publicUrl) {
+      setBanner(result.publicUrl);
+    } else {
+      toast({ title: "Upload failed", description: result.error, variant: "destructive" });
+    }
     e.target.value = "";
   };
-  const onAvatarFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+
+  const onAvatarFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) readAsDataUrl(file, setAvatar);
+    if (!file || !user) return;
+
+    setUploadingAvatar(true);
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('bucket', 'avatars');
+    formData.append('path', `${user.id}/avatar-${Date.now()}`);
+
+    const result = await uploadFile(formData);
+    setUploadingAvatar(false);
+
+    if (result.publicUrl) {
+      setAvatar(result.publicUrl);
+    } else {
+      toast({ title: "Upload failed", description: result.error, variant: "destructive" });
+    }
     e.target.value = "";
   };
 
@@ -326,6 +376,8 @@ export function EditProfileDialog({ open, onOpenChange }: Props) {
                     name={name}
                     avatarInputRef={avatarInputRef}
                     onAvatarFile={onAvatarFile}
+                    uploadingAvatar={uploadingAvatar}
+                    uploadingBanner={uploadingBanner}
                   />
                 )}
 
@@ -369,7 +421,7 @@ export function EditProfileDialog({ open, onOpenChange }: Props) {
               being clipped by a separate footer bg layer. The content above
               gets `pb-20` so its last item never sits under the buttons. */}
           <div className="absolute bottom-4 right-4 z-20 flex items-center gap-2">
-            <Button variant="glass" onClick={() => onOpenChange(false)}>
+            <Button variant="glass" onClick={() => onOpenChange(false)} disabled={submitting}>
               {t("Cancel")}
             </Button>
             {step < TOTAL_STEPS ? (
@@ -378,7 +430,8 @@ export function EditProfileDialog({ open, onOpenChange }: Props) {
                 <ChevronRight />
               </Button>
             ) : (
-              <Button variant="gradient" onClick={handleSave}>
+              <Button variant="gradient" onClick={handleSave} disabled={submitting}>
+                {submitting ? <Loader2 className="animate-spin mr-2" /> : null}
                 {t("Save changes")}
               </Button>
             )}
@@ -404,6 +457,8 @@ function Step1Banner(props: {
   name: string;
   avatarInputRef: React.RefObject<HTMLInputElement | null>;
   onAvatarFile: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  uploadingAvatar?: boolean;
+  uploadingBanner?: boolean;
 }) {
   const {
     t,
@@ -418,7 +473,9 @@ function Step1Banner(props: {
     setAvatar,
     name,
     avatarInputRef,
-    onAvatarFile
+    onAvatarFile,
+    uploadingAvatar,
+    uploadingBanner
   } = props;
 
   return (
@@ -451,11 +508,17 @@ function Step1Banner(props: {
               className="absolute inset-0 size-full object-cover"
             />
           )}
+          {uploadingBanner && (
+            <div className="absolute inset-0 bg-black/40 backdrop-blur-sm grid place-items-center z-10">
+              <Loader2 className="animate-spin text-white" />
+            </div>
+          )}
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-black/0 to-black/30" />
           <button
             type="button"
             onClick={() => bannerInputRef.current?.click()}
-            className="absolute bottom-2 left-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-black/40 backdrop-blur text-[10px] text-white hover:bg-black/60 transition"
+            disabled={uploadingBanner}
+            className="absolute bottom-2 left-2 inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-black/40 backdrop-blur text-[10px] text-white hover:bg-black/60 transition disabled:opacity-50"
           >
             <ImageIcon className="size-3" /> {t("Upload")}
           </button>
@@ -501,13 +564,19 @@ function Step1Banner(props: {
           <div className="relative shrink-0">
             <Avatar className="size-28 ring-2 ring-background shadow-floating">
               <AvatarImage src={avatar} alt={name} />
-              <AvatarFallback className="text-2xl">{initials(name || "Aria")}</AvatarFallback>
+              <AvatarFallback className="text-2xl">{initials(name || "New User")}</AvatarFallback>
             </Avatar>
+            {uploadingAvatar && (
+              <div className="absolute inset-0 rounded-full bg-black/40 backdrop-blur-sm grid place-items-center z-10">
+                <Loader2 className="animate-spin text-white" />
+              </div>
+            )}
             <button
               type="button"
               onClick={() => avatarInputRef.current?.click()}
+              disabled={uploadingAvatar}
               aria-label={t("Upload avatar")}
-              className="absolute -bottom-1 -right-1 size-9 rounded-full bg-primary grid place-items-center shadow-glow ring-2 ring-background hover:scale-105 transition"
+              className="absolute -bottom-1 -right-1 size-9 rounded-full bg-primary grid place-items-center shadow-glow ring-2 ring-background hover:scale-105 transition disabled:opacity-50"
             >
               <Camera className="size-4 text-primary-foreground" />
             </button>

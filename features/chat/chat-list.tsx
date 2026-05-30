@@ -49,8 +49,10 @@ import { StoriesRail } from "./stories-rail";
 import { StoryUploadBar } from "./story-upload-bar";
 import { NewGroupDialog } from "./new-group-dialog";
 import { EmptyChatList } from "./empty-chat-list";
-import type { Chat, ChatHint, Community } from "@/types";
+import type { Chat, ChatHint, Community, User } from "@/types";
 import { CheckCircle2, Flame, Sparkles } from "lucide-react";
+import { searchUsers } from "@/lib/supabase/actions";
+import { useAuthStore } from "@/store/use-auth-store";
 
 type Filter = "all" | "unread" | "groups" | "secret" | "favorites";
 type CommunityFilter = "all" | "joined" | "trending" | "mine";
@@ -126,7 +128,26 @@ export function ChatList({
     count: number;
     name: string;
   }>({ open: false, count: 0, name: "" });
+  const [userSuggestions, setUserSuggestions] = React.useState<User[]>([]);
+  const [isSearchingUsers, setIsSearchingUsers] = React.useState(false);
   const searchInputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (!searchOpen) {
+      setQ("");
+      setUserSuggestions([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearchingUsers(true);
+      const { data } = await searchUsers(q);
+      setUserSuggestions(data as any || []);
+      setIsSearchingUsers(false);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [q, searchOpen]);
 
   React.useEffect(() => {
     if (searchOpen) {
@@ -135,13 +156,11 @@ export function ChatList({
       requestAnimationFrame(() => searchInputRef.current?.focus());
       const id = setTimeout(() => searchInputRef.current?.focus(), 350);
       return () => clearTimeout(id);
-    } else {
-      setQ("");
     }
   }, [searchOpen]);
 
   const filtered = chats
-    .filter((c) => c.name.toLowerCase().includes(q.toLowerCase()))
+    .filter((c) => (c.name || "").toLowerCase().includes(q.toLowerCase()))
     .filter((c) => {
       if (filter === "unread") return (c.unread ?? 0) > 0;
       if (filter === "groups") return c.type === "group" || c.type === "channel";
@@ -153,19 +172,10 @@ export function ChatList({
   const pinned = filtered.filter((c) => c.pinned);
   const rest = filtered.filter((c) => !c.pinned);
 
-  const userSuggestions = allUsers
-    .filter((u) => u.id !== "me")
-    .filter((u) =>
-      q.trim() === ""
-        ? true
-        : u.name.toLowerCase().includes(q.toLowerCase()) ||
-          u.username.toLowerCase().includes(q.toLowerCase())
-    );
-
   const markAllRead = () => chats.forEach((c) => markRead(c.id));
 
-  const handleStartDM = (userId: string) => {
-    const c = startDM(userId);
+  const handleStartDM = (user: User) => {
+    const c = startDM(user);
     setSearchOpen(false);
     router.push(`/chats/${c.id}`);
   };
@@ -630,6 +640,14 @@ function ChatRow({
   active?: boolean;
   onSelect?: (id: string) => void;
 }) {
+  const onlineUsers = useChatStore((s) => s.onlineUsers);
+  const typingMap = useChatStore((s) => s.typing);
+  const isTyping = typingMap[chat.id]?.length > 0;
+  
+  // DM chats: check if the other member is online
+  const otherMemberId = chat.memberIds?.find(id => id !== 'me');
+  const isOnline = chat.type === 'dm' ? (otherMemberId && onlineUsers.includes(otherMemberId)) : chat.online;
+
   // DM chats map to a single user → show their story ring on the avatar.
   const storyUserId =
     chat.type === "dm" ? allUsers.find((u) => u.name === chat.name)?.id : undefined;
@@ -659,7 +677,7 @@ function ChatRow({
               src={chat.avatar}
               name={chat.name}
               size={52}
-              status={chat.online ? "online" : "offline"}
+              status={isOnline ? "online" : "offline"}
               pulse={false}
               breathe={false}
               ring={false}
@@ -691,7 +709,7 @@ function ChatRow({
           </div>
 
           <div className="flex items-center gap-2 mt-1">
-            <HintOrPreview chat={chat} />
+            <HintOrPreview chat={chat} isTyping={isTyping} />
             <div className="ml-auto flex items-center gap-1.5">
               {chat.muted && <BellOff className="size-3 text-muted-foreground" />}
               {chat.pinned && <Pin className="size-3 text-muted-foreground" />}
@@ -713,7 +731,11 @@ function ChatRow({
   );
 }
 
-function HintOrPreview({ chat }: { chat: Chat }) {
+function HintOrPreview({ chat, isTyping }: { chat: Chat, isTyping?: boolean }) {
+  const t = useT();
+  if (isTyping) {
+    return <HintBadge hint={{ kind: "typing" }} unread={!!chat.unread} />;
+  }
   if (chat.hint) {
     return <HintBadge hint={chat.hint} unread={!!chat.unread} />;
   }
