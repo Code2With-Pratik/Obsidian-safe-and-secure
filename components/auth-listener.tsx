@@ -3,10 +3,12 @@
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
+import { useAuthStore } from '@/store/use-auth-store'
 
 export default function AuthListener() {
   const supabase = createClient()
   const router = useRouter()
+  const logout = useAuthStore((s) => s.logout)
 
   useEffect(() => {
     const {
@@ -16,6 +18,7 @@ export default function AuthListener() {
         router.refresh()
       }
       if (event === 'SIGNED_OUT') {
+        logout()
         router.refresh()
         router.push('/login')
       }

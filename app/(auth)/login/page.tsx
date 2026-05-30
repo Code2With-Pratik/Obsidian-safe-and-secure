@@ -15,7 +15,7 @@ import { useAuthStore } from "@/store/use-auth-store";
 import { NovaMascot } from "@/components/nova-mascot";
 import { useT } from "@/lib/i18n";
 import { login as supabaseLogin } from "@/lib/supabase/actions";
-import { useToaster } from "@/components/ui/toaster";
+import { useToast } from "@/components/ui/toaster";
 
 const schema = z.object({
   email: z.string().email("Enter a valid email"),
@@ -27,7 +27,7 @@ type FormValues = z.infer<typeof schema>;
 export default function LoginPage() {
   const t = useT();
   const router = useRouter();
-  const { toast } = useToaster();
+  const { toast } = useToast();
   const login = useAuthStore((s) => s.login);
   const {
     register,

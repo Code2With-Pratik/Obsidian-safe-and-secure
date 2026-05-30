@@ -13,7 +13,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NovaMascot } from "@/components/nova-mascot";
 import { signup as supabaseSignup } from "@/lib/supabase/actions";
-import { useToaster } from "@/components/ui/toaster";
+import { useToast } from "@/components/ui/toaster";
 
 const schema = z
   .object({
@@ -31,7 +31,7 @@ type Values = z.infer<typeof schema>;
 
 export default function RegisterPage() {
   const router = useRouter();
-  const { toast } = useToaster();
+  const { toast } = useToast();
   const {
     register,
     handleSubmit,
