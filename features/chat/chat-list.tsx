@@ -17,6 +17,7 @@ import {
   Pencil,
   Star,
   CheckCheck,
+  ChevronRight,
   Image as ImageIcon,
   Mic,
   Video as VideoIcon,
@@ -49,8 +50,11 @@ import { StoriesRail } from "./stories-rail";
 import { StoryUploadBar } from "./story-upload-bar";
 import { NewGroupDialog } from "./new-group-dialog";
 import { EmptyChatList } from "./empty-chat-list";
-import type { Chat, ChatHint, Community } from "@/types";
+import type { Chat, ChatHint, Community, User } from "@/types";
 import { CheckCircle2, Flame, Sparkles } from "lucide-react";
+import { searchUsers } from "@/lib/supabase/actions";
+import { useAuthStore } from "@/store/use-auth-store";
+import { useToast } from "@/components/ui/toaster";
 
 type Filter = "all" | "unread" | "groups" | "secret" | "favorites";
 type CommunityFilter = "all" | "joined" | "trending" | "mine";
@@ -87,12 +91,14 @@ export function ChatList({
 }) {
   const router = useRouter();
   const t = useT();
+  const { toast } = useToast();
   // `?tab=community` lands the chat list on the Community tab — used by the
   // back button from the community detail page so users return to where they
   // came from.
   const searchParams = useSearchParams();
   const initialTab = searchParams?.get("tab");
   const chats = useChatStore((s) => s.chats);
+  const onlineUsers = useChatStore((s) => s.onlineUsers);
   const markRead = useChatStore((s) => s.markRead);
   const addGroup = useChatStore((s) => s.addGroup);
   const startDM = useChatStore((s) => s.startDM);
@@ -126,7 +132,34 @@ export function ChatList({
     count: number;
     name: string;
   }>({ open: false, count: 0, name: "" });
+  const [userSuggestions, setUserSuggestions] = React.useState<User[]>([]);
+  const [isSearchingUsers, setIsSearchingUsers] = React.useState(false);
   const searchInputRef = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => {
+    if (!searchOpen) {
+      setQ("");
+      setUserSuggestions([]);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearchingUsers(true);
+      const { data } = await searchUsers(q);
+      
+      // Filter out people you already have a DM with
+      const existingDMUserIds = new Set(
+        chats.filter(c => c.type === 'dm').flatMap(c => c.memberIds || [])
+      );
+      
+      const filteredSuggestions = (data as User[] || []).filter(u => !existingDMUserIds.has(u.id));
+      
+      setUserSuggestions(filteredSuggestions);
+      setIsSearchingUsers(false);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [q, searchOpen, chats]);
 
   React.useEffect(() => {
     if (searchOpen) {
@@ -135,13 +168,11 @@ export function ChatList({
       requestAnimationFrame(() => searchInputRef.current?.focus());
       const id = setTimeout(() => searchInputRef.current?.focus(), 350);
       return () => clearTimeout(id);
-    } else {
-      setQ("");
     }
   }, [searchOpen]);
 
   const filtered = chats
-    .filter((c) => c.name.toLowerCase().includes(q.toLowerCase()))
+    .filter((c) => (c.name || "").toLowerCase().includes(q.toLowerCase()))
     .filter((c) => {
       if (filter === "unread") return (c.unread ?? 0) > 0;
       if (filter === "groups") return c.type === "group" || c.type === "channel";
@@ -153,21 +184,26 @@ export function ChatList({
   const pinned = filtered.filter((c) => c.pinned);
   const rest = filtered.filter((c) => !c.pinned);
 
-  const userSuggestions = allUsers
-    .filter((u) => u.id !== "me")
-    .filter((u) =>
-      q.trim() === ""
-        ? true
-        : u.name.toLowerCase().includes(q.toLowerCase()) ||
-          u.username.toLowerCase().includes(q.toLowerCase())
-    );
-
   const markAllRead = () => chats.forEach((c) => markRead(c.id));
 
-  const handleStartDM = (userId: string) => {
-    const c = startDM(userId);
-    setSearchOpen(false);
-    router.push(`/chats/${c.id}`);
+  const handleStartDM = async (user: User) => {
+    try {
+      const result = await startDM(user);
+      if (result?.data?.id) {
+        setSearchOpen(false);
+        router.push(`/chats/${result.data.id}`);
+      } else if (result?.error) {
+        toast({
+          title: "Error",
+          description: result.error,
+        });
+      }
+    } catch (err: any) {
+      toast({
+        title: "Error",
+        description: err.message || "Failed to create chat",
+      });
+    }
   };
 
   // Filter the community grid by the current query + the active community
@@ -394,33 +430,34 @@ export function ChatList({
             {q.trim() === "" ? t("Suggested people") : t("People")}
           </SectionLabel>
           {userSuggestions.length > 0 ? (
-            userSuggestions.map((u) => (
-              <button
-                key={u.id}
-                onClick={() => handleStartDM(u.id)}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl hover:bg-foreground/[0.04] transition text-left"
-              >
-                <AnimatedAvatar
-                  src={u.avatar}
-                  name={u.name}
-                  size={44}
-                  status={u.status}
-                  pulse={false}
-                  breathe={false}
-                  ring={false}
-                  hoverLift={false}
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold truncate">{u.name}</p>
-                  <p className="text-[11px] text-muted-foreground truncate">
-                    @{u.username} · {u.bio}
-                  </p>
-                </div>
-                <span className="text-[10px] px-2 py-1 rounded-full bg-gradient-to-br from-violet-500 to-cyan-400 text-white">
-                  Chat
-                </span>
-              </button>
-            ))
+            userSuggestions.map((u) => {
+              const isOnline = onlineUsers.includes(u.id);
+              return (
+                <button
+                  key={u.id}
+                  onClick={() => handleStartDM(u)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl hover:bg-foreground/[0.04] transition text-left group"
+                >
+                  <AnimatedAvatar
+                    src={u.avatar}
+                    name={u.name}
+                    size={44}
+                    status={isOnline ? "online" : "offline"}
+                    pulse={isOnline}
+                    breathe={false}
+                    ring={false}
+                    hoverLift={false}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{u.name}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">
+                      @{u.username}
+                    </p>
+                  </div>
+                  <ChevronRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
+              );
+            })
           ) : (
             <p className="text-center text-xs text-muted-foreground py-6">
               No people match "{q}".
@@ -630,9 +667,19 @@ function ChatRow({
   active?: boolean;
   onSelect?: (id: string) => void;
 }) {
+  const me = useAuthStore((s) => s.user);
+  const onlineUsers = useChatStore((s) => s.onlineUsers);
+  const typingMap = useChatStore((s) => s.typing);
+  const isTyping = (typingMap[chat.id]?.length ?? 0) > 0;
+  
+  // DM chats: check if the other member is online
+  const otherMemberId = chat.memberIds?.find(id => id !== me?.id);
+  const isOnline = chat.type === 'dm' 
+    ? (otherMemberId && onlineUsers.includes(otherMemberId)) 
+    : !!chat.online;
+
   // DM chats map to a single user → show their story ring on the avatar.
-  const storyUserId =
-    chat.type === "dm" ? allUsers.find((u) => u.name === chat.name)?.id : undefined;
+  const storyUserId = chat.type === "dm" ? otherMemberId : undefined;
   const hasStory = useStoriesStore((s) =>
     storyUserId ? !!s.byUser[storyUserId]?.slides.length : false
   );
@@ -659,7 +706,7 @@ function ChatRow({
               src={chat.avatar}
               name={chat.name}
               size={52}
-              status={chat.online ? "online" : "offline"}
+              status={isOnline ? "online" : "offline"}
               pulse={false}
               breathe={false}
               ring={false}
@@ -691,7 +738,7 @@ function ChatRow({
           </div>
 
           <div className="flex items-center gap-2 mt-1">
-            <HintOrPreview chat={chat} />
+            <HintOrPreview chat={chat} isTyping={isTyping} />
             <div className="ml-auto flex items-center gap-1.5">
               {chat.muted && <BellOff className="size-3 text-muted-foreground" />}
               {chat.pinned && <Pin className="size-3 text-muted-foreground" />}
@@ -713,7 +760,11 @@ function ChatRow({
   );
 }
 
-function HintOrPreview({ chat }: { chat: Chat }) {
+function HintOrPreview({ chat, isTyping }: { chat: Chat, isTyping?: boolean }) {
+  const t = useT();
+  if (isTyping) {
+    return <HintBadge hint={{ kind: "typing" }} unread={!!chat.unread} />;
+  }
   if (chat.hint) {
     return <HintBadge hint={chat.hint} unread={!!chat.unread} />;
   }

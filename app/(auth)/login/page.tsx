@@ -14,6 +14,8 @@ import { Label } from "@/components/ui/label";
 import { useAuthStore } from "@/store/use-auth-store";
 import { NovaMascot } from "@/components/nova-mascot";
 import { useT } from "@/lib/i18n";
+import { login as supabaseLogin } from "@/lib/supabase/actions";
+import { useToast } from "@/components/ui/toaster";
 
 const schema = z.object({
   email: z.string().email("Enter a valid email"),
@@ -25,20 +27,28 @@ type FormValues = z.infer<typeof schema>;
 export default function LoginPage() {
   const t = useT();
   const router = useRouter();
-  const login = useAuthStore((s) => s.login);
+  const { toast } = useToast();
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting }
   } = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { email: "aria@nova.app", password: "" }
+    defaultValues: { email: "", password: "" }
   });
 
-  const onSubmit = async (_: FormValues) => {
-    await new Promise((r) => setTimeout(r, 600));
-    login();
-    router.push("/2fa");
+  const onSubmit = async (data: FormValues) => {
+    const result = await supabaseLogin(data);
+    
+    if (result?.error) {
+      toast({
+        title: "Login Failed",
+        description: result.error,
+      });
+      return;
+    }
+
+    router.push("/");
   };
 
   return (

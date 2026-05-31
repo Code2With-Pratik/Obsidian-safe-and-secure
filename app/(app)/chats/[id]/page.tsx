@@ -13,6 +13,7 @@ export default function ChatRoom() {
   const params = useParams<{ id: string }>();
   const id = params?.id;
   const chats = useChatStore((s) => s.chats);
+  const hasInitialLoaded = useChatStore((s) => s.hasInitialLoaded);
   const setActive = useChatStore((s) => s.setActiveChat);
   const right = useUIStore((s) => s.rightPanel);
   const setRight = useUIStore((s) => s.setRightPanel);
@@ -22,16 +23,26 @@ export default function ChatRoom() {
     if (id) setActive(id);
   }, [id, setActive]);
 
-  // The details panel docks beside the thread on desktop, so it opens by
-  // default there. On mobile/tablet it's a full-screen overlay that would
-  // cover the chat, so it must stay closed until the user taps the header.
+  // ... (keep the details panel effect)
   React.useEffect(() => {
     if (typeof window === "undefined") return;
     if (window.matchMedia("(min-width: 1280px)").matches) setRight("details");
     else setRight(null);
   }, [id, setRight]);
 
-  if (!chat) return notFound();
+  if (!chat) {
+    if (!hasInitialLoaded) {
+      return (
+        <div className="flex h-[calc(100dvh-4rem)] items-center justify-center">
+          <div className="flex flex-col items-center gap-2">
+            <div className="size-8 rounded-full border-2 border-primary border-t-transparent animate-spin" />
+            <p className="text-xs text-muted-foreground animate-pulse">Syncing conversation…</p>
+          </div>
+        </div>
+      );
+    }
+    return notFound();
+  }
 
   return (
     <div className="flex h-[calc(100dvh-4rem)]">

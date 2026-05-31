@@ -3,13 +3,35 @@
 import * as React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowLeft, KeyRound, Mail } from "lucide-react";
+import { ArrowLeft, KeyRound, Mail, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { resetPassword } from "@/lib/supabase/actions";
+import { useToast } from "@/components/ui/toaster";
 
 export default function RecoverPage() {
   const [sent, setSent] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+  const [email, setEmail] = React.useState("");
+  const { toast } = useToast();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    const result = await resetPassword(email);
+    setLoading(false);
+
+    if (result.error) {
+      toast({
+        title: "Error",
+        description: result.error,
+      });
+      return;
+    }
+
+    setSent(true);
+  };
 
   return (
     <div className="grid min-h-dvh place-items-center px-6 py-10">
@@ -32,28 +54,33 @@ export default function RecoverPage() {
 
         {sent ? (
           <div className="mt-6 p-4 rounded-xl glass-subtle border border-emerald-400/30 text-sm">
-            <p>Check your inbox at <span className="font-medium">you@nova.app</span>.</p>
+            <p>Check your inbox at <span className="font-medium">{email}</span>.</p>
             <p className="text-muted-foreground text-xs mt-1">
               Didn't arrive? <button onClick={() => setSent(false)} className="text-primary">Try again</button>
             </p>
           </div>
         ) : (
           <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              setSent(true);
-            }}
+            onSubmit={handleSubmit}
             className="mt-6 space-y-4"
           >
             <div className="space-y-1.5">
               <Label htmlFor="rec-email">Account email</Label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                <Input id="rec-email" type="email" defaultValue="aria@nova.app" className="pl-9" />
+                <Input 
+                  id="rec-email" 
+                  type="email" 
+                  placeholder="aria@nova.app" 
+                  className="pl-9" 
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
               </div>
             </div>
-            <Button variant="gradient" size="lg" className="w-full !h-12">
-              Send recovery link
+            <Button variant="gradient" size="lg" className="w-full !h-12" disabled={loading}>
+              {loading ? <Loader2 className="animate-spin" /> : "Send recovery link"}
             </Button>
           </form>
         )}

@@ -18,11 +18,21 @@ import { ImageLightboxProvider } from "./image-lightbox";
 import type { Chat, Message } from "@/types";
 import { motion } from "framer-motion";
 
+const EMPTY_MESSAGES: Message[] = [];
+
 export function ChatThread({ chat }: { chat: Chat }) {
-  const messages = useChatStore((s) => s.messages[chat.id] ?? []);
+  const messages = useChatStore((s) => s.messages[chat.id] ?? EMPTY_MESSAGES);
+  const markRead = useChatStore((s) => s.markRead);
   const send = useChatStore((s) => s.sendMessage);
   const sendVoice = useChatStore((s) => s.sendVoice);
   const sendAttachment = useChatStore((s) => s.sendAttachment);
+
+  // Sync state on mount or chat change
+  useEffect(() => {
+    if (chat.id) {
+      markRead(chat.id);
+    }
+  }, [chat.id, markRead]);
   const overrideThemeId = useChatThemeStore((s) => s.byChat[chat.id]);
   const overrideCustomBg = useChatThemeStore((s) => s.customBgByChat[chat.id]);
   const globalThemeId = useChatThemeStore((s) => s.globalTheme);
@@ -61,8 +71,14 @@ export function ChatThread({ chat }: { chat: Chat }) {
   const liftForPicker = pickerOpen && !isDesktop;
 
   useEffect(() => {
-    endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages.length]);
+    // Only scroll if we actually have messages or just opened the picker
+    if (messages.length > 0 || liftForPicker) {
+      const timer = setTimeout(() => {
+        endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [messages.length, liftForPicker]);
 
   // When the search has a non-empty query, narrow the list to messages whose
   // content (or attachment names) contain it. Matches are case-insensitive.
@@ -168,6 +184,7 @@ export function ChatThread({ chat }: { chat: Chat }) {
         </ScrollArea>
 
         <MessageInput
+          chatId={chat.id}
           onSend={(text) => send(chat.id, text)}
           onSendVoice={(durationSec, waveform) => sendVoice(chat.id, durationSec, waveform)}
           onSendAttachment={(payload) => sendAttachment(chat.id, payload)}

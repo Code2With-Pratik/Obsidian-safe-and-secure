@@ -1,433 +1,264 @@
 "use client";
 
 import { create } from "zustand";
-import { chats as seedChats, messagesByChat as seedMsgs, users } from "@/lib/mock-data";
-import type { Chat, Community, Message } from "@/types";
+import type { Chat, Community, Message, User } from "@/types";
+import { createClient } from "@/lib/supabase/client";
+import { RealtimeChannel } from "@supabase/supabase-js";
+import { useAuthStore } from "./use-auth-store";
+
+const supabase = createClient();
 
 interface ChatState {
   chats: Chat[];
   messages: Record<string, Message[]>;
   activeChatId: string | null;
+  typing: Record<string, string[]>; // chatId -> userIds
+  onlineUsers: string[]; // userIds
+  
+  presenceChannel: RealtimeChannel | null;
+  messageChannel: RealtimeChannel | null;
+  hasInitialLoaded: boolean;
+  
+  fetchChats: () => Promise<void>;
+  fetchMessages: (chatId: string) => Promise<void>;
+  initializeRealtime: () => void;
+  setTyping: (chatId: string, isTyping: boolean) => void;
   setActiveChat: (id: string | null) => void;
-  sendMessage: (chatId: string, content: string) => void;
-  sendVoice: (chatId: string, durationSec: number, waveform: number[]) => void;
-  /** Generic rich-attachment send. Accepts a partial Message (kind + payload
-   *  fields); the store fills in id / authorId / createdAt / status. */
+  
+  sendMessage: (chatId: string, content: string) => Promise<void>;
+  sendVoice: (chatId: string, durationSec: number, waveform: number[]) => Promise<void>;
   sendAttachment: (
     chatId: string,
     payload: Partial<Message> & { kind: Message["kind"]; content?: string }
-  ) => void;
+  ) => Promise<void>;
+  markRead: (chatId: string) => void;
+  markDelivered: (chatId: string, messageId: string) => Promise<void>;
+  
+  startDM: (user: any) => Promise<{ data?: Chat; error?: string }>;
+  removeChat: (chatId: string) => void;
+  clearAll: () => void;
+  
+  // Placeholders
+  addGroup: (group: any) => Chat;
+  joinCommunity: (community: any) => Chat;
   votePoll: (chatId: string, messageId: string, optionId: string) => void;
   toggleReaction: (chatId: string, messageId: string, emoji: string) => void;
   pinMessage: (chatId: string, messageId: string) => void;
   removeMessages: (chatId: string, messageIds: string[]) => void;
-  markRead: (chatId: string) => void;
-  addGroup: (
-    group: Pick<Chat, "name" | "description" | "memberIds" | "banner" | "avatar">
-  ) => Chat;
-  startDM: (userId: string) => Chat;
-  joinCommunity: (community: Community) => Chat;
-  /** Drop a "Join call" scheduled-message into each selected user's DM. */
-  scheduleCallWith: (
-    userIds: string[],
-    invite: {
-      whenIso: string;
-      endsAtIso?: string;
-      title: string;
-      video: boolean;
-    }
-  ) => void;
-  removeChat: (chatId: string) => void;
-  clearAll: () => void;
+  scheduleCallWith: (userIds: string[], invite: any) => void;
 }
 
 export const useChatStore = create<ChatState>((set, get) => ({
-  chats: seedChats,
-  messages: seedMsgs,
-  activeChatId: "c1",
+  chats: [],
+  messages: {},
+  activeChatId: null,
+  typing: {},
+  onlineUsers: [],
+  presenceChannel: null,
+  messageChannel: null,
+  hasInitialLoaded: false,
+
+  initializeRealtime: () => {
+    const me = useAuthStore.getState().user;
+    if (!me) return;
+
+    if (!get().presenceChannel) {
+      console.log("[Realtime] 🛰️ Connecting Presence...");
+      const channel = supabase.channel('nova_presence_v1')
+        .on('presence', { event: 'sync' }, () => {
+          const state = channel.presenceState();
+          const meId = useAuthStore.getState().user?.id;
+          
+          const onlineIds: string[] = [];
+          const typingMap: Record<string, string[]> = {};
+
+          Object.values(state).forEach((presences: any) => {
+            presences.forEach((p: any) => {
+              if (!p.user_id || p.user_id === meId) return;
+              onlineIds.push(p.user_id);
+              if (p.is_typing && p.typing_in) {
+                if (!typingMap[p.typing_in]) typingMap[p.typing_in] = [];
+                typingMap[p.typing_in].push(p.user_id);
+              }
+            });
+          });
+
+          set({ 
+            onlineUsers: Array.from(new Set(onlineIds)),
+            typing: typingMap
+          });
+        });
+
+      channel.subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          await channel.track({
+            user_id: me.id,
+            is_typing: false,
+            typing_in: null,
+            online_at: new Date().toISOString()
+          });
+        }
+      });
+      set({ presenceChannel: channel });
+    }
+
+    if (!get().messageChannel) {
+      const channel = supabase.channel(`nova_msgs_${me.id}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'messages' },
+          (payload) => {
+            const m = (payload.new || payload.old) as any;
+            const chatId = m.chat_id;
+            if (!chatId) return;
+
+            if (payload.eventType === 'INSERT') {
+              const newMessage: Message = {
+                id: m.id, chatId, authorId: m.author_id, kind: m.kind,
+                content: m.content || '', createdAt: m.created_at,
+                status: m.status || 'delivered', ...m.payload
+              };
+
+              set((s) => {
+                const chatMsgs = s.messages[chatId] || [];
+                if (chatMsgs.some(x => x.id === newMessage.id)) return s;
+                return {
+                  messages: { ...s.messages, [chatId]: [...chatMsgs, newMessage] },
+                  chats: s.chats.map(c => c.id === chatId ? { ...c, lastMessage: newMessage.content, lastMessageAt: newMessage.createdAt } : c)
+                };
+              });
+
+              if (m.author_id !== me.id && get().activeChatId === chatId) {
+                get().markRead(chatId);
+              }
+            } else if (payload.eventType === 'UPDATE') {
+              set((s) => ({
+                messages: {
+                  ...s.messages,
+                  [chatId]: (s.messages[chatId] || []).map(msg => 
+                    msg.id === m.id ? { ...msg, status: m.status } : msg
+                  )
+                }
+              }));
+            }
+          }
+        )
+        .subscribe();
+      set({ messageChannel: channel });
+    }
+  },
+
+  fetchChats: async () => {
+    const me = useAuthStore.getState().user;
+    if (!me) return;
+    const { data: chatsData } = await supabase.from('chats').select(`*, members:chat_members(user_id, role)`).order('created_at', { ascending: false });
+    if (chatsData) {
+      const userChats = chatsData.filter(c => c.members?.some((m: any) => m.user_id === me.id));
+      const pIds = Array.from(new Set(userChats.flatMap(c => c.members.map((m: any) => m.user_id))));
+      const { data: profiles } = await supabase.from('profiles').select('*').in('id', pIds);
+      const pMap = new Map(profiles?.map(p => [p.id, p]) || []);
+      const formatted = userChats.map((c: any) => {
+        let name = c.name, avatar = c.avatar;
+        if (c.type === 'dm') {
+          const other = c.members.find((m: any) => m.user_id !== me.id);
+          const p = other ? pMap.get(other.user_id) : null;
+          if (p) { name = p.name || p.username; avatar = p.avatar; }
+        }
+        return { id: c.id, type: c.type, name: name || 'Chat', avatar, memberIds: c.members.map((m: any) => m.user_id) };
+      });
+      set({ chats: formatted, hasInitialLoaded: true });
+    }
+  },
+
+  fetchMessages: async (chatId) => {
+    const { data } = await supabase.from('messages').select('*').eq('chat_id', chatId).order('created_at', { ascending: true });
+    if (data) {
+      const msgs = data.map((m: any) => ({
+        id: m.id, chatId: m.chat_id, authorId: m.author_id, kind: m.kind,
+        content: m.content || '', createdAt: m.created_at, status: m.status || 'delivered', ...m.payload
+      }));
+      set((s) => ({ messages: { ...s.messages, [chatId]: msgs } }));
+    }
+  },
+
+  setTyping: async (chatId, isTyping) => {
+    const me = useAuthStore.getState().user;
+    const channel = get().presenceChannel;
+    if (!me || !channel) return;
+    // Track the typing status. We use `typing_in` to specify the room.
+    await channel.track({
+      user_id: me.id,
+      is_typing: isTyping,
+      typing_in: isTyping ? chatId : null,
+      online_at: new Date().toISOString()
+    });
+  },
 
   setActiveChat: (id) => {
     set({ activeChatId: id });
-    if (id) get().markRead(id);
-  },
-
-  sendMessage: (chatId, content) => {
-    const m: Message = {
-      id: `m-${Date.now()}`,
-      chatId,
-      authorId: "me",
-      kind: "text",
-      content,
-      createdAt: new Date().toISOString(),
-      status: "sending"
-    };
-    set((s) => ({
-      messages: {
-        ...s.messages,
-        [chatId]: [...(s.messages[chatId] ?? []), m]
-      },
-      chats: s.chats.map((c) =>
-        c.id === chatId ? { ...c, lastMessage: content, lastMessageAt: m.createdAt } : c
-      )
-    }));
-    setTimeout(() => {
-      set((s) => ({
-        messages: {
-          ...s.messages,
-          [chatId]: (s.messages[chatId] ?? []).map((x) =>
-            x.id === m.id ? { ...x, status: "delivered" } : x
-          )
-        }
-      }));
-    }, 700);
-  },
-
-  sendVoice: (chatId, durationSec, waveform) => {
-    const id = `m-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const m: Message = {
-      id,
-      chatId,
-      authorId: "me",
-      kind: "voice",
-      content: "",
-      createdAt: new Date().toISOString(),
-      status: "sending",
-      voice: { durationSec, waveform }
-    };
-    const preview = `🎤 Voice message · ${durationSec}s`;
-    set((s) => ({
-      messages: {
-        ...s.messages,
-        [chatId]: [...(s.messages[chatId] ?? []), m]
-      },
-      chats: s.chats.map((c) =>
-        c.id === chatId ? { ...c, lastMessage: preview, lastMessageAt: m.createdAt } : c
-      )
-    }));
-    setTimeout(() => {
-      set((s) => ({
-        messages: {
-          ...s.messages,
-          [chatId]: (s.messages[chatId] ?? []).map((x) =>
-            x.id === id ? { ...x, status: "delivered" } : x
-          )
-        }
-      }));
-    }, 700);
-  },
-
-  sendAttachment: (chatId, payload) => {
-    const id = `m-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    const m: Message = {
-      id,
-      chatId,
-      authorId: "me",
-      content: payload.content ?? "",
-      createdAt: new Date().toISOString(),
-      status: "sending",
-      ...payload
-    } as Message;
-
-    const preview = previewFor(m);
-    set((s) => ({
-      messages: {
-        ...s.messages,
-        [chatId]: [...(s.messages[chatId] ?? []), m]
-      },
-      chats: s.chats.map((c) =>
-        c.id === chatId ? { ...c, lastMessage: preview, lastMessageAt: m.createdAt } : c
-      )
-    }));
-    setTimeout(() => {
-      set((s) => ({
-        messages: {
-          ...s.messages,
-          [chatId]: (s.messages[chatId] ?? []).map((x) =>
-            x.id === id ? { ...x, status: "delivered" } : x
-          )
-        }
-      }));
-    }, 600);
-  },
-
-  votePoll: (chatId, messageId, optionId) => {
-    set((s) => ({
-      messages: {
-        ...s.messages,
-        [chatId]: (s.messages[chatId] ?? []).map((m) => {
-          if (m.id !== messageId || !m.poll) return m;
-          const multi = !!m.poll.multi;
-          const nextOptions = m.poll.options.map((opt) => {
-            const had = opt.voters.includes("me");
-            if (opt.id === optionId) {
-              return {
-                ...opt,
-                voters: had ? opt.voters.filter((v) => v !== "me") : [...opt.voters, "me"]
-              };
-            }
-            // single-select polls clear my vote from other options
-            if (!multi && had) {
-              return { ...opt, voters: opt.voters.filter((v) => v !== "me") };
-            }
-            return opt;
-          });
-          return { ...m, poll: { ...m.poll, options: nextOptions } };
-        })
-      }
-    }));
-  },
-
-  toggleReaction: (chatId, messageId, emoji) =>
-    set((s) => ({
-      messages: {
-        ...s.messages,
-        [chatId]: (s.messages[chatId] ?? []).map((m) => {
-          if (m.id !== messageId) return m;
-          const existing = m.reactions?.find((r) => r.emoji === emoji);
-          let reactions = m.reactions ?? [];
-          if (existing) {
-            reactions = reactions
-              .map((r) =>
-                r.emoji === emoji
-                  ? { ...r, count: r.count + (r.byMe ? -1 : 1), byMe: !r.byMe }
-                  : r
-              )
-              .filter((r) => r.count > 0);
-          } else {
-            reactions = [...reactions, { emoji, count: 1, byMe: true }];
-          }
-          return { ...m, reactions };
-        })
-      }
-    })),
-
-  pinMessage: (chatId, messageId) =>
-    set((s) => ({
-      messages: {
-        ...s.messages,
-        [chatId]: (s.messages[chatId] ?? []).map((m) =>
-          m.id === messageId ? { ...m, pinned: !m.pinned } : m
-        )
-      }
-    })),
-
-  removeMessages: (chatId, messageIds) => {
-    if (messageIds.length === 0) return;
-    const idSet = new Set(messageIds);
-    set((s) => ({
-      messages: {
-        ...s.messages,
-        [chatId]: (s.messages[chatId] ?? []).filter((m) => !idSet.has(m.id))
-      }
-    }));
-  },
-
-  markRead: (chatId) =>
-    set((s) => ({
-      chats: s.chats.map((c) => (c.id === chatId ? { ...c, unread: 0 } : c))
-    })),
-
-  addGroup: (group) => {
-    const id = `g-${Date.now()}`;
-    const newChat: Chat = {
-      id,
-      type: "group",
-      name: group.name,
-      avatar:
-        group.avatar ??
-        `https://api.dicebear.com/9.x/notionists/svg?backgroundType=gradientLinear&backgroundColor=8b5cf6,ec4899,22d3ee,a3e635,fbbf24,fb923c,60a5fa,f472b6&radius=18&seed=${encodeURIComponent(group.name)}`,
-      banner: group.banner,
-      description: group.description,
-      memberIds: ["me", ...(group.memberIds ?? [])],
-      membersCount: 1 + (group.memberIds?.length ?? 0),
-      lastMessage: `You created the group · welcome ✨`,
-      lastMessageAt: new Date().toISOString(),
-      pinned: false,
-      online: false
-    };
-    set((s) => ({
-      chats: [newChat, ...s.chats],
-      messages: {
-        ...s.messages,
-        [id]: [
-          {
-            id: `m-sys-${Date.now()}`,
-            chatId: id,
-            authorId: "me",
-            kind: "system",
-            content: `${group.name} is live · ${(group.memberIds?.length ?? 0) + 1} members joined`,
-            createdAt: new Date().toISOString()
-          }
-        ]
-      }
-    }));
-    return newChat;
-  },
-
-  startDM: (userId) => {
-    const existing = get().chats.find(
-      (c) => c.type === "dm" && c.memberIds?.includes(userId)
-    );
-    if (existing) {
-      get().setActiveChat(existing.id);
-      return existing;
-    }
-    const u = users.find((x) => x.id === userId);
-    if (!u) {
-      throw new Error(`Unknown user ${userId}`);
-    }
-    const id = `dm-${Date.now()}`;
-    const newChat: Chat = {
-      id,
-      type: "dm",
-      name: u.name,
-      avatar: u.avatar,
-      memberIds: ["me", u.id],
-      lastMessage: "Say hi 👋",
-      lastMessageAt: new Date().toISOString(),
-      online: u.status === "online"
-    };
-    set((s) => ({
-      chats: [newChat, ...s.chats],
-      messages: {
-        ...s.messages,
-        [id]: [
-          {
-            id: `m-sys-${Date.now()}`,
-            chatId: id,
-            authorId: "me",
-            kind: "system",
-            content: `You connected with ${u.name}`,
-            createdAt: new Date().toISOString()
-          }
-        ]
-      }
-    }));
-    return newChat;
-  },
-
-  scheduleCallWith: (userIds, invite) => {
-    // One shared `callId` for every invitee's copy of the same call. The
-    // Upcoming list dedupes by this id so a 5-person schedule shows ONE
-    // upcoming entry — not five.
-    const callId = `call-${Date.now()}`;
-    const createdAt = new Date().toISOString();
-    for (const userId of userIds) {
-      const chat = get().startDM(userId);
-      const msg: Message = {
-        id: `m-${callId}-${userId}`,
-        chatId: chat.id,
-        authorId: "me",
-        kind: "schedule",
-        content: invite.title,
-        createdAt,
-        status: "sent",
-        schedule: {
-          whenIso: invite.whenIso,
-          message: invite.title,
-          callInvite: {
-            callId,
-            video: invite.video,
-            title: invite.title,
-            endsAtIso: invite.endsAtIso,
-            participantIds: ["me", ...userIds]
-          }
-        }
-      };
-      set((s) => ({
-        messages: {
-          ...s.messages,
-          [chat.id]: [...(s.messages[chat.id] ?? []), msg]
-        },
-        chats: s.chats.map((c) =>
-          c.id === chat.id
-            ? {
-                ...c,
-                lastMessage: `📞 ${invite.title}`,
-                lastMessageAt: msg.createdAt
-              }
-            : c
-        )
-      }));
+    if (id) {
+      get().markRead(id);
+      get().fetchMessages(id);
     }
   },
 
-  joinCommunity: (community) => {
-    const existing = get().chats.find(
-      (c) => c.type === "channel" && c.name === community.name
-    );
-    if (existing) {
-      get().setActiveChat(existing.id);
-      return existing;
+  sendMessage: async (chatId, content) => {
+    const me = useAuthStore.getState().user;
+    if (!me) return;
+    const tempId = `m-${Date.now()}`;
+    set((s) => ({ messages: { ...s.messages, [chatId]: [...(s.messages[chatId] ?? []), { id: tempId, chatId, authorId: me.id, kind: "text", content, createdAt: new Date().toISOString(), status: "sending" }] } }));
+    const { data, error } = await supabase.from('messages').insert({ chat_id: chatId, author_id: me.id, kind: 'text', content, status: 'sent' }).select().single();
+    if (error) {
+      set((s) => ({ messages: { ...s.messages, [chatId]: (s.messages[chatId] ?? []).filter(m => m.id !== tempId) } }));
+      return;
     }
-    const id = `co-${community.id}-${Date.now()}`;
-    const newChat: Chat = {
-      id,
-      type: "channel",
-      name: community.name,
-      avatar: community.cover,
-      banner: community.cover,
-      description: `${community.category} community · ${community.members.toLocaleString()} members`,
-      membersCount: community.members,
-      lastMessage: `You joined ${community.name} ✨`,
-      lastMessageAt: new Date().toISOString(),
-      online: true,
-      pinned: false
-    };
-    set((s) => ({
-      chats: [newChat, ...s.chats],
-      messages: {
-        ...s.messages,
-        [id]: [
-          {
-            id: `m-sys-${Date.now()}`,
-            chatId: id,
-            authorId: "me",
-            kind: "system",
-            content: `Welcome to ${community.name} · ${community.online.toLocaleString()} online now`,
-            createdAt: new Date().toISOString()
-          }
-        ]
-      }
-    }));
-    return newChat;
-  },
-
-  removeChat: (chatId) =>
     set((s) => {
-      const { [chatId]: _removed, ...rest } = s.messages;
-      return {
-        chats: s.chats.filter((c) => c.id !== chatId),
-        messages: rest,
-        activeChatId: s.activeChatId === chatId ? null : s.activeChatId
-      };
-    }),
+      const cur = s.messages[chatId] ?? [];
+      if (cur.some(m => m.id === data.id)) return { messages: { ...s.messages, [chatId]: cur.filter(m => m.id !== tempId) } };
+      return { messages: { ...s.messages, [chatId]: cur.map(x => x.id === tempId ? { ...x, id: data.id, status: "sent" } : x) } };
+    });
+  },
 
-  clearAll: () =>
-    set({
-      chats: [],
-      messages: {},
-      activeChatId: null
-    })
-}));
+  markRead: async (chatId) => {
+    const me = useAuthStore.getState().user;
+    if (!me) return;
+    await supabase.from('messages').update({ status: 'read' }).eq('chat_id', chatId).neq('author_id', me.id).neq('status', 'read');
+    set((s) => ({ chats: s.chats.map((c) => (c.id === chatId ? { ...c, unread: 0 } : c)) }));
+  },
 
-/** One-line summary of a rich message for the chat-list "lastMessage" cell. */
-function previewFor(m: Message): string {
-  switch (m.kind) {
-    case "image":    return "🖼 Photo";
-    case "video":    return "🎬 Video";
-    case "audio":    return `🎵 ${m.audio?.name ?? "Audio"}`;
-    case "voice":    return `🎤 Voice · ${m.voice?.durationSec ?? 0}s`;
-    case "file":     return `📄 ${m.file?.name ?? "Document"}`;
-    case "sticker":  return "🌟 Sticker";
-    case "gif":      return "🎞 GIF";
-    case "poll":     return `📊 ${m.poll?.question ?? "Poll"}`;
-    case "contact": {
-      const n = m.contacts?.length ?? 0;
-      return n > 1 ? `👤 ${n} contacts` : `👤 ${m.contacts?.[0]?.name ?? "Contact"}`;
+  markDelivered: async (chatId, messageId) => {
+    const me = useAuthStore.getState().user;
+    if (!me) return;
+    await supabase.from('messages').update({ status: 'delivered' }).eq('id', messageId).neq('author_id', me.id).eq('status', 'sent');
+  },
+
+  startDM: async (u) => {
+    const me = useAuthStore.getState().user;
+    if (!me) return { error: 'Not authenticated' };
+    const { data: existingId } = await supabase.rpc('find_dm_between_users', { user1_id: me.id, user2_id: u.id });
+    if (existingId) {
+      if (!get().chats.find(c => c.id === existingId)) await get().fetchChats();
+      get().setActiveChat(existingId);
+      return { data: get().chats.find(c => c.id === existingId) };
     }
-    case "location": return m.location?.live ? "🛰 Live location" : "📍 Location";
-    case "schedule": return `⏰ Scheduled`;
-    default:         return m.content || "Message";
-  }
-}
+    const { data: chat } = await supabase.from('chats').insert({ type: 'dm', created_by: me.id }).select().single();
+    if (!chat) return { error: 'Failed' };
+    await supabase.from('chat_members').insert([{ chat_id: chat.id, user_id: me.id, role: 'owner' }, { chat_id: chat.id, user_id: u.id, role: 'member' }]);
+    const newChat: Chat = { id: chat.id, type: "dm", name: u.name, avatar: u.avatar, memberIds: [me.id, u.id], online: true };
+    set((s) => ({ chats: [newChat, ...s.chats] }));
+    get().setActiveChat(chat.id);
+    return { data: newChat };
+  },
+
+  sendVoice: async () => {},
+  sendAttachment: async () => {},
+  addGroup: () => ({} as Chat),
+  joinCommunity: () => ({} as Chat),
+  votePoll: () => {},
+  toggleReaction: () => {},
+  pinMessage: () => {},
+  removeMessages: () => {},
+  scheduleCallWith: () => {},
+  removeChat: (chatId) => set((s) => ({ chats: s.chats.filter(c => c.id !== chatId) })),
+  clearAll: () => set({ chats: [], messages: {}, activeChatId: null, hasInitialLoaded: false })
+}));

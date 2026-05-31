@@ -41,9 +41,11 @@ export function formatRelative(date: Date | string) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
-export function initials(name: string) {
+export function initials(name?: string | null) {
+  if (!name) return "";
   return name
     .split(" ")
+    .filter(Boolean)
     .map((n) => n[0])
     .slice(0, 2)
     .join("")

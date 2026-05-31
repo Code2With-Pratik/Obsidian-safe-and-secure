@@ -8,7 +8,7 @@ import type { User } from "@/types";
 interface AuthState {
   user: User | null;
   isAuthed: boolean;
-  login: (user?: User) => void;
+  setUser: (user: User | null) => void;
   logout: () => void;
   updateUser: (patch: Partial<User>) => void;
 }
@@ -18,7 +18,7 @@ export const useAuthStore = create<AuthState>()(
     (set) => ({
       user: null,
       isAuthed: false,
-      login: (user) => set({ user: user ?? currentUser, isAuthed: true }),
+      setUser: (user) => set({ user, isAuthed: !!user }),
       logout: () => set({ user: null, isAuthed: false }),
       updateUser: (patch) =>
         set((s) => (s.user ? { user: { ...s.user, ...patch } } : s))

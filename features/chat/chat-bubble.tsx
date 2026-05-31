@@ -38,8 +38,9 @@ import { useT } from "@/lib/i18n";
 import { cn, copyText, formatTime, initials } from "@/lib/utils";
 import { ReactionPicker } from "./reaction-picker";
 import { useImageLightbox } from "./image-lightbox";
-import { useChatStore } from "@/store/use-chat-store";
-import { useMessageSelectionStore } from "@/store/use-message-selection-store";
+import { useChatStore } from "../../store/use-chat-store";
+import { useMessageSelectionStore } from "../../store/use-message-selection-store";
+import { useAuthStore } from "../../store/use-auth-store";
 import { users } from "@/lib/mock-data";
 import type { Message } from "@/types";
 
@@ -52,8 +53,32 @@ interface BubbleProps {
 }
 
 export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem }: BubbleProps) {
-  const me = message.authorId === "me";
-  const author = users.find((u) => u.id === message.authorId);
+  const user = useAuthStore((s) => s.user);
+  const me = message.authorId === user?.id;
+  const chats = useChatStore((s) => s.chats);
+  const chat = chats.find(c => c.id === message.chatId);
+  
+  const [author, setAuthor] = React.useState<{ name: string; avatar?: string } | null>(null);
+
+  React.useEffect(() => {
+    if (me) {
+      setAuthor({ name: user?.name || "Me", avatar: user?.avatar });
+      return;
+    }
+
+    // Try to find author in local users first
+    const localUser = users.find((u) => u.id === message.authorId);
+    if (localUser) {
+      setAuthor({ name: localUser.name, avatar: localUser.avatar });
+      return;
+    }
+
+    // Otherwise, it might be the other person in a DM
+    if (chat?.type === 'dm' && chat.name) {
+      setAuthor({ name: chat.name, avatar: chat.avatar });
+    }
+  }, [me, user, message.authorId, chat]);
+
   const toggleReaction = useChatStore((s) => s.toggleReaction);
   const pinMessage = useChatStore((s) => s.pinMessage);
   const removeMessages = useChatStore((s) => s.removeMessages);
@@ -125,6 +150,7 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
       {!me && (
         <Avatar className="size-8 shrink-0">
           <AvatarImage src={author?.avatar} />
+          <AvatarFallback>{initials(author?.name)}</AvatarFallback>
         </Avatar>
       )}
       <div className={cn("max-w-[78%] md:max-w-[68%] min-w-0 flex flex-col", me && "items-end")}>
@@ -1025,12 +1051,7 @@ function LocationBubble({ me, bubbleMe, meStyle, message }: SubProps) {
       target="_blank"
       rel="noopener noreferrer"
       style={me ? meStyle : undefined}
-      className={cn(
-        "block rounded-2xl overflow-hidden max-w-[min(18rem,100%)] ring-1",
-        me
-          ? "rounded-br-none ring-white/15" + (bubbleMe ? "" : " bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white")
-          : "rounded-bl-none glass border-border/60 ring-border/60"
-      )}
+      className="block rounded-2xl overflow-hidden max-w-[min(18rem,100%)] ring-1 ring-border/60"
     >
       <div className="aspect-[5/3] bg-black/40 relative">
         <iframe
@@ -1040,7 +1061,7 @@ function LocationBubble({ me, bubbleMe, meStyle, message }: SubProps) {
           className="absolute inset-0 w-full h-full border-0 pointer-events-none"
         />
       </div>
-      <div className="px-3 py-2 flex items-center gap-2">
+      <div className="px-3 py-2 flex items-center gap-2 bg-card">
         {loc.live ? (
           <Navigation className="size-3.5 shrink-0" />
         ) : (

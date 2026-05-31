@@ -54,6 +54,7 @@ import { useAuthStore } from "@/store/use-auth-store";
 import { FONT_OPTIONS } from "@/app/fonts";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
+import { logout as supabaseLogout } from "@/lib/supabase/actions";
 
 const sections = [
   { id: "appearance", label: "Appearance", icon: Palette },
@@ -112,9 +113,9 @@ function SettingsContent() {
   }, [sectionParam]);
   const [chatThemeOpen, setChatThemeOpen] = React.useState(false);
 
-  const handleSignOut = () => {
+  const handleSignOut = async () => {
+    await supabaseLogout();
     logout();
-    router.push("/");
   };
 
   // Settings persist in localStorage; gate the controlled inputs behind a

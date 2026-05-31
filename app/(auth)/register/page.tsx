@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { NovaMascot } from "@/components/nova-mascot";
+import { signup as supabaseSignup } from "@/lib/supabase/actions";
+import { useToast } from "@/components/ui/toaster";
 
 const schema = z
   .object({
@@ -29,14 +31,28 @@ type Values = z.infer<typeof schema>;
 
 export default function RegisterPage() {
   const router = useRouter();
+  const { toast } = useToast();
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting }
   } = useForm<Values>({ resolver: zodResolver(schema) });
 
-  const onSubmit = async (_: Values) => {
-    await new Promise((r) => setTimeout(r, 500));
+  const onSubmit = async (data: Values) => {
+    const result = await supabaseSignup(data);
+
+    if (result?.error) {
+      toast({
+        title: "Registration Failed",
+        description: result.error,
+      });
+      return;
+    }
+
+    toast({
+      title: "Success",
+      description: "Account created! Now pick your username.",
+    });
     router.push("/username");
   };
 

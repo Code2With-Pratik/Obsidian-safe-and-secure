@@ -48,6 +48,7 @@ import { StoryAvatar } from "@/components/stories/story-avatar";
 import { users as allUsers } from "@/lib/mock-data";
 import { useChatThemeStore } from "@/store/use-chat-theme-store";
 import { useMessageSelectionStore } from "@/store/use-message-selection-store";
+import { useAuthStore } from "@/store/use-auth-store";
 import { copyText } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { ChatThemeDialog } from "./chat-theme-dialog";
@@ -67,6 +68,17 @@ export function ChatHeader({
 }) {
   const router = useRouter();
   const t = useT();
+  const me = useAuthStore((s) => s.user);
+  const onlineUsers = useChatStore((s) => s.onlineUsers);
+  const typingMap = useChatStore((s) => s.typing);
+  const isTyping = (typingMap[chat.id]?.length ?? 0) > 0;
+  
+  // DM chats: check if the other member is online
+  const otherMemberId = chat.memberIds?.find(id => id !== me?.id);
+  const isOnline = chat.type === 'dm' 
+    ? (otherMemberId && onlineUsers.includes(otherMemberId)) 
+    : !!chat.online;
+
   const startCallStore = useUIStore((s) => s.startCall);
   const chats = useChatStore((s) => s.chats);
   const removeChat = useChatStore((s) => s.removeChat);
@@ -91,8 +103,7 @@ export function ChatHeader({
   const [themeOpen, setThemeOpen] = React.useState(false);
 
   // DM → resolve the single user to show their story ring on the header avatar.
-  const storyUserId =
-    chat.type === "dm" ? allUsers.find((u) => u.name === chat.name)?.id : undefined;
+  const storyUserId = chat.type === "dm" ? otherMemberId : undefined;
   const hasStory = useStoriesStore((s) =>
     storyUserId ? !!s.byUser[storyUserId]?.slides.length : false
   );
@@ -247,7 +258,7 @@ export function ChatHeader({
                   src={chat.avatar}
                   name={chat.name}
                   size={40}
-                  status={chat.online ? "online" : "offline"}
+                  status={isOnline ? "online" : "offline"}
                   pulse={false}
                   breathe={false}
                   ring={false}
@@ -267,9 +278,9 @@ export function ChatHeader({
                 <div className="text-[11px] text-muted-foreground truncate">
                   {chat.type === "group" || chat.type === "channel"
                     ? `${chat.membersCount} ${t("members")} · ${Math.floor((chat.membersCount ?? 0) / 5)} ${t("online")}`
-                    : chat.online
-                    ? `${t("online")} · ${t("typing…")}`
-                    : t("last seen 2h ago")}
+                    : isOnline
+                    ? `${t("online")}${isTyping ? ` · ${t("typing…")}` : ""}`
+                    : t("last seen recently")}
                 </div>
               </div>
             </button>

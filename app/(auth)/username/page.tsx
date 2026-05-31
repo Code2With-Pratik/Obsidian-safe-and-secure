@@ -8,17 +8,40 @@ import { AtSign, Check, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { updateUsername } from "@/lib/supabase/actions";
+import { useToast } from "@/components/ui/toaster";
 
 const SUGGESTIONS = ["aria", "aria.v", "ariavance", "aria_nova", "ariavibes"];
 
 export default function UsernamePage() {
   const router = useRouter();
-  const [value, setValue] = React.useState("aria");
+  const { toast } = useToast();
+  const [value, setValue] = React.useState("");
   const [checking, setChecking] = React.useState(false);
   const [available, setAvailable] = React.useState<boolean | null>(null);
+  const [submitting, setSubmitting] = React.useState(false);
+
+  const handleClaim = async () => {
+    setSubmitting(true);
+    const result = await updateUsername(value);
+    setSubmitting(false);
+
+    if (result.error) {
+      toast({
+        title: "Error",
+        description: result.error,
+      });
+      return;
+    }
+
+    router.push("/");
+  };
 
   React.useEffect(() => {
-    if (!value) return;
+    if (!value) {
+      setAvailable(null);
+      return;
+    }
     setChecking(true);
     setAvailable(null);
     const id = setTimeout(() => {
@@ -86,14 +109,14 @@ export default function UsernamePage() {
           variant="gradient"
           size="lg"
           className="w-full mt-7 !h-12"
-          disabled={!available}
-          onClick={() => router.push("/2fa")}
+          disabled={!available || submitting}
+          onClick={handleClaim}
         >
-          Claim @{value || "your.handle"}
+          {submitting ? <Loader2 className="animate-spin" /> : `Claim @${value || "your.handle"}`}
         </Button>
 
         <Link
-          href="/2fa"
+          href="/"
           className="block text-center text-xs text-muted-foreground mt-4 hover:text-foreground"
         >
           Skip for now

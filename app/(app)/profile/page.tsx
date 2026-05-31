@@ -36,7 +36,7 @@ import { useStoriesStore } from "@/store/use-stories-store";
 export default function ProfilePage() {
   const t = useT();
   const user = useAuthStore((s) => s.user);
-  const name = user?.name ?? "Aria Vance";
+  const name = user?.name || "New User";
   const [editOpen, setEditOpen] = React.useState(false);
   const [shareOpen, setShareOpen] = React.useState(false);
   const [qrOpen, setQrOpen] = React.useState(false);
@@ -47,7 +47,7 @@ export default function ProfilePage() {
   const openPhoto = useStoriesStore((s) => s.openPhoto);
 
   const banner = user?.banner;
-  const bannerIsUrl = banner?.startsWith("http");
+  const bannerIsUrl = banner?.startsWith("http") || banner?.startsWith("data:");
 
   return (
     <ScrollArea className="h-[calc(100dvh-4rem)]">
@@ -65,18 +65,6 @@ export default function ProfilePage() {
           ) : (
             <div className="absolute inset-0 bg-gradient-to-br from-violet-500 via-fuchsia-500 to-cyan-400" />
           )}
-          <motion.div
-            className="absolute inset-0"
-            animate={{
-              backgroundPosition: ["0% 0%", "100% 100%"]
-            }}
-            transition={{ duration: 20, repeat: Infinity, repeatType: "reverse" }}
-            style={{
-              backgroundImage:
-                "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.4), transparent 40%), radial-gradient(circle at 70% 70%, rgba(0,0,0,0.3), transparent 50%)",
-              backgroundSize: "200% 200%"
-            }}
-          />
           {/* Mobile-only: on web the Settings entry already lives in the
               left sidebar, so a second icon on the banner would be redundant. */}
           <Link
@@ -137,8 +125,8 @@ export default function ProfilePage() {
                   reduced opacity stays black in light mode and white in
                   dark mode while still reading as "secondary" text. */}
               <p className="text-foreground/75 text-base md:text-lg">
-                @{user?.username ?? "aria"}
-                {user?.pronouns ? ` · ${user.pronouns}` : " · she/her"}
+                @{user?.username || "user"}
+                {user?.pronouns ? ` · ${user.pronouns}` : ""}
               </p>
               <p className="mt-2 max-w-xl">
                 {user?.profession ?? t("Designing the future, one pixel at a time.")}
