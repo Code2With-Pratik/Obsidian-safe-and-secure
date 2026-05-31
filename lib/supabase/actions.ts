@@ -84,11 +84,19 @@ export async function updatePassword(password: string) {
 
 export async function searchUsers(query: string) {
   const supabase = await createClient()
-  const { data, error } = await supabase
+  const { data: { user: me } } = await supabase.auth.getUser()
+  
+  let builder = supabase
     .from('profiles')
     .select('*')
     .or(`name.ilike.%${query}%,username.ilike.%${query}%`)
     .limit(10)
+
+  if (me) {
+    builder = builder.neq('id', me.id)
+  }
+
+  const { data, error } = await builder
 
   if (error) {
     return { error: error.message, data: [] }

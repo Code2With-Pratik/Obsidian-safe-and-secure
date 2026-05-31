@@ -98,6 +98,7 @@ export function ChatList({
   const searchParams = useSearchParams();
   const initialTab = searchParams?.get("tab");
   const chats = useChatStore((s) => s.chats);
+  const onlineUsers = useChatStore((s) => s.onlineUsers);
   const markRead = useChatStore((s) => s.markRead);
   const addGroup = useChatStore((s) => s.addGroup);
   const startDM = useChatStore((s) => s.startDM);
@@ -145,12 +146,20 @@ export function ChatList({
     const timer = setTimeout(async () => {
       setIsSearchingUsers(true);
       const { data } = await searchUsers(q);
-      setUserSuggestions(data as any || []);
+      
+      // Filter out people you already have a DM with
+      const existingDMUserIds = new Set(
+        chats.filter(c => c.type === 'dm').flatMap(c => c.memberIds || [])
+      );
+      
+      const filteredSuggestions = (data as User[] || []).filter(u => !existingDMUserIds.has(u.id));
+      
+      setUserSuggestions(filteredSuggestions);
       setIsSearchingUsers(false);
     }, 300);
 
     return () => clearTimeout(timer);
-  }, [q, searchOpen]);
+  }, [q, searchOpen, chats]);
 
   React.useEffect(() => {
     if (searchOpen) {
@@ -187,14 +196,12 @@ export function ChatList({
         toast({
           title: "Error",
           description: result.error,
-          variant: "destructive",
         });
       }
     } catch (err: any) {
       toast({
         title: "Error",
         description: err.message || "Failed to create chat",
-        variant: "destructive",
       });
     }
   };
@@ -423,31 +430,34 @@ export function ChatList({
             {q.trim() === "" ? t("Suggested people") : t("People")}
           </SectionLabel>
           {userSuggestions.length > 0 ? (
-            userSuggestions.map((u) => (
-              <button
-                key={u.id}
-                onClick={() => handleStartDM(u)}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl hover:bg-foreground/[0.04] transition text-left group"
-              >
-                <AnimatedAvatar
-                  src={u.avatar}
-                  name={u.name}
-                  size={44}
-                  status={u.status}
-                  pulse={false}
-                  breathe={false}
-                  ring={false}
-                  hoverLift={false}
-                />
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-semibold truncate">{u.name}</p>
-                  <p className="text-[11px] text-muted-foreground truncate">
-                    @{u.username}
-                  </p>
-                </div>
-                <ChevronRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-              </button>
-            ))
+            userSuggestions.map((u) => {
+              const isOnline = onlineUsers.includes(u.id);
+              return (
+                <button
+                  key={u.id}
+                  onClick={() => handleStartDM(u)}
+                  className="w-full flex items-center gap-3 px-3 py-2.5 rounded-2xl hover:bg-foreground/[0.04] transition text-left group"
+                >
+                  <AnimatedAvatar
+                    src={u.avatar}
+                    name={u.name}
+                    size={44}
+                    status={isOnline ? "online" : "offline"}
+                    pulse={isOnline}
+                    breathe={false}
+                    ring={false}
+                    hoverLift={false}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold truncate">{u.name}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">
+                      @{u.username}
+                    </p>
+                  </div>
+                  <ChevronRight className="size-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                </button>
+              );
+            })
           ) : (
             <p className="text-center text-xs text-muted-foreground py-6">
               No people match "{q}".
@@ -669,9 +679,7 @@ function ChatRow({
     : !!chat.online;
 
   // DM chats map to a single user → show their story ring on the avatar.
-  // We check name as a fallback for mock users, but should ideally use IDs.
-  const storyUserId =
-    chat.type === "dm" ? (otherMemberId || allUsers.find((u) => u.name === chat.name)?.id) : undefined;
+  const storyUserId = chat.type === "dm" ? otherMemberId : undefined;
   const hasStory = useStoriesStore((s) =>
     storyUserId ? !!s.byUser[storyUserId]?.slides.length : false
   );

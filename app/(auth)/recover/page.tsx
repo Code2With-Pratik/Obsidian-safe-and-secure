@@ -26,7 +26,6 @@ export default function RecoverPage() {
       toast({
         title: "Error",
         description: result.error,
-        variant: "destructive",
       });
       return;
     }

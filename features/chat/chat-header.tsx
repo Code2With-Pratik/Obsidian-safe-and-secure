@@ -48,6 +48,7 @@ import { StoryAvatar } from "@/components/stories/story-avatar";
 import { users as allUsers } from "@/lib/mock-data";
 import { useChatThemeStore } from "@/store/use-chat-theme-store";
 import { useMessageSelectionStore } from "@/store/use-message-selection-store";
+import { useAuthStore } from "@/store/use-auth-store";
 import { copyText } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { ChatThemeDialog } from "./chat-theme-dialog";
@@ -67,13 +68,16 @@ export function ChatHeader({
 }) {
   const router = useRouter();
   const t = useT();
+  const me = useAuthStore((s) => s.user);
   const onlineUsers = useChatStore((s) => s.onlineUsers);
   const typingMap = useChatStore((s) => s.typing);
-  const isTyping = typingMap[chat.id]?.length > 0;
+  const isTyping = (typingMap[chat.id]?.length ?? 0) > 0;
   
   // DM chats: check if the other member is online
-  const otherMemberId = chat.memberIds?.find(id => id !== 'me');
-  const isOnline = chat.type === 'dm' ? (otherMemberId && onlineUsers.includes(otherMemberId)) : chat.online;
+  const otherMemberId = chat.memberIds?.find(id => id !== me?.id);
+  const isOnline = chat.type === 'dm' 
+    ? (otherMemberId && onlineUsers.includes(otherMemberId)) 
+    : !!chat.online;
 
   const startCallStore = useUIStore((s) => s.startCall);
   const chats = useChatStore((s) => s.chats);

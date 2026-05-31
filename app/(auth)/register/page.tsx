@@ -45,7 +45,6 @@ export default function RegisterPage() {
       toast({
         title: "Registration Failed",
         description: result.error,
-        variant: "destructive",
       });
       return;
     }

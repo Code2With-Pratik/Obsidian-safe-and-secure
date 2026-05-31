@@ -30,7 +30,6 @@ export default function UsernamePage() {
       toast({
         title: "Error",
         description: result.error,
-        variant: "destructive",
       });
       return;
     }

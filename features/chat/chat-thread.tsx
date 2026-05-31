@@ -22,9 +22,19 @@ const EMPTY_MESSAGES: Message[] = [];
 
 export function ChatThread({ chat }: { chat: Chat }) {
   const messages = useChatStore((s) => s.messages[chat.id] ?? EMPTY_MESSAGES);
+  const subscribeToChat = useChatStore((s) => s.subscribeToChat);
+  const markRead = useChatStore((s) => s.markRead);
   const send = useChatStore((s) => s.sendMessage);
   const sendVoice = useChatStore((s) => s.sendVoice);
   const sendAttachment = useChatStore((s) => s.sendAttachment);
+
+  // Sync state on mount or chat change
+  useEffect(() => {
+    if (chat.id) {
+      subscribeToChat(chat.id);
+      markRead(chat.id);
+    }
+  }, [chat.id, subscribeToChat, markRead]);
   const overrideThemeId = useChatThemeStore((s) => s.byChat[chat.id]);
   const overrideCustomBg = useChatThemeStore((s) => s.customBgByChat[chat.id]);
   const globalThemeId = useChatThemeStore((s) => s.globalTheme);

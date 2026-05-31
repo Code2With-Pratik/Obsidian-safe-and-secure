@@ -41,7 +41,6 @@ export default function ResetPasswordPage() {
       toast({
         title: "Update Failed",
         description: result.error,
-        variant: "destructive",
       });
       return;
     }

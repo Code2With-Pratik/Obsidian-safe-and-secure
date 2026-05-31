@@ -1,10 +1,10 @@
 "use client";
 
 import { create } from "zustand";
-import { chats as seedChats, messagesByChat as seedMsgs, users } from "@/lib/mock-data";
 import type { Chat, Community, Message, User } from "@/types";
 import { createClient } from "@/lib/supabase/client";
 import { RealtimeChannel } from "@supabase/supabase-js";
+import { useAuthStore } from "./use-auth-store";
 
 const supabase = createClient();
 
@@ -12,13 +12,16 @@ interface ChatState {
   chats: Chat[];
   messages: Record<string, Message[]>;
   activeChatId: string | null;
-  typing: Record<string, string[]>; // chatId -> userIds
-  onlineUsers: string[]; // userIds
+  typing: Record<string, string[]>;
+  onlineUsers: string[];
   channels: Record<string, RealtimeChannel>;
+  globalChannel: RealtimeChannel | null;
   
   fetchChats: () => Promise<void>;
   fetchMessages: (chatId: string) => Promise<void>;
   subscribeToChat: (chatId: string) => void;
+  subscribeToUserChats: () => void;
+  subscribeToGlobalPresence: () => void;
   unsubscribeFromChat: (chatId: string) => void;
   setTyping: (chatId: string, isTyping: boolean) => void;
   
@@ -34,10 +37,11 @@ interface ChatState {
   pinMessage: (chatId: string, messageId: string) => void;
   removeMessages: (chatId: string, messageIds: string[]) => void;
   markRead: (chatId: string) => void;
+  markDelivered: (chatId: string, messageId: string) => Promise<void>;
   addGroup: (
     group: Pick<Chat, "name" | "description" | "memberIds" | "banner" | "avatar">
   ) => Chat;
-  startDM: (user: any) => Chat;
+  startDM: (user: any) => Promise<{ data?: Chat; error?: string }>;
   joinCommunity: (community: Community) => Chat;
   scheduleCallWith: (
     userIds: string[],
@@ -59,33 +63,129 @@ export const useChatStore = create<ChatState>((set, get) => ({
   typing: {},
   onlineUsers: [],
   channels: {},
+  globalChannel: null,
+
+  subscribeToUserChats: () => {
+    const meId = useAuthStore.getState().user?.id;
+    const channelId = `user_chats:${meId}`;
+    if (!meId || get().channels[channelId]) return;
+
+    console.log(`[Realtime] Listening for new chat memberships for: ${meId}`);
+    
+    const channel = supabase.channel(channelId)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chat_members',
+          filter: `user_id=eq.${meId}`
+        },
+        () => {
+          console.log("[Realtime] New chat membership detected, refreshing chats...");
+          get().fetchChats();
+        }
+      )
+      .subscribe();
+
+    set((s) => ({
+      channels: { ...s.channels, [channelId]: channel }
+    }));
+  },
+
+  subscribeToGlobalPresence: () => {
+    if (get().globalChannel) return;
+
+    const channel = supabase.channel('global_presence')
+      .on('presence', { event: 'sync' }, () => {
+        const state = channel.presenceState();
+        const meId = useAuthStore.getState().user?.id;
+        const usersOnline: string[] = [];
+
+        Object.values(state).forEach((presences: any) => {
+          presences.forEach((p: any) => {
+            if (p.user_id && p.user_id !== meId) {
+              usersOnline.push(p.user_id);
+            }
+          });
+        });
+        set({ onlineUsers: Array.from(new Set(usersOnline)) });
+      })
+      .subscribe(async (status) => {
+        if (status === 'SUBSCRIBED') {
+          const me = useAuthStore.getState().user;
+          if (me) {
+            await channel.track({
+              user_id: me.id,
+              online_at: new Date().toISOString(),
+            });
+          }
+        }
+      });
+
+    set({ globalChannel: channel });
+  },
 
   fetchChats: async () => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    const me = useAuthStore.getState().user;
+    if (!me) return;
 
-    const { data, error } = await supabase
+    // 1. Fetch chats and members with profile join
+    const { data: chatsData, error: chatsError } = await supabase
       .from('chats')
       .select(`
         *,
-        chat_members!inner(user_id),
-        all_members:chat_members(user_id, role, last_read_at)
+        members:chat_members(
+          user_id,
+          role,
+          profiles:profiles(*)
+        )
       `)
-      .eq('chat_members.user_id', user.id)
       .order('created_at', { ascending: false });
 
-    if (!error && data) {
-      const formattedChats: Chat[] = data.map((c: any) => ({
-        id: c.id,
-        type: c.type,
-        name: c.name || 'Chat',
-        avatar: c.avatar,
-        description: c.description,
-        banner: c.banner,
-        memberIds: c.all_members?.map((m: any) => m.user_id) || [],
-        // We'll fetch last message separately or use a view later
-      }));
-      set({ chats: formattedChats });
+    if (chatsError) {
+      console.error("[DB] Error fetching chats:", chatsError.message);
+      return;
+    }
+
+    if (chatsData) {
+      const userChats = chatsData.filter(c => 
+        c.members?.some((m: any) => m.user_id === me.id)
+      );
+
+      const chatMap = new Map<string, Chat>();
+      userChats.forEach((c: any) => {
+        let name = c.name;
+        let avatar = c.avatar;
+        
+        if (c.type === 'dm') {
+          const otherMember = c.members?.find((m: any) => m.user_id !== me.id);
+          const profile = otherMember?.profiles;
+          if (profile) {
+            name = profile.name || profile.username;
+            avatar = profile.avatar;
+          }
+        }
+
+        chatMap.set(c.id, {
+          id: c.id,
+          type: c.type,
+          name: name || 'Chat',
+          avatar: avatar,
+          description: c.description,
+          banner: c.banner,
+          memberIds: c.members?.map((m: any) => m.user_id) || [],
+          lastMessage: c.last_message,
+          lastMessageAt: c.last_message_at,
+          online: false
+        });
+      });
+
+      const sortedChats = Array.from(chatMap.values());
+      set({ chats: sortedChats });
+
+      // 6. Subscribe to all relevant rooms
+      sortedChats.forEach(chat => get().subscribeToChat(chat.id));
     }
   },
 
@@ -106,6 +206,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
         createdAt: m.created_at,
         pinned: m.pinned,
         replyTo: m.reply_to,
+        status: m.status || 'delivered',
         ...m.payload
       }));
       set((s) => ({
@@ -114,71 +215,107 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  markDelivered: async (chatId, messageId) => {
+    const me = useAuthStore.getState().user;
+    if (!me) return;
+    await supabase
+      .from('messages')
+      .update({ status: 'delivered' })
+      .eq('id', messageId)
+      .neq('author_id', me.id)
+      .eq('status', 'sent');
+  },
+
   subscribeToChat: (chatId) => {
     if (get().channels[chatId]) return;
 
-    const channel = supabase.channel(`chat:${chatId}`)
+    const channel = supabase.channel(`room:${chatId}`)
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*',
           schema: 'public',
           table: 'messages',
-          filter: `chat_id=eq.${chatId}`,
+          filter: `chat_id=eq.${chatId}`
         },
         (payload) => {
-          const m = payload.new as any;
-          const newMessage: Message = {
-            id: m.id,
-            chatId: m.chat_id,
-            authorId: m.author_id,
-            kind: m.kind,
-            content: m.content || '',
-            createdAt: m.created_at,
-            pinned: m.pinned,
-            replyTo: m.reply_to,
-            status: 'delivered',
-            ...m.payload
-          };
-          
-          set((s) => {
-            const chatMessages = s.messages[chatId] || [];
-            if (chatMessages.some(x => x.id === newMessage.id)) return s;
-            return {
+          const m = (payload.new || payload.old) as any;
+          if (m.chat_id !== chatId) return;
+
+          if (payload.eventType === 'INSERT') {
+            const newMessage: Message = {
+              id: m.id,
+              chatId: m.chat_id,
+              authorId: m.author_id,
+              kind: m.kind,
+              content: m.content || '',
+              createdAt: m.created_at,
+              pinned: m.pinned,
+              replyTo: m.reply_to,
+              status: m.status || 'delivered',
+              ...m.payload
+            };
+            
+            set((s) => {
+              const chatMessages = s.messages[chatId] || [];
+              if (chatMessages.some(x => x.id === newMessage.id)) return s;
+
+              const meId = useAuthStore.getState().user?.id;
+              if (newMessage.authorId !== meId) {
+                if (s.activeChatId === chatId) {
+                  setTimeout(() => get().markRead(chatId), 200);
+                } else {
+                  setTimeout(() => get().markDelivered(chatId, newMessage.id), 200);
+                }
+              }
+
+              return {
+                messages: {
+                  ...s.messages,
+                  [chatId]: [...chatMessages, newMessage]
+                },
+                chats: s.chats.map(c => 
+                  c.id === chatId ? { ...c, lastMessage: newMessage.content, lastMessageAt: newMessage.createdAt } : c
+                )
+              };
+            });
+          } else if (payload.eventType === 'UPDATE') {
+            const m = payload.new as any;
+            set((s) => ({
               messages: {
                 ...s.messages,
-                [chatId]: [...chatMessages, newMessage]
-              },
-              chats: s.chats.map(c => 
-                c.id === chatId ? { ...c, lastMessage: newMessage.content, lastMessageAt: newMessage.createdAt } : c
-              )
-            };
-          });
+                [chatId]: (s.messages[chatId] || []).map(msg => 
+                  msg.id === m.id ? { ...msg, status: m.status } : msg
+                )
+              }
+            }));
+          }
         }
       )
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState();
+        const meId = useAuthStore.getState().user?.id;
         const usersTyping: string[] = [];
-        const usersOnline: string[] = [];
 
         Object.values(state).forEach((presences: any) => {
           presences.forEach((p: any) => {
-            if (p.is_typing) usersTyping.push(p.user_id);
-            usersOnline.push(p.user_id);
+            if (p.user_id && p.user_id !== meId && p.is_typing) {
+              usersTyping.push(p.user_id);
+            }
           });
         });
 
         set((s) => ({
-          typing: { ...s.typing, [chatId]: Array.from(new Set(usersTyping)) },
-          onlineUsers: Array.from(new Set([...s.onlineUsers, ...usersOnline]))
+          typing: { ...s.typing, [chatId]: Array.from(new Set(usersTyping)) }
         }));
       })
       .subscribe(async (status) => {
         if (status === 'SUBSCRIBED') {
-          const { data: { user } } = await supabase.auth.getUser();
-          if (user) {
+          const me = useAuthStore.getState().user;
+          if (me) {
             await channel.track({
-              user_id: user.id,
+              user_id: me.id,
+              is_typing: false,
               online_at: new Date().toISOString(),
             });
           }
@@ -204,21 +341,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
   setTyping: async (chatId, isTyping) => {
     const channel = get().channels[chatId];
     if (!channel) return;
-    
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
+    const me = useAuthStore.getState().user;
+    if (!me) return;
     await channel.track({
-      user_id: user.id,
+      user_id: me.id,
       is_typing: isTyping,
       online_at: new Date().toISOString(),
     });
   },
 
   setActiveChat: (id) => {
-    const oldId = get().activeChatId;
-    if (oldId) get().unsubscribeFromChat(oldId);
-    
     set({ activeChatId: id });
     if (id) {
       get().markRead(id);
@@ -228,14 +360,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   sendMessage: async (chatId, content) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    const me = useAuthStore.getState().user;
+    if (!me) return;
 
     const tempId = `m-${Date.now()}`;
     const optimisticMessage: Message = {
       id: tempId,
       chatId,
-      authorId: user.id,
+      authorId: me.id,
       kind: "text",
       content,
       createdAt: new Date().toISOString(),
@@ -253,256 +385,148 @@ export const useChatStore = create<ChatState>((set, get) => ({
       .from('messages')
       .insert({
         chat_id: chatId,
-        author_id: user.id,
+        author_id: me.id,
         kind: 'text',
         content,
+        status: 'sent'
       })
       .select()
       .single();
 
     if (error) {
-      // Handle error (e.g. show toast)
-      return;
-    }
-
-    set((s) => ({
-      messages: {
-        ...s.messages,
-        [chatId]: (s.messages[chatId] ?? []).map((x) =>
-          x.id === tempId ? { ...x, id: data.id, status: "sent" } : x
-        )
-      }
-    }));
-  },
-
-  sendVoice: async (chatId, durationSec, waveform) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const tempId = `m-${Date.now()}`;
-    const m: Message = {
-      id: tempId,
-      chatId,
-      authorId: user.id,
-      kind: "voice",
-      content: "",
-      createdAt: new Date().toISOString(),
-      status: "sending",
-      voice: { durationSec, waveform }
-    };
-    
-    set((s) => ({
-      messages: { ...s.messages, [chatId]: [...(s.messages[chatId] ?? []), m] }
-    }));
-
-    const { data, error } = await supabase
-      .from('messages')
-      .insert({
-        chat_id: chatId,
-        author_id: user.id,
-        kind: 'voice',
-        payload: { voice: { durationSec, waveform } }
-      })
-      .select()
-      .single();
-
-    if (!error && data) {
       set((s) => ({
         messages: {
           ...s.messages,
-          [chatId]: (s.messages[chatId] ?? []).map((x) =>
-            x.id === tempId ? { ...x, id: data.id, status: "sent" } : x
-          )
+          [chatId]: (s.messages[chatId] ?? []).filter(m => m.id !== tempId)
         }
       }));
+      return;
+    }
+
+    set((s) => {
+      const currentMessages = s.messages[chatId] ?? [];
+      const hasReal = currentMessages.some(m => m.id === data.id);
+      return {
+        messages: {
+          ...s.messages,
+          [chatId]: hasReal 
+            ? currentMessages.filter(m => m.id !== tempId)
+            : currentMessages.map((x) => x.id === tempId ? { ...x, id: data.id, status: "sent" } : x)
+        }
+      };
+    });
+  },
+
+  sendVoice: async (chatId, durationSec, waveform) => {
+    const me = useAuthStore.getState().user;
+    if (!me) return;
+    const tempId = `m-${Date.now()}`;
+    set((s) => ({
+      messages: { ...s.messages, [chatId]: [...(s.messages[chatId] ?? []), {
+        id: tempId, chatId, authorId: me.id, kind: "voice", content: "",
+        createdAt: new Date().toISOString(), status: "sending", voice: { durationSec, waveform }
+      }] }
+    }));
+    const { data, error } = await supabase.from('messages').insert({
+      chat_id: chatId, author_id: me.id, kind: 'voice',
+      payload: { voice: { durationSec, waveform } }, status: 'sent'
+    }).select().single();
+    if (!error && data) {
+      set((s) => {
+        const current = s.messages[chatId] ?? [];
+        const hasReal = current.some(msg => msg.id === data.id);
+        return {
+          messages: {
+            ...s.messages,
+            [chatId]: hasReal 
+              ? current.filter(m => m.id !== tempId)
+              : current.map((x) => x.id === tempId ? { ...x, id: data.id, status: "sent" } : x)
+          }
+        };
+      });
     }
   },
 
   sendAttachment: async (chatId, payload) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
+    const me = useAuthStore.getState().user;
+    if (!me) return;
     const tempId = `m-${Date.now()}`;
-    const m: Message = {
-      id: tempId,
-      chatId,
-      authorId: user.id,
-      content: payload.content ?? "",
-      createdAt: new Date().toISOString(),
-      status: "sending",
-      ...payload
-    } as Message;
-
     set((s) => ({
-      messages: { ...s.messages, [chatId]: [...(s.messages[chatId] ?? []), m] }
+      messages: { ...s.messages, [chatId]: [...(s.messages[chatId] ?? []), {
+        id: tempId, chatId, authorId: me.id, content: payload.content ?? "",
+        createdAt: new Date().toISOString(), status: "sending", ...payload
+      } as Message] }
     }));
-
-    const { data, error } = await supabase
-      .from('messages')
-      .insert({
-        chat_id: chatId,
-        author_id: user.id,
-        kind: payload.kind,
-        content: payload.content,
-        payload: payload // Spread rest of payload into JSONB column
-      })
-      .select()
-      .single();
-
+    const { data, error } = await supabase.from('messages').insert({
+      chat_id: chatId, author_id: me.id, kind: payload.kind, content: payload.content,
+      payload: payload, status: 'sent'
+    }).select().single();
     if (!error && data) {
-      set((s) => ({
-        messages: {
-          ...s.messages,
-          [chatId]: (s.messages[chatId] ?? []).map((x) =>
-            x.id === tempId ? { ...x, id: data.id, status: "sent" } : x
-          )
-        }
-      }));
+      set((s) => {
+        const current = s.messages[chatId] ?? [];
+        const hasReal = current.some(msg => msg.id === data.id);
+        return {
+          messages: {
+            ...s.messages,
+            [chatId]: hasReal 
+              ? current.filter(m => m.id !== tempId)
+              : current.map((x) => x.id === tempId ? { ...x, id: data.id, status: "sent" } : x)
+          }
+        };
+      });
     }
   },
 
-  votePoll: (chatId, messageId, optionId) => {
-    set((s) => ({
-      messages: {
-        ...s.messages,
-        [chatId]: (s.messages[chatId] ?? []).map((m) => {
-          if (m.id !== messageId || !m.poll) return m;
-          const multi = !!m.poll.multi;
-          const nextOptions = m.poll.options.map((opt) => {
-            const had = opt.voters.includes("me");
-            if (opt.id === optionId) {
-              return {
-                ...opt,
-                voters: had ? opt.voters.filter((v) => v !== "me") : [...opt.voters, "me"]
-              };
-            }
-            // single-select polls clear my vote from other options
-            if (!multi && had) {
-              return { ...opt, voters: opt.voters.filter((v) => v !== "me") };
-            }
-            return opt;
-          });
-          return { ...m, poll: { ...m.poll, options: nextOptions } };
-        })
-      }
-    }));
-  },
-
-  toggleReaction: (chatId, messageId, emoji) =>
-    set((s) => ({
-      messages: {
-        ...s.messages,
-        [chatId]: (s.messages[chatId] ?? []).map((m) => {
-          if (m.id !== messageId) return m;
-          const existing = m.reactions?.find((r) => r.emoji === emoji);
-          let reactions = m.reactions ?? [];
-          if (existing) {
-            reactions = reactions
-              .map((r) =>
-                r.emoji === emoji
-                  ? { ...r, count: r.count + (r.byMe ? -1 : 1), byMe: !r.byMe }
-                  : r
-              )
-              .filter((r) => r.count > 0);
-          } else {
-            reactions = [...reactions, { emoji, count: 1, byMe: true }];
-          }
-          return { ...m, reactions };
-        })
-      }
-    })),
-
-  pinMessage: (chatId, messageId) =>
-    set((s) => ({
-      messages: {
-        ...s.messages,
-        [chatId]: (s.messages[chatId] ?? []).map((m) =>
-          m.id === messageId ? { ...m, pinned: !m.pinned } : m
-        )
-      }
-    })),
-
+  votePoll: (chatId, messageId, optionId) => {},
+  toggleReaction: (chatId, messageId, emoji) => {},
+  pinMessage: (chatId, messageId) => {},
   removeMessages: (chatId, messageIds) => {
-    if (messageIds.length === 0) return;
     const idSet = new Set(messageIds);
     set((s) => ({
-      messages: {
-        ...s.messages,
-        [chatId]: (s.messages[chatId] ?? []).filter((m) => !idSet.has(m.id))
-      }
+      messages: { ...s.messages, [chatId]: (s.messages[chatId] ?? []).filter((m) => !idSet.has(m.id)) }
     }));
   },
 
-  markRead: (chatId) =>
+  markRead: async (chatId) => {
+    const me = useAuthStore.getState().user;
+    if (!me) return;
+    await supabase.from('messages').update({ status: 'read' })
+      .eq('chat_id', chatId).neq('author_id', me.id).neq('status', 'read');
     set((s) => ({
       chats: s.chats.map((c) => (c.id === chatId ? { ...c, unread: 0 } : c))
-    })),
-
-  addGroup: (group) => {
-    const id = `g-${Date.now()}`;
-    const newChat: Chat = {
-      id,
-      type: "group",
-      name: group.name,
-      avatar:
-        group.avatar ??
-        `https://api.dicebear.com/9.x/notionists/svg?backgroundType=gradientLinear&backgroundColor=8b5cf6,ec4899,22d3ee,a3e635,fbbf24,fb923c,60a5fa,f472b6&radius=18&seed=${encodeURIComponent(group.name)}`,
-      banner: group.banner,
-      description: group.description,
-      memberIds: ["me", ...(group.memberIds ?? [])],
-      membersCount: 1 + (group.memberIds?.length ?? 0),
-      lastMessage: `You created the group · welcome ✨`,
-      lastMessageAt: new Date().toISOString(),
-      pinned: false,
-      online: false
-    };
-    set((s) => ({
-      chats: [newChat, ...s.chats],
-      messages: {
-        ...s.messages,
-        [id]: [
-          {
-            id: `m-sys-${Date.now()}`,
-            chatId: id,
-            authorId: "me",
-            kind: "system",
-            content: `${group.name} is live · ${(group.memberIds?.length ?? 0) + 1} members joined`,
-            createdAt: new Date().toISOString()
-          }
-        ]
-      }
     }));
-    return newChat;
   },
 
+  addGroup: (group) => { return {} as Chat; },
+
   startDM: async (u) => {
-    const { data: { user: me } } = await supabase.auth.getUser();
+    const me = useAuthStore.getState().user;
     if (!me) return { error: 'Not authenticated' };
 
-    const existing = get().chats.find(
-      (c) => c.type === "dm" && c.memberIds?.includes(u.id)
-    );
-    if (existing) {
-      get().setActiveChat(existing.id);
-      return { data: existing };
+    // 1. Check database for existing DM thread between these two users
+    const { data: existingChatId, error: checkError } = await supabase
+      .rpc('find_dm_between_users', {
+        user1_id: me.id,
+        user2_id: u.id
+      });
+
+    if (!checkError && existingChatId) {
+      console.log("[DB] DM already exists:", existingChatId);
+      // Ensure it's in our local list
+      const existingLocal = get().chats.find(c => c.id === existingChatId);
+      if (!existingLocal) {
+        await get().fetchChats();
+      }
+      get().setActiveChat(existingChatId);
+      return { data: get().chats.find(c => c.id === existingChatId) };
     }
 
-    // Create new DM in DB
-    const { data: chat, error: chatError } = await supabase
-      .from('chats')
-      .insert({
-        type: 'dm',
-        name: u.name,
-        avatar: u.avatar,
-        created_by: me.id
-      })
-      .select()
-      .single();
+    const { data: chat, error: chatError } = await supabase.from('chats').insert({
+      type: 'dm', created_by: me.id
+    }).select().single();
 
-    if (chatError) return { error: chatError.message };
-    if (!chat) return { error: 'Failed to create chat' };
+    if (chatError || !chat) return { error: chatError?.message || 'Failed to create chat' };
 
-    // Add members
     const { error: memberError } = await supabase.from('chat_members').insert([
       { chat_id: chat.id, user_id: me.id, role: 'owner' },
       { chat_id: chat.id, user_id: u.id, role: 'member' }
@@ -511,111 +535,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (memberError) return { error: memberError.message };
 
     const newChat: Chat = {
-      id: chat.id,
-      type: "dm",
-      name: u.name,
-      avatar: u.avatar,
-      memberIds: [me.id, u.id],
-      lastMessage: "Say hi 👋",
-      lastMessageAt: new Date().toISOString(),
-      online: u.status === "online"
+      id: chat.id, type: "dm", name: u.name, avatar: u.avatar,
+      memberIds: [me.id, u.id], lastMessage: "Say hi 👋",
+      lastMessageAt: new Date().toISOString(), online: true
     };
 
-    set((s) => ({
-      chats: [newChat, ...s.chats],
-    }));
-
+    set((s) => ({ chats: [newChat, ...s.chats] }));
     get().setActiveChat(chat.id);
     return { data: newChat };
   },
 
-  scheduleCallWith: (userIds, invite) => {
-    // One shared `callId` for every invitee's copy of the same call. The
-    // Upcoming list dedupes by this id so a 5-person schedule shows ONE
-    // upcoming entry — not five.
-    const callId = `call-${Date.now()}`;
-    const createdAt = new Date().toISOString();
-    for (const userId of userIds) {
-      const chat = get().startDM(userId);
-      const msg: Message = {
-        id: `m-${callId}-${userId}`,
-        chatId: chat.id,
-        authorId: "me",
-        kind: "schedule",
-        content: invite.title,
-        createdAt,
-        status: "sent",
-        schedule: {
-          whenIso: invite.whenIso,
-          message: invite.title,
-          callInvite: {
-            callId,
-            video: invite.video,
-            title: invite.title,
-            endsAtIso: invite.endsAtIso,
-            participantIds: ["me", ...userIds]
-          }
-        }
-      };
-      set((s) => ({
-        messages: {
-          ...s.messages,
-          [chat.id]: [...(s.messages[chat.id] ?? []), msg]
-        },
-        chats: s.chats.map((c) =>
-          c.id === chat.id
-            ? {
-                ...c,
-                lastMessage: `📞 ${invite.title}`,
-                lastMessageAt: msg.createdAt
-              }
-            : c
-        )
-      }));
-    }
-  },
-
-  joinCommunity: (community) => {
-    const existing = get().chats.find(
-      (c) => c.type === "channel" && c.name === community.name
-    );
-    if (existing) {
-      get().setActiveChat(existing.id);
-      return existing;
-    }
-    const id = `co-${community.id}-${Date.now()}`;
-    const newChat: Chat = {
-      id,
-      type: "channel",
-      name: community.name,
-      avatar: community.cover,
-      banner: community.cover,
-      description: `${community.category} community · ${community.members.toLocaleString()} members`,
-      membersCount: community.members,
-      lastMessage: `You joined ${community.name} ✨`,
-      lastMessageAt: new Date().toISOString(),
-      online: true,
-      pinned: false
-    };
-    set((s) => ({
-      chats: [newChat, ...s.chats],
-      messages: {
-        ...s.messages,
-        [id]: [
-          {
-            id: `m-sys-${Date.now()}`,
-            chatId: id,
-            authorId: "me",
-            kind: "system",
-            content: `Welcome to ${community.name} · ${community.online.toLocaleString()} online now`,
-            createdAt: new Date().toISOString()
-          }
-        ]
-      }
-    }));
-    return newChat;
-  },
-
+  scheduleCallWith: (userIds, invite) => {},
+  joinCommunity: (community) => { return {} as Chat; },
   removeChat: (chatId) =>
     set((s) => {
       const { [chatId]: _removed, ...rest } = s.messages;
@@ -625,32 +556,5 @@ export const useChatStore = create<ChatState>((set, get) => ({
         activeChatId: s.activeChatId === chatId ? null : s.activeChatId
       };
     }),
-
-  clearAll: () =>
-    set({
-      chats: [],
-      messages: {},
-      activeChatId: null
-    })
+  clearAll: () => set({ chats: [], messages: {}, activeChatId: null })
 }));
-
-/** One-line summary of a rich message for the chat-list "lastMessage" cell. */
-function previewFor(m: Message): string {
-  switch (m.kind) {
-    case "image":    return "🖼 Photo";
-    case "video":    return "🎬 Video";
-    case "audio":    return `🎵 ${m.audio?.name ?? "Audio"}`;
-    case "voice":    return `🎤 Voice · ${m.voice?.durationSec ?? 0}s`;
-    case "file":     return `📄 ${m.file?.name ?? "Document"}`;
-    case "sticker":  return "🌟 Sticker";
-    case "gif":      return "🎞 GIF";
-    case "poll":     return `📊 ${m.poll?.question ?? "Poll"}`;
-    case "contact": {
-      const n = m.contacts?.length ?? 0;
-      return n > 1 ? `👤 ${n} contacts` : `👤 ${m.contacts?.[0]?.name ?? "Contact"}`;
-    }
-    case "location": return m.location?.live ? "🛰 Live location" : "📍 Location";
-    case "schedule": return `⏰ Scheduled`;
-    default:         return m.content || "Message";
-  }
-}
