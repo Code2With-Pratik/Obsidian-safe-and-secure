@@ -13,15 +13,11 @@ export default function ChatRoom() {
   const params = useParams<{ id: string }>();
   const id = params?.id;
   const chats = useChatStore((s) => s.chats);
+  const hasInitialLoaded = useChatStore((s) => s.hasInitialLoaded);
   const setActive = useChatStore((s) => s.setActiveChat);
   const right = useUIStore((s) => s.rightPanel);
   const setRight = useUIStore((s) => s.setRightPanel);
-  const [hasLoaded, setHasLoaded] = React.useState(false);
   const chat = chats.find((c) => c.id === id);
-
-  React.useEffect(() => {
-    if (chats.length > 0) setHasLoaded(true);
-  }, [chats]);
 
   React.useEffect(() => {
     if (id) setActive(id);
@@ -35,7 +31,7 @@ export default function ChatRoom() {
   }, [id, setRight]);
 
   if (!chat) {
-    if (!hasLoaded) {
+    if (!hasInitialLoaded) {
       return (
         <div className="flex h-[calc(100dvh-4rem)] items-center justify-center">
           <div className="flex flex-col items-center gap-2">

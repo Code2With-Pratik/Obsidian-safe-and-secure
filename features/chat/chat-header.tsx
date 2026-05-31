@@ -103,8 +103,7 @@ export function ChatHeader({
   const [themeOpen, setThemeOpen] = React.useState(false);
 
   // DM → resolve the single user to show their story ring on the header avatar.
-  const storyUserId =
-    chat.type === "dm" ? allUsers.find((u) => u.name === chat.name)?.id : undefined;
+  const storyUserId = chat.type === "dm" ? otherMemberId : undefined;
   const hasStory = useStoriesStore((s) =>
     storyUserId ? !!s.byUser[storyUserId]?.slides.length : false
   );

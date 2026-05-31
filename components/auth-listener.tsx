@@ -12,8 +12,7 @@ export default function AuthListener() {
   const logout = useAuthStore((s) => s.logout)
   const setUser = useAuthStore((s) => s.setUser)
   const fetchChats = useChatStore((s) => s.fetchChats)
-  const subscribeToGlobalPresence = useChatStore((s) => s.subscribeToGlobalPresence)
-  const subscribeToUserChats = useChatStore((s) => s.subscribeToUserChats)
+  const initializeRealtime = useChatStore((s) => s.initializeRealtime)
 
   useEffect(() => {
     const fetchProfile = async (userId: string) => {
@@ -46,8 +45,7 @@ export default function AuthListener() {
       if (event === 'SIGNED_IN' && session?.user) {
         fetchProfile(session.user.id)
         fetchChats()
-        subscribeToGlobalPresence()
-        subscribeToUserChats()
+        initializeRealtime()
         router.refresh()
       }
       if (event === 'SIGNED_OUT') {
@@ -62,15 +60,14 @@ export default function AuthListener() {
       if (session?.user) {
         fetchProfile(session.user.id)
         fetchChats()
-        subscribeToGlobalPresence()
-        subscribeToUserChats()
+        initializeRealtime()
       }
     })
 
     return () => {
       subscription.unsubscribe()
     }
-  }, [supabase, router, fetchChats, subscribeToGlobalPresence, subscribeToUserChats, setUser, logout])
+  }, [supabase, router, fetchChats, initializeRealtime, setUser, logout])
 
   return null
 }
