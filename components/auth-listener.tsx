@@ -12,7 +12,10 @@ export default function AuthListener() {
   const logout = useAuthStore((s) => s.logout)
   const setUser = useAuthStore((s) => s.setUser)
   const fetchChats = useChatStore((s) => s.fetchChats)
+  const fetchBlocked = useChatStore((s) => s.fetchBlocked)
   const initializeRealtime = useChatStore((s) => s.initializeRealtime)
+  const disconnectRealtime = useChatStore((s) => s.disconnectRealtime)
+  const clearAll = useChatStore((s) => s.clearAll)
 
   useEffect(() => {
     const fetchProfile = async (userId: string) => {
@@ -45,10 +48,15 @@ export default function AuthListener() {
       if (event === 'SIGNED_IN' && session?.user) {
         fetchProfile(session.user.id)
         fetchChats()
+        fetchBlocked()
         initializeRealtime()
         router.refresh()
       }
       if (event === 'SIGNED_OUT') {
+        // Tear down realtime channels and wipe local chat state so we don't
+        // leak presence/message subscriptions across user sessions.
+        disconnectRealtime()
+        clearAll()
         logout()
         router.refresh()
         router.push('/')
@@ -60,6 +68,7 @@ export default function AuthListener() {
       if (session?.user) {
         fetchProfile(session.user.id)
         fetchChats()
+        fetchBlocked()
         initializeRealtime()
       }
     })
@@ -67,7 +76,7 @@ export default function AuthListener() {
     return () => {
       subscription.unsubscribe()
     }
-  }, [supabase, router, fetchChats, initializeRealtime, setUser, logout])
+  }, [supabase, router, fetchChats, fetchBlocked, initializeRealtime, disconnectRealtime, clearAll, setUser, logout])
 
   return null
 }

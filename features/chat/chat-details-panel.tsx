@@ -16,6 +16,7 @@ import { users as allUsers } from "@/lib/mock-data";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useT } from "@/lib/i18n";
 import { MediaViewer, type MediaItem } from "./media-viewer";
+import { ChatMembersCard } from "./chat-members-card";
 import type { Chat } from "@/types";
 
 const photos = [
@@ -114,6 +115,8 @@ export function ChatDetailsPanel({ chat }: { chat: Chat }) {
             <span className="text-xs text-muted-foreground">3</span>
           </SettingRow>
         </div>
+
+        <ChatMembersCard chat={chat} />
 
         <div className="mt-6">
           <Tabs defaultValue="media">

@@ -5,6 +5,7 @@ import type { Chat, Message } from "@/types";
 import { createClient } from "@/lib/supabase/client";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useAuthStore } from "./use-auth-store";
+import { useChatThemeStore } from "./use-chat-theme-store";
 
 const supabase = createClient();
 
@@ -77,6 +78,8 @@ interface ChatState {
   activeChatId: string | null;
   typing: Record<string, string[]>; // chatId → userIds typing
   onlineUsers: string[];
+  /** UserIds I've blocked — DM rows from them are hidden in the chat list. */
+  blockedIds: string[];
 
   presenceChannel: RealtimeChannel | null;
   messageChannel: RealtimeChannel | null;
@@ -130,6 +133,9 @@ interface ChatState {
   favouriteChat: (chatId: string, favorite: boolean) => Promise<void>;
   clearChat: (chatId: string) => Promise<void>;
   removeChat: (chatId: string) => Promise<void>;
+  fetchBlocked: () => Promise<void>;
+  blockUser: (userId: string) => Promise<void>;
+  unblockUser: (userId: string) => Promise<void>;
 
   /* ----- calls integration ----- */
   scheduleCallWith: (
@@ -156,6 +162,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   activeChatId: null,
   typing: {},
   onlineUsers: [],
+  blockedIds: [],
 
   presenceChannel: null,
   messageChannel: null,
@@ -168,6 +175,27 @@ export const useChatStore = create<ChatState>((set, get) => ({
   initializeRealtime: () => {
     const me = useAuthStore.getState().user;
     if (!me) return;
+
+    // Defensive cleanup: if we already have channels registered with the same
+    // topics (HMR re-ran the module, auth-listener fired twice, etc.), tear
+    // them down before creating fresh ones. Without this, Supabase throws
+    // "cannot add `presence` callbacks after subscribe()" because `.on()`
+    // can't be attached to an already-subscribed channel.
+    const ourTopics = new Set([
+      "realtime:nova_presence_v1",
+      `realtime:nova_msgs_${me.id}`,
+      `realtime:nova_reactions_${me.id}`,
+      `realtime:nova_chats_${me.id}`
+    ]);
+    supabase.getChannels().forEach((c) => {
+      if (ourTopics.has(c.topic)) supabase.removeChannel(c);
+    });
+    set({
+      presenceChannel: null,
+      messageChannel: null,
+      reactionChannel: null,
+      chatChannel: null
+    });
 
     // Presence (online + typing)
     if (!get().presenceChannel) {
@@ -300,7 +328,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({ reactionChannel: channel });
     }
 
-    // Chats — keep the list in sync when a chat is deleted elsewhere.
+    // Chats — keep the list in sync on DELETE *and* propagate theme changes
+    // (chats.theme / custom_bg) so when one participant picks a theme, the
+    // other side sees it instantly via the chat-theme store.
     if (!get().chatChannel) {
       const channel = supabase
         .channel(`nova_chats_${me.id}`)
@@ -314,6 +344,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
               const { [id]: _drop, ...rest } = s.messages;
               return { chats: s.chats.filter((c) => c.id !== id), messages: rest };
             });
+          }
+        )
+        .on(
+          "postgres_changes",
+          { event: "UPDATE", schema: "public", table: "chats" },
+          (payload) => {
+            const row = payload.new as {
+              id?: string;
+              theme?: string | null;
+              custom_bg?: string | null;
+            };
+            if (!row?.id) return;
+            useChatThemeStore
+              .getState()
+              .hydrateChatTheme(row.id, row.theme, row.custom_bg);
           }
         )
         .subscribe();
@@ -394,6 +439,28 @@ export const useChatStore = create<ChatState>((set, get) => ({
         favorite: mine?.favorite ?? false
       };
     });
+    // Hydrate per-chat theme into the chat-theme-store so both participants
+    // see the same theme picked by either side.
+    const hydrate = useChatThemeStore.getState().hydrateChatTheme;
+    userChats.forEach((c: Record<string, unknown>) => {
+      hydrate(c.id as string, c.theme as string | null, c.custom_bg as string | null);
+    });
+
+    // Unread counts — one round-trip RPC that compares each chat's
+    // last_read_at against the message stream.
+    const { data: unreadRows } = await supabase.rpc("get_unread_counts");
+    if (unreadRows) {
+      const unreadMap = new Map(
+        (unreadRows as { chat_id: string; unread: number }[]).map((r) => [
+          r.chat_id,
+          Number(r.unread)
+        ])
+      );
+      formatted.forEach((c) => {
+        c.unread = unreadMap.get(c.id) ?? 0;
+      });
+    }
+
     set({ chats: formatted, hasInitialLoaded: true });
   },
 
@@ -609,12 +676,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
   markRead: async (chatId) => {
     const me = useAuthStore.getState().user;
     if (!me) return;
-    await supabase
-      .from("messages")
-      .update({ status: "read" })
-      .eq("chat_id", chatId)
-      .neq("author_id", me.id)
-      .neq("status", "read");
+    const now = new Date().toISOString();
+    // Bump my last_read_at AND flip status of inbound messages to "read", so
+    // both the unread badge (computed from last_read_at) and the per-message
+    // read-receipt tick are accurate on the next reload.
+    await Promise.all([
+      supabase
+        .from("chat_members")
+        .update({ last_read_at: now })
+        .eq("chat_id", chatId)
+        .eq("user_id", me.id),
+      supabase
+        .from("messages")
+        .update({ status: "read" })
+        .eq("chat_id", chatId)
+        .neq("author_id", me.id)
+        .neq("status", "read")
+    ]);
     set((s) => ({ chats: s.chats.map((c) => (c.id === chatId ? { ...c, unread: 0 } : c)) }));
   },
 
@@ -858,6 +936,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
       return { chats: s.chats.filter((c) => c.id !== chatId), messages: rest };
     });
     await supabase.from("chats").delete().eq("id", chatId);
+  },
+
+  fetchBlocked: async () => {
+    const me = useAuthStore.getState().user;
+    if (!me) return;
+    const { data } = await supabase
+      .from("blocked_users")
+      .select("blocked_id")
+      .eq("blocker_id", me.id);
+    set({ blockedIds: (data || []).map((r: { blocked_id: string }) => r.blocked_id) });
+  },
+
+  blockUser: async (userId) => {
+    const me = useAuthStore.getState().user;
+    if (!me || userId === me.id) return;
+    set((s) => ({ blockedIds: Array.from(new Set([...s.blockedIds, userId])) }));
+    await supabase
+      .from("blocked_users")
+      .insert({ blocker_id: me.id, blocked_id: userId });
+  },
+
+  unblockUser: async (userId) => {
+    const me = useAuthStore.getState().user;
+    if (!me) return;
+    set((s) => ({ blockedIds: s.blockedIds.filter((id) => id !== userId) }));
+    await supabase
+      .from("blocked_users")
+      .delete()
+      .eq("blocker_id", me.id)
+      .eq("blocked_id", userId);
   },
 
   /* ----- calls integration ----- */

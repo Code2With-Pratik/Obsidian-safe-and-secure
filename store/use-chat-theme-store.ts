@@ -2,6 +2,9 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { createClient } from "@/lib/supabase/client";
+
+const supabase = createClient();
 
 export type ChatThemeCategory = "photo" | "gradient" | "pattern";
 
@@ -284,6 +287,14 @@ interface State {
   resetAllChatThemes: () => void;
   customBgFor: (chatId: string) => string | undefined;
   themeFor: (chatId: string) => ChatTheme;
+  /** Sync local state from a chats-row payload — used by fetchChats and the
+   *  realtime UPDATE listener so both participants stay in lockstep without
+   *  re-writing to the DB. */
+  hydrateChatTheme: (
+    chatId: string,
+    themeId: string | null | undefined,
+    customBg: string | null | undefined
+  ) => void;
 }
 
 export const useChatThemeStore = create<State>()(
@@ -293,17 +304,44 @@ export const useChatThemeStore = create<State>()(
       customBgByChat: {},
       globalTheme: "default",
       globalCustomBg: undefined,
-      setTheme: (chatId, themeId) =>
-        set((s) => ({ byChat: { ...s.byChat, [chatId]: themeId } })),
-      setCustomBg: (chatId, image) =>
+      setTheme: (chatId, themeId) => {
+        // Optimistic local update — both participants get the same theme via
+        // the chats realtime UPDATE event once the DB write lands.
+        set((s) => ({ byChat: { ...s.byChat, [chatId]: themeId } }));
+        // Clear custom_bg unless the new theme IS custom (caller will pair
+        // setCustomBg with the choice in that case).
+        void supabase
+          .from("chats")
+          .update({
+            theme: themeId,
+            ...(themeId === CUSTOM_THEME_ID ? {} : { custom_bg: null })
+          })
+          .eq("id", chatId);
+      },
+      setCustomBg: (chatId, image) => {
         set((s) => ({
           customBgByChat: { ...s.customBgByChat, [chatId]: image },
           byChat: { ...s.byChat, [chatId]: CUSTOM_THEME_ID }
-        })),
+        }));
+        void supabase
+          .from("chats")
+          .update({ theme: CUSTOM_THEME_ID, custom_bg: image })
+          .eq("id", chatId);
+      },
       setGlobalTheme: (themeId) => set({ globalTheme: themeId }),
       setGlobalCustomBg: (image) =>
         set({ globalCustomBg: image, globalTheme: CUSTOM_THEME_ID }),
       resetAllChatThemes: () => set({ byChat: {}, customBgByChat: {} }),
+      hydrateChatTheme: (chatId, themeId, customBg) =>
+        set((s) => {
+          const nextByChat = { ...s.byChat };
+          const nextCustom = { ...s.customBgByChat };
+          if (themeId) nextByChat[chatId] = themeId;
+          else delete nextByChat[chatId];
+          if (customBg) nextCustom[chatId] = customBg;
+          else delete nextCustom[chatId];
+          return { byChat: nextByChat, customBgByChat: nextCustom };
+        }),
       customBgFor: (chatId) => get().customBgByChat[chatId],
       themeFor: (chatId) => {
         const state = get();

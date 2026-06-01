@@ -9,6 +9,9 @@ interface ToastItem {
   id: string;
   title: string;
   description?: string;
+  /** Visual variant — defaults to "default". `destructive` paints with the
+   *  rose palette for errors / dangerous outcomes. */
+  variant?: "default" | "destructive" | "success";
 }
 
 const ToastContext = React.createContext<{

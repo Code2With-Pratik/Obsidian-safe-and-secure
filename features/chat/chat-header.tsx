@@ -85,6 +85,8 @@ export function ChatHeader({
   const muteChat = useChatStore((s) => s.muteChat);
   const favouriteChat = useChatStore((s) => s.favouriteChat);
   const clearChat = useChatStore((s) => s.clearChat);
+  const blockUser = useChatStore((s) => s.blockUser);
+  const messages = useChatStore((s) => s.messages);
 
   const themeId = useChatThemeStore((s) => s.byChat[chat.id] ?? "default");
   const selectionCount = useMessageSelectionStore(
@@ -366,7 +368,24 @@ export function ChatHeader({
 
             <DropdownMenuSeparator />
 
-            <DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => {
+                // Serialize the current chat's messages and trigger a download.
+                if (typeof window === "undefined") return;
+                const list = messages[chat.id] ?? [];
+                const blob = new Blob([JSON.stringify(list, null, 2)], {
+                  type: "application/json"
+                });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `${chat.name.replace(/[^\w-]+/g, "_") || "chat"}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                setTimeout(() => URL.revokeObjectURL(url), 1000);
+              }}
+            >
               <Download />
               {t("Export chat")}
             </DropdownMenuItem>
@@ -383,7 +402,24 @@ export function ChatHeader({
 
             <DropdownMenuSeparator />
 
-            <DropdownMenuItem className="text-rose-600 focus:text-rose-400">
+            <DropdownMenuItem
+              className="text-rose-600 focus:text-rose-400"
+              onSelect={() => {
+                if (chat.type !== "dm" || !otherMemberId) return;
+                if (
+                  typeof window !== "undefined" &&
+                  window.confirm(
+                    t("Block this contact? They won't be able to message you and this chat will close.")
+                  )
+                ) {
+                  void (async () => {
+                    await blockUser(otherMemberId);
+                    await removeChat(chat.id);
+                    router.push("/chats");
+                  })();
+                }
+              }}
+            >
               <Ban />
               {t("Block contact")}
             </DropdownMenuItem>
