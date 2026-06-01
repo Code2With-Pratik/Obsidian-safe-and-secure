@@ -54,7 +54,7 @@ export function StoryUploadBar() {
     if (!pending || committed.current) return;
     if (progress >= 100 && pending.slide) {
       committed.current = true;
-      addStory(pending.userId, pending.slide);
+      void addStory(pending.slide);
       setDone(true);
       const tmo = window.setTimeout(() => clearPending(), 650);
       return () => window.clearTimeout(tmo);

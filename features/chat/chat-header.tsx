@@ -167,55 +167,73 @@ export function ChatHeader({
 
   if (selectionActive) {
     return (
-      <div className="relative z-10 flex items-center gap-2 px-3 md:px-5 h-16 border-b border-border/40 backdrop-blur-2xl backdrop-saturate-180 bg-card/70 dark:bg-card/65 glass-specular shadow-[0_8px_24px_-16px_rgba(0,0,0,0.5)]">
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={() => clearSelection(chat.id)}
-          aria-label="Exit selection mode"
-          className="[&_svg]:size-6 dark:text-white dark:hover:text-white"
-        >
-          <XIcon />
-        </Button>
-        <div className="flex-1 min-w-0">
-          <p className="font-semibold text-[15px] truncate">
-            {selectionCount} {t("selected")}
-          </p>
-          <p className="text-[11px] text-muted-foreground">{t("Tap messages to add or remove")}</p>
-        </div>
-        <div className="flex items-center gap-1">
+      <>
+        <div className="relative z-10 flex items-center gap-2 px-3 md:px-5 h-16 border-b border-border/40 backdrop-blur-2xl backdrop-saturate-180 bg-card/70 dark:bg-card/65 glass-specular shadow-[0_8px_24px_-16px_rgba(0,0,0,0.5)]">
           <Button
             variant="ghost"
             size="icon"
-            onClick={copySelected}
-            aria-label="Copy selected"
-            title="Copy"
-            className="[&_svg]:size-[22px] dark:text-white dark:hover:text-white"
-          >
-            <CopyIcon />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Forward selected"
-            title="Forward"
             onClick={() => clearSelection(chat.id)}
-            className="[&_svg]:size-[22px] dark:text-white dark:hover:text-white"
+            aria-label="Exit selection mode"
+            className="[&_svg]:size-6 dark:text-white dark:hover:text-white"
           >
-            <ForwardIcon />
+            <XIcon />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={deleteSelected}
-            aria-label="Delete selected"
-            title="Delete"
-            className="[&_svg]:size-[22px] text-rose-400 hover:text-rose-300"
-          >
-            <Trash2 />
-          </Button>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-[15px] truncate">
+              {selectionCount} {t("selected")}
+            </p>
+            <p className="text-[11px] text-muted-foreground">{t("Tap messages to add or remove")}</p>
+          </div>
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={copySelected}
+              aria-label="Copy selected"
+              title="Copy"
+              className="[&_svg]:size-[22px] dark:text-white dark:hover:text-white"
+            >
+              <CopyIcon />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Forward selected"
+              title="Forward"
+              onClick={() => clearSelection(chat.id)}
+              className="[&_svg]:size-[22px] dark:text-white dark:hover:text-white"
+            >
+              <ForwardIcon />
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={deleteSelected}
+              aria-label="Delete selected"
+              title="Delete"
+              className="[&_svg]:size-[22px] text-rose-400 hover:text-rose-300"
+            >
+              <Trash2 />
+            </Button>
+          </div>
         </div>
-      </div>
+        <DeleteMessageDialog
+          open={deleteOpen}
+          count={selectedIds.length}
+          canDeleteForEveryone={allSelectedAreMine}
+          onClose={() => setDeleteOpen(false)}
+          onDeleteForMe={async () => {
+            await hideMessages(chat.id, selectedIds);
+            clearSelection(chat.id);
+            setDeleteOpen(false);
+          }}
+          onDeleteForEveryone={async () => {
+            await removeMessages(chat.id, selectedIds);
+            clearSelection(chat.id);
+            setDeleteOpen(false);
+          }}
+        />
+      </>
     );
   }
 

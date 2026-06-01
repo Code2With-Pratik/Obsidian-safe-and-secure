@@ -39,6 +39,7 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { useStoriesStore } from "@/store/use-stories-store";
 import { VinylDisc } from "@/components/stories/vinyl-disc";
 import { currentUser } from "@/lib/mock-data";
+import { useAuthStore } from "@/store/use-auth-store";
 import { FONT_OPTIONS, DEFAULT_FONT, emojiFontFamily } from "@/app/fonts";
 import { ExpressionsPicker, type ExpressionPick } from "@/features/chat/expressions-picker";
 
@@ -329,6 +330,7 @@ export function StoryEditor() {
   const startStoryUpload = useStoriesStore((s) => s.startStoryUpload);
   const attachStorySlide = useStoriesStore((s) => s.attachStorySlide);
   const clearPendingStory = useStoriesStore((s) => s.clearPendingStory);
+  const meId = useAuthStore((s) => s.user?.id);
   const [bg, setBg] = React.useState<Background>({ kind: "gradient", value: GRADIENTS[0] });
   const [filter, setFilter] = React.useState<string>("none");
   const [layers, setLayers] = React.useState<Layer[]>([]);
@@ -805,7 +807,7 @@ export function StoryEditor() {
    *  is attached and committed once the bar completes. Music is kept out of the
    *  baked PNG and re-attached as live metadata so it spins / plays in the
    *  viewer (Instagram-style). */
-  const shareStory = () => {
+  const shareStory = async () => {
     const dispRect = canvasRef.current?.getBoundingClientRect();
     const music = musicLayer
       ? {
@@ -843,7 +845,7 @@ export function StoryEditor() {
             })
         : [];
 
-    startStoryUpload(currentUser.id);
+    startStoryUpload(meId || currentUser.id);
     router.push("/chats");
 
     // Bake images into the PNG too (so the rail thumbnail shows them) — the

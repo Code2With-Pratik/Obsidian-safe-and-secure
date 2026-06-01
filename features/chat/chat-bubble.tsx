@@ -448,6 +448,37 @@ function BubbleBody({
 
   return (
     <div className="flex flex-col gap-1.5 max-w-full">
+      {message.storyReply && (
+        <div
+          className={cn(
+            "flex items-center gap-2 rounded-2xl p-1.5 pr-3 max-w-full",
+            me ? "self-end bg-white/10" : "self-start glass border border-border/60"
+          )}
+        >
+          <div
+            className="size-10 rounded-xl overflow-hidden shrink-0 grid place-items-center text-[10px] text-white/80"
+            style={
+              message.storyReply.src
+                ? undefined
+                : { background: message.storyReply.bg || "#222" }
+            }
+          >
+            {message.storyReply.src ? (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={message.storyReply.src}
+                alt="Story"
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <span className="line-clamp-2 px-1 text-center leading-tight">
+                {message.storyReply.text || "Story"}
+              </span>
+            )}
+          </div>
+          <div className="text-[11px] opacity-70">Replied to story</div>
+        </div>
+      )}
       <div
         style={me ? meStyle : themStyleProp}
         className={cn(
@@ -792,30 +823,82 @@ function VideoBubble({ me, message }: SubProps) {
 }
 
 /** Audio file (music) — play button + filename + native <audio>. */
+/** Pick the best audio MIME for a given URL/filename so old uploads stored
+ *  as application/octet-stream still decode — browsers honor the <source>
+ *  type hint over the Content-Type header for media decoding. */
+function guessAudioMime(url: string, name: string): string {
+  const target = (name || url).toLowerCase();
+  if (target.endsWith(".mp3")) return "audio/mpeg";
+  if (target.endsWith(".m4a")) return "audio/mp4";
+  if (target.endsWith(".aac")) return "audio/aac";
+  if (target.endsWith(".ogg") || target.endsWith(".opus")) return "audio/ogg";
+  if (target.endsWith(".wav")) return "audio/wav";
+  if (target.endsWith(".flac")) return "audio/flac";
+  if (target.endsWith(".webm")) return "audio/webm";
+  return "audio/mpeg";
+}
+
 function AudioBubble({ me, bubbleMe, meStyle, message }: SubProps) {
   const [playing, setPlaying] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
   const ref = React.useRef<HTMLAudioElement>(null);
   const audio = message.audio!;
+  const isBlobUrl = !!audio.url && audio.url.startsWith("blob:");
+  const audioMime = audio.url ? guessAudioMime(audio.url, audio.name) : "";
   const toggle = () => {
     const el = ref.current;
     if (!el) return;
-    if (playing) el.pause();
-    else void el.play().catch(() => {});
+    if (playing) {
+      el.pause();
+      return;
+    }
+    // Surface play failures (CORS / dead-blob / autoplay) — but ignore
+    // AbortError, which fires harmlessly when the user pauses before the
+    // async play() promise has settled.
+    el.play().catch((err) => {
+      if (err?.name === "AbortError") return;
+      console.error("[AudioBubble] play failed", {
+        url: audio.url,
+        name: audio.name,
+        message: err?.message,
+        error: err
+      });
+      setError(err?.message || "Couldn't play this audio");
+    });
   };
   React.useEffect(() => {
     const el = ref.current;
     if (!el) return;
-    const onPlay = () => setPlaying(true);
+    const onPlay = () => {
+      setPlaying(true);
+      setError(null);
+    };
     const onPause = () => setPlaying(false);
+    const onError = () => {
+      const code = el.error?.code;
+      console.error("[AudioBubble] element error", {
+        url: audio.url,
+        name: audio.name,
+        code,
+        message: el.error?.message
+      });
+      setError(
+        code === 4
+          ? "File format not supported or link is dead"
+          : "Couldn't load audio"
+      );
+    };
     el.addEventListener("play", onPlay);
     el.addEventListener("pause", onPause);
     el.addEventListener("ended", onPause);
+    el.addEventListener("error", onError);
     return () => {
       el.removeEventListener("play", onPlay);
       el.removeEventListener("pause", onPause);
       el.removeEventListener("ended", onPause);
+      el.removeEventListener("error", onError);
     };
-  }, []);
+  }, [audio.url, audio.name]);
   const sizeLabel = audio.size ? formatBytes(audio.size) : "";
   return (
     <div
@@ -840,13 +923,36 @@ function AudioBubble({ me, bubbleMe, meStyle, message }: SubProps) {
           <MusicIcon className="size-3.5 shrink-0 opacity-80" />
           <span className="truncate">{audio.name}</span>
         </div>
-        {sizeLabel && (
+        {error ? (
+          <p className="text-[11px] text-rose-300 truncate" title={error}>
+            {isBlobUrl ? "Link expired — please re-send" : error}
+          </p>
+        ) : sizeLabel ? (
           <p className="text-[11px] opacity-70">{sizeLabel}</p>
-        )}
+        ) : null}
       </div>
       {audio.url && (
         // eslint-disable-next-line jsx-a11y/media-has-caption
-        <audio ref={ref} src={audio.url} preload="metadata" className="hidden" />
+        <audio ref={ref} preload="metadata" className="hidden">
+          {/* Browsers honor the source `type` hint over the response
+              Content-Type when decoding media — this lets old uploads that
+              were stored as application/octet-stream still play. */}
+          <source src={audio.url} type={audioMime} />
+          {/* Bare-src fallback for browsers that don't pick up the source. */}
+          <source src={audio.url} />
+        </audio>
+      )}
+      {audio.url && (
+        <a
+          href={audio.url}
+          download={audio.name || true}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-[11px] opacity-70 hover:opacity-100 underline shrink-0"
+          aria-label="Download"
+        >
+          ↓
+        </a>
       )}
     </div>
   );

@@ -1,56 +1,47 @@
 "use client";
 
 import { create } from "zustand";
-import { stories as seedStories } from "@/lib/mock-data";
+import { createClient } from "@/lib/supabase/client";
+import type { RealtimeChannel, RealtimePostgresChangesPayload } from "@supabase/supabase-js";
+import { useAuthStore } from "@/store/use-auth-store";
+import { useChatStore } from "@/store/use-chat-store";
 
-/** A music sticker carried live on a slide (so it can spin / play in the
- *  viewer instead of being baked flat into the exported image). */
+const supabase = createClient();
+
+/** A music sticker carried live on a slide. */
 export interface StoryMusic {
   title: string;
   artist: string;
   cover?: string;
-  /** 30s preview mp3 — auto-plays in the viewer, Instagram-style. */
   preview?: string;
   variant: "card" | "square" | "circle" | "note";
-  /** Center position + transform, as captured in the editor. */
   x: number;
   y: number;
   scale: number;
   rotate: number;
 }
 
-/** An image/GIF overlay rendered LIVE (as an <img>) in the viewer instead of
- *  being flattened into the static PNG — so animated GIFs keep playing. */
+/** Live image/GIF overlay rendered as <img> instead of baked into the PNG. */
 export interface StoryOverlay {
   id: string;
   src: string;
-  /** Center position as a % of the canvas. */
   x: number;
   y: number;
-  /** Size as a % of the canvas width / height (preserves aspect across the
-   *  editor and viewer canvases, which share the 9:16 ratio). */
   wPct: number;
   hPct: number;
   scale: number;
   rotate: number;
-  /** Resolved CSS filter string (so the viewer needn't know filter ids). */
   filter?: string;
 }
 
-/** One frame of a user's story reel. */
 export interface StorySlide {
   id: string;
   kind: "image" | "text";
-  /** Image src (remote URL or data URL from the editor export). */
   src?: string;
-  /** Gradient background for text slides. */
   bg?: string;
   text?: string;
-  /** Epoch ms the slide was posted — drives the "2h ago" label + 24h expiry. */
   postedAt: number;
-  /** Optional live music overlay (spins / plays in the viewer). */
   music?: StoryMusic;
-  /** Live image/GIF overlays (animate in the viewer). */
   overlays?: StoryOverlay[];
 }
 
@@ -59,110 +50,490 @@ export interface UserStories {
   slides: StorySlide[];
   /** Whether the current viewer has already watched this reel (dims the ring). */
   viewed: boolean;
-  /** Whether the current user has liked this reel (others' stories only). */
+  /** Whether the current user has liked any slide in this reel. */
   likedByMe?: boolean;
 }
 
-/** Stories live for 24h after posting, then disappear. */
 export const STORY_TTL_MS = 24 * 60 * 60 * 1000;
 export const isFreshStory = (postedAt: number) => Date.now() - postedAt < STORY_TTL_MS;
 
+interface StoryRow {
+  id: string;
+  author_id: string;
+  type: "image" | "video" | "text";
+  content_url: string | null;
+  bg_gradient: string | null;
+  text_content: string | null;
+  created_at: string;
+  expires_at: string;
+  metadata: { music?: StoryMusic; overlays?: StoryOverlay[] } | null;
+}
+
+interface ViewRow {
+  story_id: string;
+  user_id: string;
+}
+
+interface LikeRow {
+  story_id: string;
+  user_id: string;
+}
+
+/** Minimal profile cache so the viewer/rail/popups can render the author's
+ *  name + avatar without each call site re-fetching. Populated by fetchStories
+ *  and topped up on realtime inserts. */
+export interface StoryProfile {
+  id: string;
+  name?: string;
+  username?: string;
+  avatar?: string;
+}
+
 interface StoriesState {
   byUser: Record<string, UserStories>;
-  /** User whose reel is open in the full-screen viewer (null = closed). */
+  profiles: Record<string, StoryProfile>;
   viewerUserId: string | null;
-  /** User whose "story or profile?" prompt is open (null = closed). */
   promptUserId: string | null;
-  /** User whose profile photo is open in the enlarged viewer (null = closed). */
   photoUserId: string | null;
-  /** A story being "uploaded" — drives the progress bar in the chat-list
-   *  header. `slide` is null while the canvas is still composing in the
-   *  background; once attached AND the bar reaches 100% it's committed. */
   pendingStory:
     | {
         userId: string;
         slide: (Omit<StorySlide, "id" | "postedAt"> & { postedAt?: number }) | null;
       }
     | null;
+  storyChannel: RealtimeChannel | null;
 
-  addStory: (userId: string, slide: Omit<StorySlide, "id" | "postedAt"> & { postedAt?: number }) => void;
-  markViewed: (userId: string) => void;
+  /** Pull every non-expired story + my views + my likes from Supabase. */
+  fetchStories: () => Promise<void>;
+  /** Compose + persist a story slide. Uploads the image data URL (if any) to
+   *  the chat-attachments bucket so peers can fetch it. Returns the new
+   *  story's database id on success. */
+  addStory: (
+    slide: Omit<StorySlide, "id" | "postedAt"> & { postedAt?: number }
+  ) => Promise<string | null>;
+  /** Mark another user's reel as viewed (writes one row per slide). */
+  markViewed: (userId: string) => Promise<void>;
+  /** Toggle a like on the currently-open slide for a given user reel. */
+  toggleLike: (userId: string, slideId: string) => Promise<void>;
+  /** Send a story reply as a DM to the author with a thumbnail of the slide. */
+  replyToStory: (
+    storyAuthorId: string,
+    slide: StorySlide,
+    content: string
+  ) => Promise<void>;
+  /** Lookup tables for the author's "Viewers"/"Likers" sheets. */
+  getStoryViewers: (
+    storyId: string
+  ) => Promise<Array<{ id: string; name?: string; username?: string; avatar?: string }>>;
+  getStoryLikers: (
+    storyId: string
+  ) => Promise<Array<{ id: string; name?: string; username?: string; avatar?: string }>>;
+
   openPrompt: (userId: string) => void;
   closePrompt: () => void;
   openViewer: (userId: string) => void;
   closeViewer: () => void;
   openPhoto: (userId: string) => void;
   closePhoto: () => void;
-  /** Begin the upload animation (slide attached later once composed). */
   startStoryUpload: (userId: string) => void;
-  /** Attach the composed slide to the in-flight upload. */
-  attachStorySlide: (slide: Omit<StorySlide, "id" | "postedAt"> & { postedAt?: number }) => void;
+  attachStorySlide: (
+    slide: Omit<StorySlide, "id" | "postedAt"> & { postedAt?: number }
+  ) => void;
   clearPendingStory: () => void;
-  /** Like / unlike another user's reel. */
-  toggleLike: (userId: string) => void;
-  /** Drop slides (and empty reels) older than 24h. */
   pruneExpired: () => void;
   hasStory: (userId: string) => boolean;
+
+  initializeRealtime: () => void;
+  disconnectRealtime: () => void;
 }
 
-const slideId = () =>
-  `slide-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+const slideIdFor = (storyId: string) => `slide-${storyId}`;
 
-/** Group the mock `stories` array into per-user reels. */
-function seed(): Record<string, UserStories> {
-  const map: Record<string, UserStories> = {};
-  for (const s of seedStories) {
-    const slide: StorySlide = {
-      id: s.id,
-      kind: s.type === "text" ? "text" : "image",
-      src: s.type === "text" ? undefined : s.preview,
-      bg: s.bg,
-      text: s.text,
-      postedAt: Date.parse(s.postedAt) || Date.now()
-    };
-    const existing = map[s.authorId];
-    if (existing) {
-      existing.slides.push(slide);
-      if (!s.viewed) existing.viewed = false;
-    } else {
-      map[s.authorId] = { userId: s.authorId, slides: [slide], viewed: !!s.viewed };
+function rowToSlide(r: StoryRow): StorySlide {
+  const meta = r.metadata || {};
+  return {
+    id: slideIdFor(r.id),
+    kind: r.type === "text" ? "text" : "image",
+    src: r.type === "text" ? undefined : r.content_url ?? undefined,
+    bg: r.bg_gradient ?? undefined,
+    text: r.text_content ?? undefined,
+    postedAt: new Date(r.created_at).getTime(),
+    music: meta.music,
+    overlays: meta.overlays
+  };
+}
+
+/** Try to upload a story image to chat-attachments and return its public URL.
+ *  Falls back to the original data URL on failure so the author still sees
+ *  their own slide locally even if the upload fails. */
+async function uploadStoryImage(dataUrl: string): Promise<string | null> {
+  try {
+    const me = useAuthStore.getState().user;
+    if (!me) return null;
+    if (!dataUrl.startsWith("data:")) return dataUrl;
+    const blob = await fetch(dataUrl).then((r) => r.blob());
+    const ext = blob.type.includes("png") ? "png" : blob.type.includes("jpeg") ? "jpg" : "png";
+    const path = `${me.id}/story-${Date.now()}-${Math.random().toString(36).slice(2, 9)}.${ext}`;
+    const { data, error } = await supabase.storage
+      .from("chat-attachments")
+      .upload(path, blob, {
+        cacheControl: "3600",
+        upsert: false,
+        contentType: blob.type || `image/${ext}`
+      });
+    if (error || !data) {
+      console.error("[uploadStoryImage] failed", error);
+      return null;
     }
+    const { data: pub } = supabase.storage
+      .from("chat-attachments")
+      .getPublicUrl(data.path);
+    return pub.publicUrl;
+  } catch (err) {
+    console.error("[uploadStoryImage] exception", err);
+    return null;
   }
-  return map;
 }
 
 export const useStoriesStore = create<StoriesState>((set, get) => ({
-  byUser: seed(),
+  byUser: {},
+  profiles: {},
   viewerUserId: null,
   promptUserId: null,
   photoUserId: null,
   pendingStory: null,
+  storyChannel: null,
 
-  addStory: (userId, slide) =>
-    set((st) => {
-      const next: StorySlide = {
-        id: slideId(),
-        postedAt: slide.postedAt ?? Date.now(),
+  fetchStories: async () => {
+    const me = useAuthStore.getState().user;
+    if (!me) return;
+    const nowIso = new Date().toISOString();
+    const [storiesRes, viewsRes, likesRes] = await Promise.all([
+      supabase
+        .from("stories")
+        .select("*")
+        .gt("expires_at", nowIso)
+        .order("created_at", { ascending: true }),
+      supabase
+        .from("story_views")
+        .select("story_id, user_id")
+        .eq("user_id", me.id),
+      supabase
+        .from("story_likes")
+        .select("story_id, user_id")
+        .eq("user_id", me.id)
+    ]);
+    const rows = (storiesRes.data || []) as StoryRow[];
+    const myViews = new Set((viewsRes.data || []).map((r: ViewRow) => r.story_id));
+    const myLikes = new Set((likesRes.data || []).map((r: LikeRow) => r.story_id));
+    // Populate the profile cache so the rail/viewer/popups can render names
+    // and avatars without each call site running its own fetch.
+    const authorIds = Array.from(new Set(rows.map((r) => r.author_id)));
+    let profileMap: Record<string, StoryProfile> = {};
+    if (authorIds.length) {
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id, name, username, avatar")
+        .in("id", authorIds);
+      (profs || []).forEach((p: StoryProfile) => {
+        profileMap[p.id] = p;
+      });
+    }
+    // Also keep our own profile around so MyStoryBar / sidebar can find it.
+    if (!profileMap[me.id]) {
+      profileMap[me.id] = {
+        id: me.id,
+        name: me.name,
+        username: me.username,
+        avatar: me.avatar
+      };
+    }
+    const next: Record<string, UserStories> = {};
+    rows.forEach((r) => {
+      const slide = rowToSlide(r);
+      const existing = next[r.author_id];
+      const isViewedSlide = myViews.has(r.id);
+      const isLikedSlide = myLikes.has(r.id);
+      if (existing) {
+        existing.slides.push(slide);
+        if (!isViewedSlide) existing.viewed = false;
+        if (isLikedSlide) existing.likedByMe = true;
+      } else {
+        next[r.author_id] = {
+          userId: r.author_id,
+          slides: [slide],
+          viewed: isViewedSlide,
+          likedByMe: isLikedSlide
+        };
+      }
+    });
+    set({ byUser: next, profiles: { ...get().profiles, ...profileMap } });
+  },
+
+  addStory: async (slide) => {
+    const me = useAuthStore.getState().user;
+    if (!me) return null;
+    // Upload the composed image to storage so peers can fetch it.
+    let contentUrl: string | null = null;
+    if (slide.kind === "image" && slide.src) {
+      contentUrl = await uploadStoryImage(slide.src);
+    }
+    // Re-host every overlay whose src is a blob:/data: URL — those are only
+    // valid in the sender's browser, so the recipient would see dead links
+    // (and the live GIF / image wouldn't animate on their viewer).
+    let overlays: StoryOverlay[] | undefined = slide.overlays;
+    if (overlays?.length) {
+      overlays = await Promise.all(
+        overlays.map(async (o) => {
+          if (o.src.startsWith("blob:") || o.src.startsWith("data:")) {
+            const uploaded = await uploadStoryImage(o.src);
+            return uploaded ? { ...o, src: uploaded } : o;
+          }
+          return o;
+        })
+      );
+    }
+    // Same for the music cover / preview (album art could be a blob: from a
+    // local file pick).
+    let music: StoryMusic | undefined = slide.music;
+    if (music?.cover && (music.cover.startsWith("blob:") || music.cover.startsWith("data:"))) {
+      const uploaded = await uploadStoryImage(music.cover);
+      if (uploaded) music = { ...music, cover: uploaded };
+    }
+    const metadata = { music, overlays };
+    const baseRow = {
+      author_id: me.id,
+      type: slide.kind === "text" ? "text" : "image",
+      content_url: contentUrl,
+      bg_gradient: slide.bg ?? null,
+      text_content: slide.text ?? null
+    };
+    let { data, error } = await supabase
+      .from("stories")
+      .insert({ ...baseRow, metadata })
+      .select("*")
+      .single<StoryRow>();
+    // Graceful fallback: if the database still lacks the `metadata` column
+    // (section 10 of APPLY_PENDING.sql hasn't been applied yet), retry the
+    // insert without it so the story still posts. Music/overlay metadata is
+    // lost on this slide until the SQL is run.
+    if (
+      error &&
+      /metadata/i.test((error as unknown as { message?: string }).message || "") &&
+      /(does not exist|schema cache|not find)/i.test(
+        (error as unknown as { message?: string }).message || ""
+      )
+    ) {
+      console.warn(
+        "[addStory] stories.metadata column missing — falling back without music/overlay metadata. Re-run supabase/APPLY_PENDING.sql section 10 to enable it."
+      );
+      const retry = await supabase
+        .from("stories")
+        .insert(baseRow)
+        .select("*")
+        .single<StoryRow>();
+      data = retry.data;
+      error = retry.error;
+    }
+    if (error || !data) {
+      // Postgres/Storage error objects use non-enumerable own properties; the
+      // browser console collapses them to `{}`. Walk own-property names and
+      // JSON-stringify the result so we ALWAYS see the underlying fields, then
+      // also log line-by-line so nothing is collapsed in DevTools.
+      const errAny = error as unknown as Record<string, unknown> | null;
+      const ownProps: Record<string, unknown> = {};
+      if (errAny) {
+        Object.getOwnPropertyNames(errAny).forEach((k) => {
+          ownProps[k] = errAny[k];
+        });
+      }
+      const msg = (errAny?.message as string | undefined) || "";
+      const hint =
+        /metadata/i.test(msg) && /(does not exist|schema cache|not find)/i.test(msg)
+          ? "The stories.metadata column hasn't been added yet — re-run supabase/APPLY_PENDING.sql section 10."
+          : /story_likes/i.test(msg) && /(does not exist|schema cache|not find)/i.test(msg)
+          ? "The story_likes table is missing — re-run supabase/APPLY_PENDING.sql section 10."
+          : (errAny?.code === "42501" || /policy|denied|unauthorized/i.test(msg))
+          ? "RLS rejected the insert. Check that the 'Users can manage their own stories' policy exists on the stories table."
+          : null;
+      console.error(
+        "[addStory] insert failed —",
+        "message:",
+        msg || "(empty)",
+        "| code:",
+        String(errAny?.code ?? "(none)"),
+        "| details:",
+        String(errAny?.details ?? "(none)"),
+        "| hint:",
+        String(hint ?? "(no diagnosis)"),
+        "| kind:",
+        slide.kind,
+        "| contentUrl:",
+        String(contentUrl ?? "(none)"),
+        "| ownProps:",
+        JSON.stringify(ownProps),
+        "| dataIsNull:",
+        String(!data),
+        "| rawErrorIsNull:",
+        String(error === null)
+      );
+      // Still optimistically show the author their own slide.
+      const local: StorySlide = {
+        id: slide.kind === "text" ? `local-${Date.now()}` : `local-${Date.now()}`,
         kind: slide.kind,
         src: slide.src,
         bg: slide.bg,
         text: slide.text,
+        postedAt: slide.postedAt ?? Date.now(),
         music: slide.music,
         overlays: slide.overlays
       };
-      const existing = st.byUser[userId];
+      set((st) => {
+        const existing = st.byUser[me.id];
+        const entry: UserStories = existing
+          ? { ...existing, slides: [...existing.slides, local], viewed: false }
+          : { userId: me.id, slides: [local], viewed: false };
+        return { byUser: { ...st.byUser, [me.id]: entry } };
+      });
+      return null;
+    }
+    // Fall back to the in-memory input for music + overlays so the AUTHOR
+    // still sees their story animate locally even when the metadata column
+    // is missing from the database (recipients won't see them until the SQL
+    // is applied, but at least the editor's owner gets the full preview).
+    const next: StorySlide = {
+      ...rowToSlide(data),
+      music: rowToSlide(data).music ?? music,
+      overlays: rowToSlide(data).overlays ?? overlays
+    };
+    set((st) => {
+      const existing = st.byUser[me.id];
       const entry: UserStories = existing
         ? { ...existing, slides: [...existing.slides, next], viewed: false }
-        : { userId, slides: [next], viewed: false };
-      return { byUser: { ...st.byUser, [userId]: entry } };
-    }),
+        : { userId: me.id, slides: [next], viewed: false };
+      return { byUser: { ...st.byUser, [me.id]: entry } };
+    });
+    return data.id;
+  },
 
-  markViewed: (userId) =>
+  markViewed: async (userId) => {
+    const me = useAuthStore.getState().user;
+    if (!me) return;
+    const reel = get().byUser[userId];
+    if (!reel) return;
+    // Optimistic local update.
     set((st) => {
       const e = st.byUser[userId];
       if (!e || e.viewed) return {};
       return { byUser: { ...st.byUser, [userId]: { ...e, viewed: true } } };
-    }),
+    });
+    const storyIds = reel.slides
+      .map((s) => (s.id.startsWith("slide-") ? s.id.slice("slide-".length) : null))
+      .filter((x): x is string => !!x);
+    if (storyIds.length === 0) return;
+    await supabase
+      .from("story_views")
+      .upsert(
+        storyIds.map((sid) => ({ story_id: sid, user_id: me.id })),
+        { onConflict: "story_id,user_id", ignoreDuplicates: true }
+      );
+  },
+
+  toggleLike: async (userId, slideId) => {
+    const me = useAuthStore.getState().user;
+    if (!me) return;
+    const reel = get().byUser[userId];
+    if (!reel) return;
+    const slide = reel.slides.find((s) => s.id === slideId);
+    if (!slide) return;
+    const storyId = slide.id.startsWith("slide-") ? slide.id.slice("slide-".length) : null;
+    if (!storyId) return;
+    const willLike = !reel.likedByMe;
+    // Optimistic.
+    set((st) => {
+      const e = st.byUser[userId];
+      if (!e) return {};
+      return {
+        byUser: { ...st.byUser, [userId]: { ...e, likedByMe: willLike } }
+      };
+    });
+    if (willLike) {
+      await supabase
+        .from("story_likes")
+        .upsert(
+          { story_id: storyId, user_id: me.id },
+          { onConflict: "story_id,user_id", ignoreDuplicates: true }
+        );
+    } else {
+      await supabase
+        .from("story_likes")
+        .delete()
+        .eq("story_id", storyId)
+        .eq("user_id", me.id);
+    }
+  },
+
+  replyToStory: async (storyAuthorId, slide, content) => {
+    const me = useAuthStore.getState().user;
+    if (!me) return;
+    const storyId = slide.id.startsWith("slide-") ? slide.id.slice("slide-".length) : slide.id;
+    // Ensure a DM chat exists with the story author.
+    const startDM = useChatStore.getState().startDM;
+    const dm = await startDM(storyAuthorId);
+    const chatId = dm.data?.id;
+    if (!chatId) return;
+    const sendAttachment = useChatStore.getState().sendAttachment;
+    await sendAttachment(chatId, {
+      kind: "text",
+      content,
+      storyReply: {
+        storyId,
+        src: slide.src,
+        bg: slide.bg,
+        text: slide.text
+      }
+    });
+  },
+
+  getStoryViewers: async (storyId) => {
+    const rid = storyId.startsWith("slide-") ? storyId.slice("slide-".length) : storyId;
+    const { data: views } = await supabase
+      .from("story_views")
+      .select("user_id")
+      .eq("story_id", rid);
+    if (!views?.length) return [];
+    const ids = (views as ViewRow[]).map((v) => v.user_id);
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, name, username, avatar")
+      .in("id", ids);
+    return (profiles || []).map((p: { id: string; name?: string; username?: string; avatar?: string }) => ({
+      id: p.id,
+      name: p.name || p.username,
+      username: p.username,
+      avatar: p.avatar
+    }));
+  },
+
+  getStoryLikers: async (storyId) => {
+    const rid = storyId.startsWith("slide-") ? storyId.slice("slide-".length) : storyId;
+    const { data: likes } = await supabase
+      .from("story_likes")
+      .select("user_id")
+      .eq("story_id", rid);
+    if (!likes?.length) return [];
+    const ids = (likes as LikeRow[]).map((v) => v.user_id);
+    const { data: profiles } = await supabase
+      .from("profiles")
+      .select("id, name, username, avatar")
+      .in("id", ids);
+    return (profiles || []).map((p: { id: string; name?: string; username?: string; avatar?: string }) => ({
+      id: p.id,
+      name: p.name || p.username,
+      username: p.username,
+      avatar: p.avatar
+    }));
+  },
 
   openPrompt: (userId) => set({ promptUserId: userId }),
   closePrompt: () => set({ promptUserId: null }),
@@ -175,13 +546,6 @@ export const useStoriesStore = create<StoriesState>((set, get) => ({
     set((st) => (st.pendingStory ? { pendingStory: { ...st.pendingStory, slide } } : {})),
   clearPendingStory: () => set({ pendingStory: null }),
 
-  toggleLike: (userId) =>
-    set((st) => {
-      const e = st.byUser[userId];
-      if (!e) return {};
-      return { byUser: { ...st.byUser, [userId]: { ...e, likedByMe: !e.likedByMe } } };
-    }),
-
   pruneExpired: () =>
     set((st) => {
       let changed = false;
@@ -189,7 +553,7 @@ export const useStoriesStore = create<StoriesState>((set, get) => ({
       for (const [uid, reel] of Object.entries(st.byUser)) {
         const fresh = reel.slides.filter((s) => isFreshStory(s.postedAt));
         if (fresh.length === 0) {
-          changed = true; // whole reel expired → drop it
+          changed = true;
           continue;
         }
         if (fresh.length !== reel.slides.length) changed = true;
@@ -198,5 +562,80 @@ export const useStoriesStore = create<StoriesState>((set, get) => ({
       return changed ? { byUser: next } : {};
     }),
 
-  hasStory: (userId) => !!get().byUser[userId]?.slides.length
+  hasStory: (userId) => !!get().byUser[userId]?.slides.length,
+
+  initializeRealtime: () => {
+    const me = useAuthStore.getState().user;
+    if (!me) return;
+    // Defensive cleanup: HMR / double-init / auth-listener firing twice can
+    // leave a channel registered with the same topic already subscribed.
+    // `.on()` then throws "cannot add postgres_changes callbacks after
+    // subscribe()". Tear it down before creating a fresh one.
+    const topic = `realtime:nova_stories_${me.id}`;
+    supabase.getChannels().forEach((c) => {
+      if (c.topic === topic) supabase.removeChannel(c);
+    });
+    if (get().storyChannel) {
+      set({ storyChannel: null });
+    }
+    const channel = supabase
+      .channel(`nova_stories_${me.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "stories" },
+        async (payload: RealtimePostgresChangesPayload<StoryRow>) => {
+          const r = payload.new as StoryRow;
+          // Skip our own inserts — addStory has already added them locally.
+          if (r.author_id === me.id) return;
+          const slide = rowToSlide(r);
+          // Lazy-load the author's profile if we haven't seen them before so
+          // their name + avatar render correctly in the rail/viewer.
+          if (!get().profiles[r.author_id]) {
+            const { data: prof } = await supabase
+              .from("profiles")
+              .select("id, name, username, avatar")
+              .eq("id", r.author_id)
+              .single();
+            if (prof) {
+              set((st) => ({
+                profiles: { ...st.profiles, [r.author_id]: prof as StoryProfile }
+              }));
+            }
+          }
+          set((st) => {
+            const existing = st.byUser[r.author_id];
+            const entry: UserStories = existing
+              ? { ...existing, slides: [...existing.slides, slide], viewed: false }
+              : { userId: r.author_id, slides: [slide], viewed: false };
+            return { byUser: { ...st.byUser, [r.author_id]: entry } };
+          });
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "stories" },
+        (payload: RealtimePostgresChangesPayload<{ id?: string }>) => {
+          const old = payload.old as { id?: string };
+          if (!old?.id) return;
+          const targetId = `slide-${old.id}`;
+          set((st) => {
+            const next: Record<string, UserStories> = {};
+            for (const [uid, reel] of Object.entries(st.byUser)) {
+              const filtered = reel.slides.filter((s) => s.id !== targetId);
+              if (filtered.length === 0) continue;
+              next[uid] = filtered.length === reel.slides.length ? reel : { ...reel, slides: filtered };
+            }
+            return { byUser: next };
+          });
+        }
+      )
+      .subscribe();
+    set({ storyChannel: channel });
+  },
+
+  disconnectRealtime: () => {
+    const ch = get().storyChannel;
+    if (ch) supabase.removeChannel(ch);
+    set({ storyChannel: null });
+  }
 }));

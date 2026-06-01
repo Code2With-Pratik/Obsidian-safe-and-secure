@@ -115,6 +115,17 @@ export interface Message {
   };
   contacts?: { name: string; username?: string; avatar?: string }[];
   location?: { lat: number; lng: number; live?: boolean };
+  /** Story-reply context — when a user replies to someone's story from the
+   *  viewer, the resulting DM carries a small thumbnail + caption of the
+   *  source slide so the author knows which story the reply is about. */
+  storyReply?: {
+    storyId: ID;
+    /** Preview image (image story) or null for text-only slides. */
+    src?: string;
+    /** Gradient bg + text for text slides. */
+    bg?: string;
+    text?: string;
+  };
   schedule?: {
     whenIso: string;
     message: string;

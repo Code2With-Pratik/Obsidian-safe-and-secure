@@ -18,6 +18,10 @@ const newId = (): string => {
   return `c-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 };
 
+/** Per-(chatId, userId) auto-clear timers for the typing-broadcast channel.
+ *  Kept at module scope so they survive store updates and HMR. */
+const typingClearTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+
 /* ----------------------------- helpers ----------------------------- */
 
 /**
@@ -85,6 +89,7 @@ interface ChatState {
   messageChannel: RealtimeChannel | null;
   reactionChannel: RealtimeChannel | null;
   chatChannel: RealtimeChannel | null;
+  typingChannel: RealtimeChannel | null;
   hasInitialLoaded: boolean;
 
   /* ----- lifecycle ----- */
@@ -104,6 +109,9 @@ interface ChatState {
     chatId: string,
     payload: Partial<Message> & { kind: Message["kind"]; content?: string }
   ) => Promise<void>;
+  /** Upload a File to the chat-attachments bucket and return the public URL.
+   *  Returns null on failure (logged to the console). */
+  uploadAttachment: (file: File) => Promise<string | null>;
 
   /* ----- read receipts ----- */
   markRead: (chatId: string) => Promise<void>;
@@ -171,6 +179,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   messageChannel: null,
   reactionChannel: null,
   chatChannel: null,
+  typingChannel: null,
   hasInitialLoaded: false,
 
   /* ----- realtime ----- */
@@ -186,6 +195,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // can't be attached to an already-subscribed channel.
     const ourTopics = new Set([
       "realtime:nova_presence_v1",
+      "realtime:nova_typing_v1",
       `realtime:nova_msgs_${me.id}`,
       `realtime:nova_reactions_${me.id}`,
       `realtime:nova_chats_${me.id}`
@@ -197,39 +207,35 @@ export const useChatStore = create<ChatState>((set, get) => ({
       presenceChannel: null,
       messageChannel: null,
       reactionChannel: null,
-      chatChannel: null
+      chatChannel: null,
+      typingChannel: null
     });
 
-    // Presence (online + typing)
+    // Presence — online status only. Typing moved to a dedicated broadcast
+    // channel below: presence's sync event was unreliable for transient
+    // "user stopped typing" updates, leaving the indicator stuck on the
+    // recipient's screen.
     if (!get().presenceChannel) {
       const channel = supabase
-        .channel("nova_presence_v1")
+        .channel("nova_presence_v1", { config: { presence: { key: me.id } } })
         .on("presence", { event: "sync" }, () => {
           const state = channel.presenceState();
           const meId = useAuthStore.getState().user?.id;
           const online: string[] = [];
-          const typing: Record<string, string[]> = {};
           Object.values(state).forEach((presences) => {
             (presences as Array<Record<string, unknown>>).forEach((p) => {
               const uid = p.user_id as string | undefined;
               if (!uid || uid === meId) return;
               online.push(uid);
-              if (p.is_typing && p.typing_in) {
-                const k = p.typing_in as string;
-                if (!typing[k]) typing[k] = [];
-                typing[k].push(uid);
-              }
             });
           });
-          set({ onlineUsers: Array.from(new Set(online)), typing });
+          set({ onlineUsers: Array.from(new Set(online)) });
         });
       channel.subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
           const nowIso = new Date().toISOString();
           await channel.track({
             user_id: me.id,
-            is_typing: false,
-            typing_in: null,
             online_at: nowIso
           });
           // Bump my last_seen_at — used by DM chat headers to show
@@ -240,6 +246,52 @@ export const useChatStore = create<ChatState>((set, get) => ({
       set({ presenceChannel: channel });
     }
 
+    // Typing — dedicated broadcast channel. Every keystroke broadcasts
+    // {user_id, chat_id, typing}; recipients append/remove the sender from
+    // typing[chat_id] and arm a 2.5s auto-clear timer so the indicator
+    // disappears even if the sender's "stop" packet never arrives.
+    if (!get().typingChannel) {
+      const channel = supabase
+        .channel("nova_typing_v1")
+        .on("broadcast", { event: "typing" }, ({ payload }) => {
+          const p = payload as
+            | { user_id?: string; chat_id?: string; typing?: boolean }
+            | undefined;
+          if (!p?.user_id || !p?.chat_id) return;
+          if (p.user_id === me.id) return;
+          const userId = p.user_id;
+          const chatId = p.chat_id;
+          const prev = typingClearTimers.get(`${chatId}:${userId}`);
+          if (prev) clearTimeout(prev);
+          if (p.typing) {
+            set((s) => {
+              const cur = s.typing[chatId] || [];
+              if (cur.includes(userId)) return s;
+              return { typing: { ...s.typing, [chatId]: [...cur, userId] } };
+            });
+            const t = setTimeout(() => {
+              set((s) => ({
+                typing: {
+                  ...s.typing,
+                  [chatId]: (s.typing[chatId] || []).filter((u) => u !== userId)
+                }
+              }));
+              typingClearTimers.delete(`${chatId}:${userId}`);
+            }, 2500);
+            typingClearTimers.set(`${chatId}:${userId}`, t);
+          } else {
+            set((s) => ({
+              typing: {
+                ...s.typing,
+                [chatId]: (s.typing[chatId] || []).filter((u) => u !== userId)
+              }
+            }));
+          }
+        })
+        .subscribe();
+      set({ typingChannel: channel });
+    }
+
     // Messages — INSERT / UPDATE / DELETE
     if (!get().messageChannel) {
       const channel = supabase
@@ -248,6 +300,36 @@ export const useChatStore = create<ChatState>((set, get) => ({
           "postgres_changes",
           { event: "*", schema: "public", table: "messages" },
           (payload) => {
+            // For DELETE events the `old` row only carries `chat_id` when
+            // REPLICA IDENTITY FULL is set on the messages table — fall back
+            // to scanning local state by id so a DELETE without chat_id still
+            // removes the message from every chat that contained it.
+            if (payload.eventType === "DELETE") {
+              const id = (payload.old as Record<string, unknown> | undefined)?.id as
+                | string
+                | undefined;
+              if (!id) return;
+              const state = get();
+              const chatIdsContainingMsg = Object.keys(state.messages).filter((cid) =>
+                state.messages[cid].some((m) => m.id === id)
+              );
+              const explicitChatId = ((payload.old as Record<string, unknown> | undefined)?.chat_id as
+                | string
+                | undefined);
+              const targets = explicitChatId
+                ? [explicitChatId]
+                : chatIdsContainingMsg;
+              if (targets.length === 0) return;
+              set((s) => {
+                const nextMessages = { ...s.messages };
+                for (const cid of targets) {
+                  nextMessages[cid] = (s.messages[cid] || []).filter((m) => m.id !== id);
+                }
+                return { messages: nextMessages };
+              });
+              return;
+            }
+
             const row = (payload.new || payload.old) as Record<string, unknown>;
             const chatId = row.chat_id as string;
             if (!chatId) return;
@@ -334,15 +416,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
               ) {
                 void get().markRead(chatId);
               }
-            } else if (payload.eventType === "DELETE") {
-              const id = (payload.old as Record<string, unknown>).id as string;
-              set((s) => ({
-                messages: {
-                  ...s.messages,
-                  [chatId]: (s.messages[chatId] || []).filter((m) => m.id !== id)
-                }
-              }));
             }
+            // DELETE is handled above the early-return — payload.old.chat_id
+            // may be absent when REPLICA IDENTITY isn't FULL.
           }
         )
         .subscribe();
@@ -419,16 +495,20 @@ export const useChatStore = create<ChatState>((set, get) => ({
         .update({ last_seen_at: new Date().toISOString() })
         .eq("id", me.id);
     }
-    const { presenceChannel, messageChannel, reactionChannel, chatChannel } = get();
+    const { presenceChannel, messageChannel, reactionChannel, chatChannel, typingChannel } = get();
     if (presenceChannel) supabase.removeChannel(presenceChannel);
     if (messageChannel) supabase.removeChannel(messageChannel);
     if (reactionChannel) supabase.removeChannel(reactionChannel);
     if (chatChannel) supabase.removeChannel(chatChannel);
+    if (typingChannel) supabase.removeChannel(typingChannel);
+    typingClearTimers.forEach((t) => clearTimeout(t));
+    typingClearTimers.clear();
     set({
       presenceChannel: null,
       messageChannel: null,
       reactionChannel: null,
-      chatChannel: null
+      chatChannel: null,
+      typingChannel: null
     });
   },
 
@@ -508,19 +588,52 @@ export const useChatStore = create<ChatState>((set, get) => ({
     // Unread counts — one round-trip RPC that compares each chat's
     // last_read_at against the message stream.
     const { data: unreadRows } = await supabase.rpc("get_unread_counts");
-    if (unreadRows) {
-      const unreadMap = new Map(
-        (unreadRows as { chat_id: string; unread: number }[]).map((r) => [
-          r.chat_id,
-          Number(r.unread)
-        ])
-      );
-      formatted.forEach((c) => {
-        c.unread = unreadMap.get(c.id) ?? 0;
-      });
-    }
+    const unreadMap = unreadRows
+      ? new Map(
+          (unreadRows as { chat_id: string; unread: number }[]).map((r) => [
+            r.chat_id,
+            Number(r.unread)
+          ])
+        )
+      : new Map<string, number>();
+    formatted.forEach((c) => {
+      c.unread = unreadMap.get(c.id) ?? 0;
+    });
 
-    set({ chats: formatted, hasInitialLoaded: true });
+    // Dedupe DM rows: legacy data (before the find_dm_between_users RPC
+    // existed) can have multiple chat rows for the same partner. Keep the
+    // chat with the highest unread count, falling back to the most recently
+    // created — that's the one the user has actually been using — and roll
+    // every duplicate's unread into it so nothing is lost from the badge.
+    const dmCanonical = new Map<string, Chat>();
+    const nonDmChats: Chat[] = [];
+    formatted.forEach((c) => {
+      if (c.type !== "dm") {
+        nonDmChats.push(c);
+        return;
+      }
+      const partnerId = c.memberIds?.find((id) => id !== me.id);
+      if (!partnerId) {
+        nonDmChats.push(c);
+        return;
+      }
+      const prev = dmCanonical.get(partnerId);
+      if (!prev) {
+        dmCanonical.set(partnerId, c);
+        return;
+      }
+      // Keep the one with more unread (tie → keep prev — it came first in
+      // the created_at DESC ordering, so it's the newer chat).
+      if ((c.unread ?? 0) > (prev.unread ?? 0)) {
+        c.unread = (c.unread ?? 0) + (prev.unread ?? 0);
+        dmCanonical.set(partnerId, c);
+      } else {
+        prev.unread = (prev.unread ?? 0) + (c.unread ?? 0);
+      }
+    });
+    const deduped = [...nonDmChats, ...Array.from(dmCanonical.values())];
+
+    set({ chats: deduped, hasInitialLoaded: true });
   },
 
   fetchMessages: async (chatId) => {
@@ -584,13 +697,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   setTyping: async (chatId, isTyping) => {
     const me = useAuthStore.getState().user;
-    const channel = get().presenceChannel;
+    const channel = get().typingChannel;
     if (!me || !channel) return;
-    await channel.track({
-      user_id: me.id,
-      is_typing: isTyping,
-      typing_in: isTyping ? chatId : null,
-      online_at: new Date().toISOString()
+    await channel.send({
+      type: "broadcast",
+      event: "typing",
+      payload: { user_id: me.id, chat_id: chatId, typing: isTyping }
     });
   },
 
@@ -706,6 +818,82 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
   },
 
+  uploadAttachment: async (file) => {
+    const me = useAuthStore.getState().user;
+    if (!me) return null;
+    // De-collide with a uuid prefix; keep extension so the browser MIME-sniffs
+    // correctly and the audio/video tag knows what to do.
+    const ext = file.name.includes(".")
+      ? file.name.slice(file.name.lastIndexOf(".")).toLowerCase()
+      : "";
+    const path = `${me.id}/${newId()}${ext}`;
+    // Some browsers leave file.type empty (drag-drop of .mp3 from Windows
+    // Explorer, for instance). Supabase then stamps the object as
+    // application/octet-stream and <audio>/<video> reject playback with a
+    // "Format error". Infer the type from the extension for common media.
+    const mimeFromExt: Record<string, string> = {
+      ".mp3": "audio/mpeg",
+      ".m4a": "audio/mp4",
+      ".aac": "audio/aac",
+      ".ogg": "audio/ogg",
+      ".opus": "audio/ogg",
+      ".wav": "audio/wav",
+      ".flac": "audio/flac",
+      ".webm": "audio/webm",
+      ".mp4": "video/mp4",
+      ".mov": "video/quicktime",
+      ".mkv": "video/x-matroska",
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".png": "image/png",
+      ".gif": "image/gif",
+      ".webp": "image/webp",
+      ".pdf": "application/pdf"
+    };
+    const resolvedType = file.type || mimeFromExt[ext] || "application/octet-stream";
+    const { data, error } = await supabase.storage
+      .from("chat-attachments")
+      .upload(path, file, {
+        cacheControl: "3600",
+        upsert: false,
+        contentType: resolvedType
+      });
+    if (error || !data) {
+      // Supabase StorageError uses non-enumerable own properties, so a plain
+      // `{ error }` log serializes to `{}`. Walk every own property name to
+      // get the real payload.
+      const errAny = error as unknown as Record<string, unknown> | null;
+      const serialized = errAny
+        ? Object.getOwnPropertyNames(errAny).reduce<Record<string, unknown>>((acc, k) => {
+            acc[k] = errAny[k];
+            return acc;
+          }, {})
+        : null;
+      const msg =
+        (errAny?.message as string | undefined) ||
+        (errAny?.error as string | undefined) ||
+        "";
+      const hint =
+        /not found|does not exist/i.test(msg) || (errAny?.statusCode as number) === 404
+          ? "The `chat-attachments` bucket isn't created yet — re-run supabase/APPLY_PENDING.sql section 8 in the Supabase SQL editor."
+          : (errAny?.statusCode as number) === 403 || /policy|denied|unauthorized/i.test(msg)
+          ? "Bucket exists but RLS rejected the upload — re-run supabase/APPLY_PENDING.sql section 8 to install the storage policies."
+          : null;
+      console.error("[uploadAttachment] failed", {
+        path,
+        message: msg || "(empty)",
+        statusCode: errAny?.statusCode,
+        name: errAny?.name,
+        code: errAny?.error,
+        serialized,
+        hint
+      });
+      return null;
+    }
+    const { data: pub } = supabase.storage.from("chat-attachments").getPublicUrl(data.path);
+    return pub.publicUrl;
+  },
+
   sendAttachment: async (chatId, p) => {
     const me = useAuthStore.getState().user;
     if (!me) return;
@@ -734,21 +922,34 @@ export const useChatStore = create<ChatState>((set, get) => ({
     set((s) => ({
       messages: { ...s.messages, [chatId]: [...(s.messages[chatId] ?? []), optimistic] }
     }));
+    // Only include `schedule_at` in the insert when we're actually scheduling.
+    // This keeps INSERTs working on databases where the schedule_at migration
+    // hasn't been applied yet (column would otherwise be unknown → error).
+    const insertRow: Record<string, unknown> = {
+      chat_id: chatId,
+      author_id: me.id,
+      kind,
+      content,
+      status: isScheduled ? "scheduled" : "sent",
+      payload: rest,
+      client_id: cid
+    };
+    if (isScheduled) insertRow.schedule_at = scheduleAt;
     const { data, error } = await supabase
       .from("messages")
-      .insert({
-        chat_id: chatId,
-        author_id: me.id,
-        kind,
-        content,
-        status: isScheduled ? "scheduled" : "sent",
-        schedule_at: isScheduled ? scheduleAt : null,
-        payload: rest,
-        client_id: cid
-      })
+      .insert(insertRow)
       .select()
       .single();
     if (error || !data) {
+      console.error("[sendAttachment] insert failed", {
+        kind,
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        code: error?.code,
+        rawError: error,
+        insertRow
+      });
       set((s) => ({
         messages: { ...s.messages, [chatId]: (s.messages[chatId] ?? []).filter((m) => m.id !== cid) }
       }));
@@ -841,13 +1042,26 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
   removeMessages: async (chatId, ids) => {
     if (ids.length === 0) return;
+    const prev = get().messages[chatId] || [];
     set((s) => ({
       messages: {
         ...s.messages,
         [chatId]: (s.messages[chatId] || []).filter((m) => !ids.includes(m.id))
       }
     }));
-    await supabase.from("messages").delete().in("id", ids);
+    const { error } = await supabase.from("messages").delete().in("id", ids);
+    if (error) {
+      // Most likely cause: missing DELETE RLS policy on messages. Roll back
+      // the optimistic removal so the user can see the message didn't actually
+      // get deleted server-side.
+      console.error("[removeMessages] delete failed", {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      });
+      set((s) => ({ messages: { ...s.messages, [chatId]: prev } }));
+    }
   },
 
   hideMessages: async (chatId, ids) => {

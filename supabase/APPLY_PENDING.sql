@@ -170,4 +170,159 @@ ALTER TABLE profiles
 CREATE INDEX IF NOT EXISTS profiles_last_seen_at_idx
   ON profiles(last_seen_at);
 
+-- ---------------------------------------------------------------------
+-- 7.  Allow message authors to delete their own messages ("Delete for
+--     everyone"). Without this policy the original schema's RLS rejects
+--     every DELETE silently and the row stays in the DB.
+-- ---------------------------------------------------------------------
+DROP POLICY IF EXISTS "Users can delete own messages" ON messages;
+CREATE POLICY "Users can delete own messages" ON messages
+  FOR DELETE TO authenticated
+  USING (author_id = auth.uid());
+
+-- Without REPLICA IDENTITY FULL on messages, realtime DELETE events carry
+-- only the primary key — recipients can't route them to the right chat, so
+-- "delete for everyone" only takes effect for the author.
+ALTER TABLE messages REPLICA IDENTITY FULL;
+
+-- ---------------------------------------------------------------------
+-- 8.  Public Storage bucket for chat attachments (audio / images / video
+--     / docs). Without this, files uploaded with URL.createObjectURL()
+--     only exist in the sender's browser and the recipient sees a dead
+--     blob: URL.
+-- ---------------------------------------------------------------------
+INSERT INTO storage.buckets (id, name, public)
+  VALUES ('chat-attachments', 'chat-attachments', true)
+  ON CONFLICT (id) DO UPDATE SET public = true;
+
+DROP POLICY IF EXISTS "chat_attachments_read" ON storage.objects;
+CREATE POLICY "chat_attachments_read" ON storage.objects
+  FOR SELECT TO public
+  USING (bucket_id = 'chat-attachments');
+
+DROP POLICY IF EXISTS "chat_attachments_upload" ON storage.objects;
+CREATE POLICY "chat_attachments_upload" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (bucket_id = 'chat-attachments');
+
+DROP POLICY IF EXISTS "chat_attachments_update" ON storage.objects;
+CREATE POLICY "chat_attachments_update" ON storage.objects
+  FOR UPDATE TO authenticated
+  USING (bucket_id = 'chat-attachments' AND owner = auth.uid())
+  WITH CHECK (bucket_id = 'chat-attachments' AND owner = auth.uid());
+
+DROP POLICY IF EXISTS "chat_attachments_delete" ON storage.objects;
+CREATE POLICY "chat_attachments_delete" ON storage.objects
+  FOR DELETE TO authenticated
+  USING (bucket_id = 'chat-attachments' AND owner = auth.uid());
+
+-- ---------------------------------------------------------------------
+-- 9.  Merge duplicate DM chats. Legacy rows (created before the
+--     find_dm_between_users RPC existed) can leave 5–10 chat rows for the
+--     same DM partner. This block picks the *oldest* chat per partner as
+--     canonical, moves every duplicate's messages + reactions into it,
+--     then deletes the duplicate rows. Safe to re-run — once everything
+--     is deduped, the CTE returns no rows and nothing happens.
+-- ---------------------------------------------------------------------
+DO $$
+DECLARE
+  pair_record RECORD;
+  canonical_id UUID;
+BEGIN
+  FOR pair_record IN
+    SELECT
+      LEAST(m1.user_id, m2.user_id) AS user_a,
+      GREATEST(m1.user_id, m2.user_id) AS user_b,
+      ARRAY_AGG(c.id ORDER BY c.created_at ASC) AS chat_ids
+    FROM chats c
+    JOIN chat_members m1 ON m1.chat_id = c.id
+    JOIN chat_members m2 ON m2.chat_id = c.id AND m2.user_id <> m1.user_id
+    WHERE c.type = 'dm'
+    GROUP BY LEAST(m1.user_id, m2.user_id), GREATEST(m1.user_id, m2.user_id)
+    HAVING COUNT(DISTINCT c.id) > 1
+  LOOP
+    canonical_id := pair_record.chat_ids[1];
+    -- Re-point every duplicate's messages to the canonical chat. Reactions
+    -- ride along through their message_id FK, no separate UPDATE needed.
+    UPDATE messages
+       SET chat_id = canonical_id
+     WHERE chat_id = ANY(pair_record.chat_ids[2:array_length(pair_record.chat_ids, 1)]);
+    -- Delete the duplicate chat rows; chat_members & cascades take care of
+    -- the rest.
+    DELETE FROM chats
+     WHERE id = ANY(pair_record.chat_ids[2:array_length(pair_record.chat_ids, 1)]);
+  END LOOP;
+END $$;
+
+-- ---------------------------------------------------------------------
+-- 10. Stories ecosystem — likes table, metadata column, realtime
+--     publication, and a pg_cron job that drops expired stories every
+--     5 minutes (the stories table already carries `expires_at` set to
+--     NOW() + 24h on insert).
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS story_likes (
+  story_id   UUID NOT NULL REFERENCES stories(id) ON DELETE CASCADE,
+  user_id    UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (story_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS story_likes_user_idx ON story_likes(user_id);
+
+ALTER TABLE story_likes ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "story_likes_select_all" ON story_likes;
+CREATE POLICY "story_likes_select_all" ON story_likes
+  FOR SELECT TO authenticated
+  USING (true);
+
+DROP POLICY IF EXISTS "story_likes_modify_own" ON story_likes;
+CREATE POLICY "story_likes_modify_own" ON story_likes
+  FOR ALL TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+-- Holds music/overlay metadata for slides composed in the editor.
+ALTER TABLE stories
+  ADD COLUMN IF NOT EXISTS metadata JSONB DEFAULT '{}'::jsonb;
+
+-- Realtime publication so the viewer / sidebar update without a reload.
+DO $$
+DECLARE t TEXT;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['stories', 'story_views', 'story_likes']
+  LOOP
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime'
+        AND schemaname = 'public'
+        AND tablename = t
+    ) THEN
+      EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE public.%I', t);
+    END IF;
+  END LOOP;
+END $$;
+
+ALTER TABLE stories REPLICA IDENTITY FULL;
+ALTER TABLE story_views REPLICA IDENTITY FULL;
+ALTER TABLE story_likes REPLICA IDENTITY FULL;
+
+DO $$
+BEGIN
+  PERFORM cron.unschedule('cleanup-expired-stories')
+  WHERE EXISTS (
+    SELECT 1 FROM cron.job WHERE jobname = 'cleanup-expired-stories'
+  );
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END $$;
+
+SELECT cron.schedule(
+  'cleanup-expired-stories',
+  '*/5 * * * *',
+  $job$
+    DELETE FROM stories WHERE expires_at <= NOW();
+  $job$
+);
+
 -- Done. Reload the app — the new columns/RPC/policies/jobs are now live.
