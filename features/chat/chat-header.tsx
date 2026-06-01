@@ -54,6 +54,11 @@ import { copyText } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { ChatThemeDialog } from "./chat-theme-dialog";
 import { DeleteMessageDialog } from "./delete-message-dialog";
+
+/** Stable empty array used as the fallback for `selected[chat.id]` so the
+ *  Zustand selector doesn't return a fresh `[]` on every render (which
+ *  trips React's "getSnapshot should be cached" / max-update-depth loop). */
+const EMPTY_SELECTED_IDS: string[] = [];
 import type { Chat } from "@/types";
 
 export function ChatHeader({
@@ -148,7 +153,12 @@ export function ChatHeader({
   const deleteSelected = () => {
     setDeleteOpen(true);
   };
-  const selectedIds = useMessageSelectionStore((s) => s.selected[chat.id] ?? []);
+  // Important: select the raw value, then fall back to a STABLE empty array
+  // outside the selector. A `?? []` inside the selector returns a fresh `[]`
+  // every render and trips React's
+  // "result of getSnapshot should be cached to avoid an infinite loop".
+  const selectedIdsRaw = useMessageSelectionStore((s) => s.selected[chat.id]);
+  const selectedIds = selectedIdsRaw ?? EMPTY_SELECTED_IDS;
   const allSelectedAreMine = React.useMemo(() => {
     if (!me?.id || selectedIds.length === 0) return false;
     const list = messages[chat.id] ?? [];
