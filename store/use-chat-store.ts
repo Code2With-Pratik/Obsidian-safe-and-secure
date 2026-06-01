@@ -112,7 +112,10 @@ interface ChatState {
   /* ----- message actions ----- */
   toggleReaction: (chatId: string, messageId: string, emoji: string) => Promise<void>;
   pinMessage: (chatId: string, messageId: string) => Promise<void>;
+  /** Hard-delete from the DB. "Delete for everyone". */
   removeMessages: (chatId: string, messageIds: string[]) => Promise<void>;
+  /** Soft-hide for the current user only. "Delete for me". */
+  hideMessages: (chatId: string, messageIds: string[]) => Promise<void>;
   votePoll: (chatId: string, messageId: string, optionId: string) => Promise<void>;
 
   /* ----- chat actions ----- */
@@ -222,12 +225,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
         });
       channel.subscribe(async (status) => {
         if (status === "SUBSCRIBED") {
+          const nowIso = new Date().toISOString();
           await channel.track({
             user_id: me.id,
             is_typing: false,
             typing_in: null,
-            online_at: new Date().toISOString()
+            online_at: nowIso
           });
+          // Bump my last_seen_at — used by DM chat headers to show
+          // "last seen at HH:mm" when I'm offline on someone else's screen.
+          void supabase.from("profiles").update({ last_seen_at: nowIso }).eq("id", me.id);
         }
       });
       set({ presenceChannel: channel });
@@ -247,6 +254,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
 
             if (payload.eventType === "INSERT") {
               const incoming = rowToMessage(row);
+              // Scheduled messages by *other* users shouldn't appear until the
+              // pg_cron job flips them to status='sent' — they'll arrive then
+              // via the UPDATE branch below.
+              if (
+                (row.status as string) === "scheduled" &&
+                (row.author_id as string) !== me.id
+              ) {
+                return;
+              }
               const clientId = row.client_id as string | undefined;
               set((s) => {
                 const cur = s.messages[chatId] || [];
@@ -282,14 +298,42 @@ export const useChatStore = create<ChatState>((set, get) => ({
               }
             } else if (payload.eventType === "UPDATE") {
               const next = rowToMessage(row);
-              set((s) => ({
-                messages: {
-                  ...s.messages,
-                  [chatId]: (s.messages[chatId] || []).map((m) =>
-                    m.id === next.id ? { ...m, ...next } : m
-                  )
+              set((s) => {
+                const cur = s.messages[chatId] || [];
+                const has = cur.some((m) => m.id === next.id);
+                if (has) {
+                  return {
+                    messages: {
+                      ...s.messages,
+                      [chatId]: cur.map((m) => (m.id === next.id ? { ...m, ...next } : m))
+                    }
+                  };
                 }
-              }));
+                // Recipient didn't see this row earlier (scheduled-but-not-due
+                // messages are filtered out on INSERT). Now that pg_cron flipped
+                // it to 'sent', surface it as if it were a fresh insert.
+                return {
+                  messages: { ...s.messages, [chatId]: [...cur, next] },
+                  chats: s.chats.map((c) =>
+                    c.id === chatId
+                      ? {
+                          ...c,
+                          lastMessage: next.content,
+                          lastMessageAt: next.createdAt,
+                          unread:
+                            c.id === get().activeChatId ? 0 : (c.unread ?? 0) + 1
+                        }
+                      : c
+                  )
+                };
+              });
+              if (
+                !get().messages[chatId]?.some((m) => m.id === next.id && m.status === "scheduled") &&
+                next.authorId !== me.id &&
+                get().activeChatId === chatId
+              ) {
+                void get().markRead(chatId);
+              }
             } else if (payload.eventType === "DELETE") {
               const id = (payload.old as Record<string, unknown>).id as string;
               set((s) => ({
@@ -367,6 +411,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   disconnectRealtime: () => {
+    const me = useAuthStore.getState().user;
+    // Record the moment we go offline so peers see an accurate "last seen at".
+    if (me) {
+      void supabase
+        .from("profiles")
+        .update({ last_seen_at: new Date().toISOString() })
+        .eq("id", me.id);
+    }
     const { presenceChannel, messageChannel, reactionChannel, chatChannel } = get();
     if (presenceChannel) supabase.removeChannel(presenceChannel);
     if (messageChannel) supabase.removeChannel(messageChannel);
@@ -417,12 +469,18 @@ export const useChatStore = create<ChatState>((set, get) => ({
       const mine = members.find((m) => m.user_id === me.id);
       let name = c.name as string | undefined;
       let avatar = c.avatar as string | undefined;
+      let lastSeenAt: string | undefined;
       if (c.type === "dm") {
         const other = members.find((m) => m.user_id !== me.id);
-        const p = other ? (pMap.get(other.user_id) as { name?: string; username?: string; avatar?: string } | undefined) : undefined;
+        const p = other
+          ? (pMap.get(other.user_id) as
+              | { name?: string; username?: string; avatar?: string; last_seen_at?: string }
+              | undefined)
+          : undefined;
         if (p) {
           name = p.name || p.username;
           avatar = p.avatar;
+          lastSeenAt = p.last_seen_at;
         }
       }
       return {
@@ -436,7 +494,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         membersCount: members.length,
         pinned: mine?.pinned ?? false,
         muted: mine?.muted ?? false,
-        favorite: mine?.favorite ?? false
+        favorite: mine?.favorite ?? false,
+        lastSeenAt
       };
     });
     // Hydrate per-chat theme into the chat-theme-store so both participants
@@ -465,16 +524,40 @@ export const useChatStore = create<ChatState>((set, get) => ({
   },
 
   fetchMessages: async (chatId) => {
+    const me = useAuthStore.getState().user;
     const { data } = await supabase
       .from("messages")
       .select("*")
       .eq("chat_id", chatId)
       .order("created_at", { ascending: true });
     if (!data) return;
-    const msgs = (data as Record<string, unknown>[]).map(rowToMessage);
+    let msgs = (data as Record<string, unknown>[]).map(rowToMessage);
+
+    // Drop scheduled-but-not-due messages from *other* users — those land
+    // via the UPDATE realtime channel once pg_cron flips them to 'sent'.
+    if (me) {
+      msgs = msgs.filter(
+        (m) => m.status !== "scheduled" || m.authorId === me.id
+      );
+    }
+
+    // Drop messages the current user has soft-hidden ("Delete for me").
+    const ids = msgs.map((m) => m.id);
+    if (me && ids.length > 0) {
+      const { data: hiddenRows } = await supabase
+        .from("message_hidden_for")
+        .select("message_id")
+        .eq("user_id", me.id)
+        .in("message_id", ids);
+      const hiddenSet = new Set(
+        (hiddenRows || []).map((r: { message_id: string }) => r.message_id)
+      );
+      if (hiddenSet.size > 0) {
+        msgs = msgs.filter((m) => !hiddenSet.has(m.id));
+      }
+    }
 
     // Hydrate reactions in one round-trip.
-    const ids = msgs.map((m) => m.id);
     if (ids.length > 0) {
       const { data: rxRows } = await supabase
         .from("message_reactions")
@@ -626,9 +709,17 @@ export const useChatStore = create<ChatState>((set, get) => ({
   sendAttachment: async (chatId, p) => {
     const me = useAuthStore.getState().user;
     if (!me) return;
-    const { kind, content = "", ...rest } = p;
+    const { kind, content = "", scheduleAt, ...rest } = p as Partial<Message> & {
+      kind: Message["kind"];
+      content?: string;
+      scheduleAt?: string;
+    };
     const cid = newId();
     const now = new Date().toISOString();
+    // If a future scheduleAt is set, hold the message at status='scheduled'.
+    // pg_cron flips it to 'sent' when due (see migration 20260601160000).
+    const isScheduled =
+      typeof scheduleAt === "string" && new Date(scheduleAt).getTime() > Date.now();
     const optimistic = {
       id: cid,
       chatId,
@@ -636,7 +727,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
       kind,
       content,
       createdAt: now,
-      status: "sending" as const,
+      status: isScheduled ? "scheduled" : "sending",
+      scheduleAt: isScheduled ? scheduleAt : undefined,
       ...rest
     } as Message;
     set((s) => ({
@@ -649,7 +741,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         author_id: me.id,
         kind,
         content,
-        status: "sent",
+        status: isScheduled ? "scheduled" : "sent",
+        schedule_at: isScheduled ? scheduleAt : null,
         payload: rest,
         client_id: cid
       })
@@ -665,7 +758,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
       messages: {
         ...s.messages,
         [chatId]: (s.messages[chatId] ?? []).map((m) =>
-          m.id === cid ? { ...m, id: data.id, status: "sent" } : m
+          m.id === cid
+            ? { ...m, id: data.id, status: isScheduled ? "scheduled" : "sent" }
+            : m
         )
       }
     }));
@@ -753,6 +848,21 @@ export const useChatStore = create<ChatState>((set, get) => ({
       }
     }));
     await supabase.from("messages").delete().in("id", ids);
+  },
+
+  hideMessages: async (chatId, ids) => {
+    const me = useAuthStore.getState().user;
+    if (!me || ids.length === 0) return;
+    // Optimistic local hide.
+    set((s) => ({
+      messages: {
+        ...s.messages,
+        [chatId]: (s.messages[chatId] || []).filter((m) => !ids.includes(m.id))
+      }
+    }));
+    await supabase
+      .from("message_hidden_for")
+      .insert(ids.map((mid) => ({ message_id: mid, user_id: me.id })));
   },
 
   votePoll: async (chatId, messageId, optionId) => {

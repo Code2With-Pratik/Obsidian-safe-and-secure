@@ -51,6 +51,8 @@ export interface Chat {
   description?: string;
   banner?: string;
   online?: boolean;
+  /** ISO timestamp of the DM peer's last online presence, for "last seen at" */
+  lastSeenAt?: string;
   encrypted?: boolean;
   color?: string;
   favorite?: boolean;
@@ -106,6 +108,8 @@ export interface Message {
   gif?: { src: string; alt?: string };
   poll?: {
     question: string;
+    /** Optional image shown above the question. */
+    imageUrl?: string;
     options: PollOption[];
     multi?: boolean;
   };
@@ -128,7 +132,9 @@ export interface Message {
     };
   };
   link?: { url: string; title: string; description?: string; image?: string };
-  status?: "sending" | "sent" | "delivered" | "read";
+  /** Optional schedule for delayed delivery — server delivers when due. */
+  scheduleAt?: string;
+  status?: "sending" | "sent" | "delivered" | "read" | "scheduled";
 }
 
 export interface GhostRoom {

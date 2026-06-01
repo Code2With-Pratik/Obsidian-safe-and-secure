@@ -46,12 +46,14 @@ import { useChatStore } from "@/store/use-chat-store";
 import { useStoriesStore } from "@/store/use-stories-store";
 import { StoryAvatar } from "@/components/stories/story-avatar";
 import { users as allUsers } from "@/lib/mock-data";
+import { formatLastSeen } from "@/lib/utils";
 import { useChatThemeStore } from "@/store/use-chat-theme-store";
 import { useMessageSelectionStore } from "@/store/use-message-selection-store";
 import { useAuthStore } from "@/store/use-auth-store";
 import { copyText } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { ChatThemeDialog } from "./chat-theme-dialog";
+import { DeleteMessageDialog } from "./delete-message-dialog";
 import type { Chat } from "@/types";
 
 export function ChatHeader({
@@ -139,12 +141,19 @@ export function ChatHeader({
     clearSelection(chat.id);
   };
 
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
+  const hideMessages = useChatStore((s) => s.hideMessages);
+  // Multi-select Delete now opens the shared dialog — Delete for everyone is
+  // only offered when every selected message is mine.
   const deleteSelected = () => {
-    const ids = useMessageSelectionStore.getState().selected[chat.id] ?? [];
-    const fn = removeMessages ?? useChatStore.getState().removeMessages;
-    fn?.(chat.id, ids);
-    clearSelection(chat.id);
+    setDeleteOpen(true);
   };
+  const selectedIds = useMessageSelectionStore((s) => s.selected[chat.id] ?? []);
+  const allSelectedAreMine = React.useMemo(() => {
+    if (!me?.id || selectedIds.length === 0) return false;
+    const list = messages[chat.id] ?? [];
+    return selectedIds.every((id) => list.find((m) => m.id === id)?.authorId === me.id);
+  }, [selectedIds, messages, chat.id, me?.id]);
 
   if (selectionActive) {
     return (
@@ -276,11 +285,17 @@ export function ChatHeader({
                     </Badge>
                   )}
                 </div>
-                <div className="text-[11px] text-muted-foreground truncate">
+                <div className={`text-[11px] truncate ${isTyping ? "text-cyan-400" : "text-muted-foreground"}`}>
                   {chat.type === "group" || chat.type === "channel"
-                    ? `${chat.membersCount} ${t("members")} · ${Math.floor((chat.membersCount ?? 0) / 5)} ${t("online")}`
+                    ? isTyping
+                      ? t("typing…")
+                      : `${chat.membersCount} ${t("members")}`
+                    : isTyping
+                    ? t("typing…")
                     : isOnline
-                    ? `${t("online")}${isTyping ? ` · ${t("typing…")}` : ""}`
+                    ? t("online")
+                    : chat.lastSeenAt
+                    ? `${t("last seen")} ${formatLastSeen(new Date(chat.lastSeenAt))}`
                     : t("last seen recently")}
                 </div>
               </div>
@@ -442,6 +457,23 @@ export function ChatHeader({
       </div>
 
       <ChatThemeDialog chatId={chat.id} open={themeOpen} onOpenChange={setThemeOpen} />
+
+      <DeleteMessageDialog
+        open={deleteOpen}
+        count={selectedIds.length}
+        canDeleteForEveryone={allSelectedAreMine}
+        onClose={() => setDeleteOpen(false)}
+        onDeleteForMe={async () => {
+          await hideMessages(chat.id, selectedIds);
+          clearSelection(chat.id);
+          setDeleteOpen(false);
+        }}
+        onDeleteForEveryone={async () => {
+          await removeMessages(chat.id, selectedIds);
+          clearSelection(chat.id);
+          setDeleteOpen(false);
+        }}
+      />
     </div>
   );
 }

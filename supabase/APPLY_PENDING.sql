@@ -102,4 +102,72 @@ ALTER TABLE chats
 
 ALTER TABLE chats REPLICA IDENTITY FULL;
 
--- Done. Reload the app — the new columns/RPC/policies are now live.
+-- ---------------------------------------------------------------------
+-- 5.  Per-user soft-hide ("Delete for me") + scheduled messages
+--     (status='scheduled' + schedule_at, delivered by pg_cron).
+-- ---------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS message_hidden_for (
+  message_id  UUID NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+  user_id     UUID NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  hidden_at   TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (message_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS message_hidden_for_user_idx
+  ON message_hidden_for(user_id);
+
+ALTER TABLE message_hidden_for ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "msg_hidden_select_own" ON message_hidden_for;
+CREATE POLICY "msg_hidden_select_own" ON message_hidden_for
+  FOR SELECT TO authenticated
+  USING (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "msg_hidden_modify_own" ON message_hidden_for;
+CREATE POLICY "msg_hidden_modify_own" ON message_hidden_for
+  FOR ALL TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+ALTER TABLE messages
+  ADD COLUMN IF NOT EXISTS schedule_at TIMESTAMPTZ;
+
+CREATE INDEX IF NOT EXISTS messages_schedule_at_idx
+  ON messages(schedule_at)
+  WHERE schedule_at IS NOT NULL;
+
+-- pg_cron extension (pre-installed on Supabase, this just enables it).
+CREATE EXTENSION IF NOT EXISTS pg_cron WITH SCHEMA extensions;
+
+DO $$
+BEGIN
+  PERFORM cron.unschedule('deliver-scheduled-messages')
+  WHERE EXISTS (
+    SELECT 1 FROM cron.job WHERE jobname = 'deliver-scheduled-messages'
+  );
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END $$;
+
+SELECT cron.schedule(
+  'deliver-scheduled-messages',
+  '* * * * *',
+  $job$
+    UPDATE messages
+    SET status = 'sent', schedule_at = NULL
+    WHERE status = 'scheduled'
+      AND schedule_at IS NOT NULL
+      AND schedule_at <= NOW();
+  $job$
+);
+
+-- ---------------------------------------------------------------------
+-- 6.  profiles.last_seen_at — drives "last seen at HH:mm" in DM headers.
+-- ---------------------------------------------------------------------
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ DEFAULT now();
+
+CREATE INDEX IF NOT EXISTS profiles_last_seen_at_idx
+  ON profiles(last_seen_at);
+
+-- Done. Reload the app — the new columns/RPC/policies/jobs are now live.

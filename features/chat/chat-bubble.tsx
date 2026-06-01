@@ -37,6 +37,7 @@ import { useUIStore } from "@/store/use-ui-store";
 import { useT } from "@/lib/i18n";
 import { cn, copyText, formatTime, initials } from "@/lib/utils";
 import { ReactionPicker } from "./reaction-picker";
+import { DeleteMessageDialog } from "./delete-message-dialog";
 import { useImageLightbox } from "./image-lightbox";
 import { useChatStore } from "../../store/use-chat-store";
 import { useMessageSelectionStore } from "../../store/use-message-selection-store";
@@ -82,6 +83,8 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
   const toggleReaction = useChatStore((s) => s.toggleReaction);
   const pinMessage = useChatStore((s) => s.pinMessage);
   const removeMessages = useChatStore((s) => s.removeMessages);
+  const hideMessages = useChatStore((s) => s.hideMessages);
+  const [deleteOpen, setDeleteOpen] = React.useState(false);
   const selectionCount = useMessageSelectionStore(
     (s) => s.selected[message.chatId]?.length ?? 0
   );
@@ -103,8 +106,7 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
   };
 
   const handleDelete = () => {
-    const fn = removeMessages ?? useChatStore.getState().removeMessages;
-    fn?.(message.chatId, [message.id]);
+    setDeleteOpen(true);
   };
 
   if (message.kind === "system") {
@@ -209,7 +211,15 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
           <span suppressHydrationWarning>{formatTime(message.createdAt)}</span>
           {message.edited && <span className="opacity-70">edited</span>}
           {me && message.status && (
-            <span className="ml-1">
+            <span className="ml-1 inline-flex items-center gap-1">
+              {message.status === "scheduled" && (
+                <span className="inline-flex items-center gap-1 text-amber-400">
+                  <Clock className="size-3" />
+                  {message.scheduleAt
+                    ? `Scheduled · ${formatTime(message.scheduleAt)}`
+                    : "Scheduled"}
+                </span>
+              )}
               {message.status === "sending" && <Clock className="size-3" />}
               {message.status === "sent" && <Check className="size-3" />}
               {message.status === "delivered" && <CheckCheck className="size-3" />}
@@ -282,6 +292,21 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
           </DropdownMenuContent>
         </DropdownMenu>
       </motion.div>
+
+      <DeleteMessageDialog
+        open={deleteOpen}
+        count={1}
+        canDeleteForEveryone={me}
+        onClose={() => setDeleteOpen(false)}
+        onDeleteForMe={async () => {
+          await hideMessages(message.chatId, [message.id]);
+          setDeleteOpen(false);
+        }}
+        onDeleteForEveryone={async () => {
+          await removeMessages(message.chatId, [message.id]);
+          setDeleteOpen(false);
+        }}
+      />
     </motion.div>
   );
 }
@@ -926,82 +951,102 @@ function FileBubble({ me, bubbleMe, meStyle, message }: SubProps) {
   );
 }
 
-/** Interactive poll — WhatsApp-style with progress bars + tap-to-vote. */
+/** Interactive poll — WhatsApp-style: radio + label, slim green progress
+ *  bar, voter avatars + count on the right. Optional image above the
+ *  question. */
 function PollBubble({ me, bubbleMe, meStyle, message }: SubProps) {
   const t = useT();
   const vote = useChatStore((s) => s.votePoll);
+  const myId = useAuthStore((s) => s.user?.id);
   const poll = message.poll!;
   const total = poll.options.reduce((acc, o) => acc + o.voters.length, 0);
   return (
     <div
       style={me ? meStyle : undefined}
       className={cn(
-        "rounded-2xl px-3.5 py-3 max-w-[min(20rem,100%)] min-w-[15rem] space-y-2.5",
+        "rounded-2xl px-3.5 py-3 max-w-[min(22rem,100%)] min-w-[16rem] space-y-3",
         me
           ? "rounded-br-none" + (bubbleMe ? "" : " bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white")
           : "rounded-bl-none glass border border-border/60"
       )}
     >
-      <div className="flex items-center gap-2">
-        <span
-          className="size-7 rounded-lg grid place-items-center shrink-0"
-          style={{ backgroundColor: "color-mix(in srgb, currentColor 18%, transparent)" }}
-        >
-          📊
-        </span>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold leading-tight">{poll.question}</p>
-          <p className="text-[11px] opacity-70">
-            {t("Poll")} · {poll.multi ? t("Select one or more") : t("Select one")}
-          </p>
+      {/* Optional image above the question. */}
+      {poll.imageUrl && (
+        <div className="overflow-hidden rounded-xl">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={poll.imageUrl} alt="" className="h-40 w-full object-cover" />
         </div>
+      )}
+
+      <div>
+        <p className="text-sm font-semibold leading-tight">{poll.question}</p>
+        <p className="text-[11px] opacity-70 mt-0.5">
+          {t("Poll")} · {poll.multi ? t("Select one or more") : t("Select one")}
+        </p>
       </div>
-      <div className="space-y-1.5">
+
+      <div className="space-y-2.5">
         {poll.options.map((opt) => {
           const count = opt.voters.length;
           const pct = total === 0 ? 0 : Math.round((count / total) * 100);
-          const mine = opt.voters.includes("me");
+          const mine = !!myId && opt.voters.includes(myId);
+          // Show up to 3 voter avatars (most recent), use mock users for
+          // lookup; falls back to initials when the voter isn't known
+          // locally (real Supabase users not in mock-data).
+          const voterAvatars = opt.voters
+            .map((uid) => users.find((u) => u.id === uid))
+            .filter((u): u is NonNullable<typeof u> => !!u)
+            .slice(-3);
           return (
             <button
               key={opt.id}
               onClick={() => vote(message.chatId, message.id, opt.id)}
-              className={cn(
-                "relative w-full text-left px-3 py-2 rounded-xl overflow-hidden transition",
-                "ring-1",
-                mine
-                  ? "ring-current/60"
-                  : "ring-white/20"
-              )}
-              style={{
-                backgroundColor: mine
-                  ? "color-mix(in srgb, currentColor 18%, transparent)"
-                  : "color-mix(in srgb, currentColor 8%, transparent)"
-              }}
+              className="block w-full text-left group"
             >
-              {/* progress fill */}
-              <span
-                className="absolute inset-y-0 left-0 transition-[width] duration-300"
-                style={{
-                  width: `${pct}%`,
-                  backgroundColor: "color-mix(in srgb, currentColor 14%, transparent)"
-                }}
-              />
-              <span className="relative flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
                 <span
                   className={cn(
-                    "size-4 rounded-full grid place-items-center text-[8px] font-bold shrink-0",
-                    mine ? "bg-current text-background" : "ring-1 ring-current/40"
+                    "size-5 rounded-full grid place-items-center shrink-0 transition",
+                    mine
+                      ? "bg-emerald-500 ring-emerald-500"
+                      : "ring-2 ring-current/30 group-hover:ring-current/50"
                   )}
                 >
-                  {mine && <Check className="size-2.5" strokeWidth={4} />}
+                  {mine && <Check className="size-3 text-white" strokeWidth={3.5} />}
                 </span>
-                <span className="flex-1 text-sm">{opt.text}</span>
-                <span className="text-[11px] tabular-nums opacity-80">{pct}%</span>
-              </span>
+                <span className="flex-1 text-sm truncate">{opt.text}</span>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {voterAvatars.length > 0 && (
+                    <div className="flex -space-x-1.5">
+                      {voterAvatars.map((u) => (
+                        <Avatar
+                          key={u.id}
+                          className="size-5 ring-2 ring-background"
+                        >
+                          <AvatarImage src={u.avatar} alt={u.name} />
+                          <AvatarFallback className="text-[8px]">
+                            {initials(u.name)}
+                          </AvatarFallback>
+                        </Avatar>
+                      ))}
+                    </div>
+                  )}
+                  <span className="text-[11px] tabular-nums opacity-80 min-w-[1ch] text-right">
+                    {count}
+                  </span>
+                </div>
+              </div>
+              <div className="ml-7 mt-1.5 h-1 rounded-full bg-current/10 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-emerald-500 transition-[width] duration-300"
+                  style={{ width: `${pct}%` }}
+                />
+              </div>
             </button>
           );
         })}
       </div>
+
       <p className="text-[11px] opacity-60 text-right">
         {total} {total === 1 ? t("vote") : t("votes")}
       </p>

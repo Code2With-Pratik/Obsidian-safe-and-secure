@@ -819,9 +819,12 @@ export function MessageInput({
         open={scheduleOpen}
         onClose={() => setScheduleOpen(false)}
         onSchedule={(when, message) => {
+          // Schedule a *regular text* to deliver at `when` — pg_cron flips
+          // status='scheduled' → 'sent' so recipients only see it then.
           onSendAttachment?.({
-            kind: "schedule",
-            schedule: { whenIso: when.toISOString(), message }
+            kind: "text",
+            content: message,
+            scheduleAt: when.toISOString()
           });
         }}
       />
@@ -837,7 +840,12 @@ export function MessageInput({
           }));
           onSendAttachment?.({
             kind: "poll",
-            poll: { question: poll.question, options, multi: poll.multi }
+            poll: {
+              question: poll.question,
+              imageUrl: poll.imageUrl,
+              options,
+              multi: poll.multi
+            }
           });
         }}
       />

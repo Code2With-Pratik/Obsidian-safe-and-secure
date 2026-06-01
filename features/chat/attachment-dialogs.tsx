@@ -620,20 +620,41 @@ export function PollCreatorDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  onCreate: (poll: { question: string; options: string[]; multi: boolean }) => void;
+  onCreate: (poll: {
+    question: string;
+    imageUrl?: string;
+    options: string[];
+    multi: boolean;
+  }) => void;
 }) {
   const t = useT();
   const [question, setQuestion] = React.useState("");
+  const [imageUrl, setImageUrl] = React.useState<string | undefined>();
   const [options, setOptions] = React.useState<string[]>(["", ""]);
   const [multi, setMulti] = React.useState(false);
+  const fileRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
     if (!open) {
       setQuestion("");
+      setImageUrl(undefined);
       setOptions(["", ""]);
       setMulti(false);
     }
   }, [open]);
+
+  const onPickImage = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (!f) return;
+    // Tiny inline data URL so the poll can be drafted offline. Stored on the
+    // poll row inside the message payload JSON.
+    const reader = new FileReader();
+    reader.onload = () => {
+      if (typeof reader.result === "string") setImageUrl(reader.result);
+    };
+    reader.readAsDataURL(f);
+  };
 
   const setOption = (i: number, v: string) =>
     setOptions((prev) => prev.map((o, idx) => (idx === i ? v : o)));
@@ -646,12 +667,44 @@ export function PollCreatorDialog({
 
   const submit = () => {
     if (!canCreate) return;
-    onCreate({ question: question.trim(), options: cleanOpts, multi });
+    onCreate({
+      question: question.trim(),
+      imageUrl,
+      options: cleanOpts,
+      multi
+    });
     onClose();
   };
 
   return (
     <DialogShell open={open} onClose={onClose} title={t("Create poll")} subtitle={t("Ask a question, get answers")}>
+      <input ref={fileRef} type="file" accept="image/*" hidden onChange={onPickImage} />
+      {/* Optional image above the question. */}
+      <div className="mb-3">
+        {imageUrl ? (
+          <div className="relative h-32 w-full overflow-hidden rounded-xl">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover" />
+            <button
+              type="button"
+              onClick={() => setImageUrl(undefined)}
+              className="absolute right-1.5 top-1.5 size-7 grid place-items-center rounded-full bg-black/55 text-white hover:bg-black/75"
+              aria-label={t("Remove image")}
+            >
+              <Trash2 className="size-3.5" />
+            </button>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            className="flex h-16 w-full items-center justify-center gap-2 rounded-xl glass-subtle text-sm text-muted-foreground hover:text-foreground hover:bg-foreground/5"
+          >
+            <Plus className="size-4" />
+            {t("Add image (optional)")}
+          </button>
+        )}
+      </div>
       <label className="block">
         <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{t("Question")}</span>
         <input

@@ -41,6 +41,37 @@ export function formatRelative(date: Date | string) {
   return `${yyyy}-${mm}-${dd}`;
 }
 
+/**
+ * "last seen at HH:MM" / "yesterday" / "Jun 1" style label for offline DMs.
+ * Returns a stable string (no locale-dependent month names in the future
+ * formatter to avoid SSR/hydration drift — handled by toLocaleTimeString in
+ * a client-only consumer).
+ */
+export function formatLastSeen(date: Date | string) {
+  const d = typeof date === "string" ? new Date(date) : date;
+  const diff = Date.now() - d.getTime();
+  const min = Math.floor(diff / 60_000);
+  if (min < 1) return "just now";
+  if (min < 60) return `${min}m ago`;
+  const today = new Date();
+  const sameDay =
+    d.getFullYear() === today.getFullYear() &&
+    d.getMonth() === today.getMonth() &&
+    d.getDate() === today.getDate();
+  if (sameDay) {
+    const hh = String(d.getHours()).padStart(2, "0");
+    const mm = String(d.getMinutes()).padStart(2, "0");
+    return `today at ${hh}:${mm}`;
+  }
+  const yesterday = new Date(today.getTime() - 86_400_000);
+  const wasYesterday =
+    d.getFullYear() === yesterday.getFullYear() &&
+    d.getMonth() === yesterday.getMonth() &&
+    d.getDate() === yesterday.getDate();
+  if (wasYesterday) return "yesterday";
+  return formatRelative(d);
+}
+
 export function initials(name?: string | null) {
   if (!name) return "";
   return name
