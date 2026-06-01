@@ -465,18 +465,20 @@ function OtherStoryBar({
     }
   };
 
-  const sendReply = () => {
+  const sendReply = async () => {
     const text = reply.trim();
     if (!text) return;
-    const chat = startDM(reel.userId);
+    const result = await startDM(reel.userId);
+    const chatId = result.data?.id;
+    if (!chatId) return;
     if (slide.src) {
-      sendAttachment(chat.id, {
+      await sendAttachment(chatId, {
         kind: "image",
         media: [{ url: slide.src, alt: "Story" }],
         content: text
       });
     } else {
-      sendAttachment(chat.id, { kind: "text", content: text });
+      await sendAttachment(chatId, { kind: "text", content: text });
     }
     setReply("");
     setSent(true);

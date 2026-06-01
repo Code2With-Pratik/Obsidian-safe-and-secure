@@ -216,10 +216,12 @@ export default function CallsPage() {
 
   /** Start a 1-on-1 call with the given user. Reuses the existing chat (or
    *  creates one) so End correctly returns to the Calls tab. */
-  const callUser = (user: User, video: boolean) => {
-    const chat = startDM(user.id);
+  const callUser = async (user: User, video: boolean) => {
+    const result = await startDM(user);
+    const chatId = result.data?.id;
+    if (!chatId) return;
     startCall({
-      chatId: chat.id,
+      chatId,
       name: user.name,
       avatar: user.avatar,
       video,

@@ -72,15 +72,17 @@ export function GhostCallDialog({ open, onOpenChange }: Props) {
       cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]
     );
 
-  const handleStart = () => {
+  const handleStart = async () => {
     if (picked.length === 0) return;
     // Fresh ghost handle for this call.
     const ghostHandle = `Ghost#${1000 + Math.floor(Math.random() * 9000)}`;
     if (picked.length === 1) {
       const u = allUsers.find((x) => x.id === picked[0])!;
-      const chat = startDM(u.id);
+      const result = await startDM(u);
+      const chatId = result.data?.id;
+      if (!chatId) return;
       startCall({
-        chatId: chat.id,
+        chatId,
         // The invitee sees "Ghost call · <their name>", not the caller.
         name: u.name,
         avatar: u.avatar,
@@ -95,7 +97,7 @@ export function GhostCallDialog({ open, onOpenChange }: Props) {
       const pickedUsers = picked
         .map((id) => allUsers.find((u) => u.id === id))
         .filter((u): u is NonNullable<typeof u> => !!u);
-      const chat = addGroup({
+      const chat = await addGroup({
         name: "Ghost room",
         description: "Anonymous call",
         memberIds: picked,

@@ -61,13 +61,15 @@ export function StartCallDialog({ open, onOpenChange }: Props) {
       cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]
     );
 
-  const handleStart = () => {
+  const handleStart = async () => {
     if (picked.length === 0) return;
     if (picked.length === 1) {
       const u = allUsers.find((x) => x.id === picked[0])!;
-      const chat = startDM(u.id);
+      const result = await startDM(u);
+      const chatId = result.data?.id;
+      if (!chatId) return;
       startCall({
-        chatId: chat.id,
+        chatId,
         name: u.name,
         avatar: u.avatar,
         video,
@@ -88,7 +90,7 @@ export function StartCallDialog({ open, onOpenChange }: Props) {
               .slice(0, 2)
               .map((u) => u.name.split(" ")[0])
               .join(", ")} +${pickedUsers.length - 2}`;
-      const chat = addGroup({
+      const chat = await addGroup({
         name,
         description: "Quick meeting",
         memberIds: picked,

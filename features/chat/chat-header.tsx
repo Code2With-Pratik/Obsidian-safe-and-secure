@@ -80,12 +80,11 @@ export function ChatHeader({
     : !!chat.online;
 
   const startCallStore = useUIStore((s) => s.startCall);
-  const chats = useChatStore((s) => s.chats);
   const removeChat = useChatStore((s) => s.removeChat);
-  const updateChat = (id: string, patch: Partial<Chat>) =>
-    useChatStore.setState({
-      chats: chats.map((c) => (c.id === id ? { ...c, ...patch } : c))
-    });
+  const pinChat = useChatStore((s) => s.pinChat);
+  const muteChat = useChatStore((s) => s.muteChat);
+  const favouriteChat = useChatStore((s) => s.favouriteChat);
+  const clearChat = useChatStore((s) => s.clearChat);
 
   const themeId = useChatThemeStore((s) => s.byChat[chat.id] ?? "default");
   const selectionCount = useMessageSelectionStore(
@@ -352,21 +351,17 @@ export function ChatHeader({
               <CalendarClock />
               {t("Schedule message")}
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => updateChat(chat.id, { pinned: !chat.pinned })}
-            >
+            <DropdownMenuItem onSelect={() => pinChat(chat.id, !chat.pinned)}>
               <Pin />
               {chat.pinned ? t("Unpin chat") : t("Pin chat")}
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => updateChat(chat.id, { muted: !chat.muted })}
-            >
+            <DropdownMenuItem onSelect={() => muteChat(chat.id, !chat.muted)}>
               {chat.muted ? <Bell /> : <BellOff />}
               {chat.muted ? t("Unmute") : t("Mute notifications")}
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => favouriteChat(chat.id, !chat.favorite)}>
               <Star />
-              {t("Add to favorites")}
+              {chat.favorite ? t("Remove from favorites") : t("Add to favorites")}
             </DropdownMenuItem>
 
             <DropdownMenuSeparator />
@@ -375,7 +370,13 @@ export function ChatHeader({
               <Download />
               {t("Export chat")}
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem
+              onSelect={() => {
+                if (typeof window !== "undefined" && window.confirm(t("Clear all messages in this chat?"))) {
+                  void clearChat(chat.id);
+                }
+              }}
+            >
               <Eraser />
               {t("Clear chat")}
             </DropdownMenuItem>
