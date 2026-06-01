@@ -3,14 +3,19 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Ghost, Lock, Radio, Sparkles, Timer, ChevronLeft } from "lucide-react";
+import { Ghost, Lock, Radio, Sparkles, ChevronLeft } from "lucide-react";
+import { LiveKitRoom } from "@livekit/components-react";
+import "@livekit/components-styles";
 import { VideoGrid } from "@/features/calls/video-grid";
+import { LiveKitStage } from "@/features/calls/livekit-stage";
 import { CallControls, CALL_FILTERS } from "@/features/calls/call-controls";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { callParticipants } from "@/lib/mock-data";
 import { useUIStore } from "@/store/use-ui-store";
 import { useT } from "@/lib/i18n";
+
+const LIVEKIT_URL = process.env.NEXT_PUBLIC_LIVEKIT_URL;
 
 function Timer01() {
   const [s, setS] = React.useState(0);
@@ -78,6 +83,37 @@ export default function ActiveCall() {
     }
   }, [activeCall, router]);
 
+  // LiveKit token — fetched once the call exists and `NEXT_PUBLIC_LIVEKIT_URL`
+  // is set. When the env var is missing we silently fall back to the mock UI
+  // (so the page never crashes for unconfigured deployments).
+  const [lkToken, setLkToken] = React.useState<string | null>(null);
+  const roomName = activeCall?.chatId
+    ? `call-${activeCall.chatId}`
+    : undefined;
+  React.useEffect(() => {
+    if (!LIVEKIT_URL || !roomName) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/livekit/token", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ roomName })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const { token } = (await res.json()) as { token: string };
+        if (!cancelled) setLkToken(token);
+      } catch (err) {
+        console.warn("[LiveKit] token fetch failed — falling back to mock:", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [roomName]);
+
+  const useLivekit = !!(LIVEKIT_URL && lkToken);
+
   return (
     // Fullscreen overlay. The video stage fills the entire viewport from
     // edge to edge; the top status row and the bottom controls float ON
@@ -90,13 +126,27 @@ export default function ActiveCall() {
         className="absolute inset-0 transition-[filter] duration-200"
         style={{ filter: filterCss }}
       >
-        <VideoGrid
-          participants={
-            activeCall?.group
-              ? callParticipants.slice(0, Math.min(callParticipants.length, activeCall.participants ?? 4))
-              : callParticipants.slice(0, 2)
-          }
-        />
+        {useLivekit ? (
+          <LiveKitRoom
+            token={lkToken!}
+            serverUrl={LIVEKIT_URL}
+            connect
+            audio
+            video={activeCall?.video !== false}
+            className="h-full w-full"
+            data-lk-theme="default"
+          >
+            <LiveKitStage />
+          </LiveKitRoom>
+        ) : (
+          <VideoGrid
+            participants={
+              activeCall?.group
+                ? callParticipants.slice(0, Math.min(callParticipants.length, activeCall.participants ?? 4))
+                : callParticipants.slice(0, 2)
+            }
+          />
+        )}
       </div>
 
       {/* 2. Soft gradients top & bottom so floating UI stays readable
