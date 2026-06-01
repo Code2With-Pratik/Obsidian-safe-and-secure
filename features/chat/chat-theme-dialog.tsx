@@ -240,12 +240,22 @@ function CustomTile({
   onClear: (e: React.MouseEvent) => void;
 }) {
   return (
-    <motion.button
+    // Outer wrapper is a div with role=button so the inner "remove" <button>
+    // isn't nested inside another <button> (invalid HTML → hydration error).
+    <motion.div
       whileHover={{ y: -2 }}
       whileTap={{ scale: 0.96 }}
       onClick={onPick}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onPick();
+        }
+      }}
+      role="button"
+      tabIndex={0}
       className={cn(
-        "relative aspect-square rounded-2xl overflow-hidden ring-2 transition",
+        "relative aspect-square rounded-2xl overflow-hidden ring-2 transition cursor-pointer focus-visible:outline-none focus-visible:ring-cyan-400",
         active ? "ring-cyan-400 shadow-glow-cyan" : "ring-white/10 hover:ring-white/30",
         !image && "bg-gradient-to-br from-white/10 to-white/[0.02]"
       )}
@@ -256,7 +266,10 @@ function CustomTile({
           <div className="absolute inset-0 bg-gradient-to-b from-transparent to-black/50" />
           <button
             type="button"
-            onClick={onClear}
+            onClick={(e) => {
+              e.stopPropagation();
+              onClear(e);
+            }}
             className="absolute top-2 left-2 size-5 rounded-full bg-black/60 hover:bg-black/80 grid place-items-center transition"
             aria-label="Remove custom background"
           >
@@ -284,7 +297,7 @@ function CustomTile({
           <Check className="size-3 text-violet-500" />
         </motion.div>
       )}
-    </motion.button>
+    </motion.div>
   );
 }
 
