@@ -56,18 +56,50 @@ export function MessageInput({
 }: Props) {
   const t = useT();
   const setTyping = useChatStore((s) => s.setTyping);
+  const uploadAttachment = useChatStore((s) => s.uploadAttachment);
   const [text, setText] = React.useState("");
   const [showAi, setShowAi] = React.useState(false);
 
+  // Typing is broadcast over Supabase Realtime (see store.initializeRealtime).
+  // Each keystroke is a fresh "typing:true" heartbeat — the recipient arms a
+  // 2.5s auto-clear, so as long as the sender is actively typing the
+  // indicator stays on. We also send an explicit "typing:false" 1.2s after
+  // the last keystroke, on blur, on send, and on unmount so the indicator
+  // disappears the moment the user stops.
+  const typingRef = React.useRef(false);
+  const setTypingRef = React.useRef(setTyping);
+  React.useEffect(() => {
+    setTypingRef.current = setTyping;
+  }, [setTyping]);
+  const sendStopTyping = React.useCallback(() => {
+    if (!typingRef.current) return;
+    typingRef.current = false;
+    setTypingRef.current(chatId, false);
+  }, [chatId]);
+
   React.useEffect(() => {
     if (!text.trim()) {
-      setTyping(chatId, false);
+      sendStopTyping();
       return;
     }
-    setTyping(chatId, true);
-    const timeout = setTimeout(() => setTyping(chatId, false), 2000);
+    typingRef.current = true;
+    setTypingRef.current(chatId, true);
+    const timeout = setTimeout(() => {
+      typingRef.current = false;
+      setTypingRef.current(chatId, false);
+    }, 1200);
     return () => clearTimeout(timeout);
-  }, [text, chatId, setTyping]);
+  }, [text, chatId, sendStopTyping]);
+
+  React.useEffect(() => {
+    const cid = chatId;
+    return () => {
+      if (typingRef.current) {
+        typingRef.current = false;
+        setTypingRef.current(cid, false);
+      }
+    };
+  }, [chatId]);
   const [attachOpen, setAttachOpen] = React.useState(false);
   const [exprOpen, setExprOpen] = React.useState(false);
 
@@ -84,47 +116,61 @@ export function MessageInput({
   const audioInputRef = React.useRef<HTMLInputElement>(null);
 
   const onFile = (kind: "photo" | "video" | "doc" | "music") =>
-    (e: React.ChangeEvent<HTMLInputElement>) => {
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(e.target.files ?? []);
       if (files.length === 0) return;
+      // Reset the input element early so picking the same file again triggers
+      // a fresh change event even if the upload below takes a while.
+      e.target.value = "";
+
+      // Upload to the chat-attachments bucket so the *recipient* can fetch the
+      // file. URL.createObjectURL() blobs are local to the sender's browser and
+      // appear as dead links on the other side.
+      const uploads = await Promise.all(
+        files.map(async (f) => {
+          const url = await uploadAttachment(f);
+          return url ? { file: f, url } : null;
+        })
+      );
+      const ok = uploads.filter((u): u is { file: File; url: string } => !!u);
+      if (ok.length === 0) return;
 
       if (kind === "photo") {
         // Batch every selected image into one message → WhatsApp-style grid.
-        const media = files.map((f) => ({
-          url: URL.createObjectURL(f),
-          alt: f.name,
-          mime: f.type
+        const media = ok.map(({ file, url }) => ({
+          url,
+          alt: file.name,
+          mime: file.type
         }));
         onSendAttachment?.({ kind: "image", media });
       } else if (kind === "video") {
         // Same for videos.
-        const media = files.map((f) => ({
-          url: URL.createObjectURL(f),
-          alt: f.name,
-          mime: f.type
+        const media = ok.map(({ file, url }) => ({
+          url,
+          alt: file.name,
+          mime: file.type
         }));
         onSendAttachment?.({ kind: "video", media });
       } else if (kind === "music") {
-        files.forEach((f) =>
+        ok.forEach(({ file, url }) =>
           onSendAttachment?.({
             kind: "audio",
-            audio: { url: URL.createObjectURL(f), name: f.name, size: f.size }
+            audio: { url, name: file.name, size: file.size }
           })
         );
       } else {
-        files.forEach((f) =>
+        ok.forEach(({ file, url }) =>
           onSendAttachment?.({
             kind: "file",
             file: {
-              url: URL.createObjectURL(f),
-              name: f.name,
-              size: f.size,
-              mime: f.type
+              url,
+              name: file.name,
+              size: file.size,
+              mime: file.type
             }
           })
         );
       }
-      e.target.value = "";
     };
 
   const handleAttach = (id: AttachmentKind) => {
@@ -489,6 +535,7 @@ export function MessageInput({
     if (!t) return;
     onSend(t);
     setText("");
+    sendStopTyping();
     ref.current?.focus();
   };
 
@@ -602,7 +649,10 @@ export function MessageInput({
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 onFocus={() => setFocused(true)}
-                onBlur={() => setFocused(false)}
+                onBlur={() => {
+                  setFocused(false);
+                  sendStopTyping();
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();

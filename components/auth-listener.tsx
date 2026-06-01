@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import { useAuthStore } from '@/store/use-auth-store'
 import { useChatStore } from '@/store/use-chat-store'
+import { useStoriesStore } from '@/store/use-stories-store'
 
 export default function AuthListener() {
   const supabase = createClient()
@@ -16,6 +17,9 @@ export default function AuthListener() {
   const initializeRealtime = useChatStore((s) => s.initializeRealtime)
   const disconnectRealtime = useChatStore((s) => s.disconnectRealtime)
   const clearAll = useChatStore((s) => s.clearAll)
+  const fetchStories = useStoriesStore((s) => s.fetchStories)
+  const initStoryRealtime = useStoriesStore((s) => s.initializeRealtime)
+  const disconnectStoryRealtime = useStoriesStore((s) => s.disconnectRealtime)
 
   useEffect(() => {
     const fetchProfile = async (userId: string) => {
@@ -50,12 +54,15 @@ export default function AuthListener() {
         fetchChats()
         fetchBlocked()
         initializeRealtime()
+        fetchStories()
+        initStoryRealtime()
         router.refresh()
       }
       if (event === 'SIGNED_OUT') {
         // Tear down realtime channels and wipe local chat state so we don't
         // leak presence/message subscriptions across user sessions.
         disconnectRealtime()
+        disconnectStoryRealtime()
         clearAll()
         logout()
         router.refresh()
@@ -70,13 +77,15 @@ export default function AuthListener() {
         fetchChats()
         fetchBlocked()
         initializeRealtime()
+        fetchStories()
+        initStoryRealtime()
       }
     })
 
     return () => {
       subscription.unsubscribe()
     }
-  }, [supabase, router, fetchChats, fetchBlocked, initializeRealtime, disconnectRealtime, clearAll, setUser, logout])
+  }, [supabase, router, fetchChats, fetchBlocked, initializeRealtime, disconnectRealtime, clearAll, setUser, logout, fetchStories, initStoryRealtime, disconnectStoryRealtime])
 
   return null
 }

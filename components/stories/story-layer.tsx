@@ -24,14 +24,48 @@ import {
   type StorySlide,
   type UserStories
 } from "@/store/use-stories-store";
-import { useChatStore } from "@/store/use-chat-store";
 import { VinylDisc } from "@/components/stories/vinyl-disc";
 import { users, currentUser } from "@/lib/mock-data";
 import { initials, formatRelative } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
+import { useAuthStore } from "@/store/use-auth-store";
 
-function lookup(userId: string) {
-  return users.find((u) => u.id === userId) ?? (userId === "me" ? currentUser : undefined);
+/** Resolve a user record from the in-memory profile cache first, then the
+ *  mock seed data (for dev-only fixtures), then fall back to the legacy "me"
+ *  alias. Returns whatever fields are needed by the viewer/popups — name,
+ *  username, avatar. */
+function useUserLookup() {
+  const profiles = useStoriesStore((s) => s.profiles);
+  const me = useAuthStore((s) => s.user);
+  return React.useCallback(
+    (userId: string) => {
+      const cached = profiles[userId];
+      if (cached) {
+        return {
+          id: cached.id,
+          name: cached.name || cached.username || "Someone",
+          username: cached.username || "user",
+          avatar:
+            cached.avatar ||
+            `https://api.dicebear.com/9.x/notionists/svg?seed=${cached.id}`
+        };
+      }
+      const mock = users.find((u) => u.id === userId);
+      if (mock) return mock;
+      if (userId === "me" || (me && userId === me.id)) {
+        return me
+          ? {
+              id: me.id,
+              name: me.name,
+              username: me.username,
+              avatar: me.avatar
+            }
+          : currentUser;
+      }
+      return undefined;
+    },
+    [profiles, me]
+  );
 }
 
 /** Mounted once (app-providers). Renders the story prompt + viewer driven by
@@ -68,6 +102,7 @@ function Prompt({ userId }: { userId: string }) {
   const closePrompt = useStoriesStore((s) => s.closePrompt);
   const openViewer = useStoriesStore((s) => s.openViewer);
   const openPhoto = useStoriesStore((s) => s.openPhoto);
+  const lookup = useUserLookup();
   const u = lookup(userId);
 
   return (
@@ -111,6 +146,7 @@ function Prompt({ userId }: { userId: string }) {
 function PhotoViewer({ userId }: { userId: string }) {
   const t = useT();
   const close = useStoriesStore((s) => s.closePhoto);
+  const lookup = useUserLookup();
   const u = lookup(userId);
 
   React.useEffect(() => {
@@ -163,14 +199,18 @@ function Viewer({ userId }: { userId: string }) {
   const byUser = useStoriesStore((s) => s.byUser);
   const close = useStoriesStore((s) => s.closeViewer);
   const markViewed = useStoriesStore((s) => s.markViewed);
+  const userLookup = useUserLookup();
+  const meId = useAuthStore((s) => s.user?.id);
 
   // Ordered reels — your own first, then everyone else (matches the rail).
   const reels = React.useMemo(
     () =>
       Object.values(byUser)
         .filter((r) => r.slides.length > 0)
-        .sort((a, b) => (a.userId === "me" ? -1 : b.userId === "me" ? 1 : 0)),
-    [byUser]
+        .sort((a, b) =>
+          a.userId === meId ? -1 : b.userId === meId ? 1 : 0
+        ),
+    [byUser, meId]
   );
 
   const [userIdx, setUserIdx] = React.useState(() => {
@@ -182,7 +222,7 @@ function Viewer({ userId }: { userId: string }) {
 
   const reel = reels[userIdx];
   const slides = reel?.slides ?? [];
-  const u = reel ? lookup(reel.userId) : undefined;
+  const u = reel ? userLookup(reel.userId) : undefined;
   const slide = slides[idx];
 
   // Play/pause for the whole story (progress timer + music). pausedRef lets the
@@ -430,7 +470,9 @@ function StoryBottomBar({
   slide: StorySlide;
   setPaused: (v: boolean) => void;
 }) {
-  if (reel.userId === "me") return <MyStoryBar setPaused={setPaused} />;
+  const meId = useAuthStore((s) => s.user?.id);
+  if (reel.userId === "me" || reel.userId === meId)
+    return <MyStoryBar reel={reel} slide={slide} setPaused={setPaused} />;
   return <OtherStoryBar reel={reel} slide={slide} setPaused={setPaused} />;
 }
 
@@ -445,8 +487,7 @@ function OtherStoryBar({
 }) {
   const t = useT();
   const toggleLike = useStoriesStore((s) => s.toggleLike);
-  const startDM = useChatStore((s) => s.startDM);
-  const sendAttachment = useChatStore((s) => s.sendAttachment);
+  const replyToStory = useStoriesStore((s) => s.replyToStory);
   const liked = !!reel.likedByMe;
   const [reply, setReply] = React.useState("");
   const [sent, setSent] = React.useState(false);
@@ -456,7 +497,7 @@ function OtherStoryBar({
   const [pops, setPops] = React.useState(0);
 
   const like = () => {
-    toggleLike(reel.userId);
+    void toggleLike(reel.userId, slide.id);
     if (!liked) {
       setPops((p) => p + 1); // launch the flying heart
       window.setTimeout(() => setFilled(true), 430); // fill on its return
@@ -468,18 +509,7 @@ function OtherStoryBar({
   const sendReply = async () => {
     const text = reply.trim();
     if (!text) return;
-    const result = await startDM(reel.userId);
-    const chatId = result.data?.id;
-    if (!chatId) return;
-    if (slide.src) {
-      await sendAttachment(chatId, {
-        kind: "image",
-        media: [{ url: slide.src, alt: "Story" }],
-        content: text
-      });
-    } else {
-      await sendAttachment(chatId, { kind: "text", content: text });
-    }
+    await replyToStory(reel.userId, slide, text);
     setReply("");
     setSent(true);
     window.setTimeout(() => setSent(false), 1600);
@@ -544,13 +574,44 @@ function OtherStoryBar({
   );
 }
 
-function MyStoryBar({ setPaused }: { setPaused: (v: boolean) => void }) {
+function MyStoryBar({
+  reel,
+  slide,
+  setPaused
+}: {
+  reel: UserStories;
+  slide: StorySlide;
+  setPaused: (v: boolean) => void;
+}) {
   const t = useT();
   const [open, setOpen] = React.useState(false);
-  // Mock audience for the demo — deterministic so it doesn't reshuffle.
-  const others = React.useMemo(() => users.filter((u) => u.id !== "me"), []);
-  const viewers = others.slice(0, 5);
-  const likers = others.slice(0, 2);
+  const getStoryViewers = useStoriesStore((s) => s.getStoryViewers);
+  const getStoryLikers = useStoriesStore((s) => s.getStoryLikers);
+  const [viewers, setViewers] = React.useState<
+    Array<{ id: string; name?: string; username?: string; avatar?: string }>
+  >([]);
+  const [likers, setLikers] = React.useState<
+    Array<{ id: string; name?: string; username?: string; avatar?: string }>
+  >([]);
+
+  // Refresh whenever the visible slide changes.
+  React.useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      const [v, l] = await Promise.all([
+        getStoryViewers(slide.id),
+        getStoryLikers(slide.id)
+      ]);
+      if (cancelled) return;
+      setViewers(v);
+      setLikers(l);
+    };
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [slide.id, reel.userId, getStoryViewers, getStoryLikers]);
+
   const likerIds = new Set(likers.map((u) => u.id));
 
   const openList = () => {

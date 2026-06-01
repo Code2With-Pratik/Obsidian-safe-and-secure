@@ -4,30 +4,39 @@ import * as React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Plus } from "lucide-react";
-import { users, currentUser } from "@/lib/mock-data";
+import { users } from "@/lib/mock-data";
 import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { useStoriesStore, type UserStories } from "@/store/use-stories-store";
+import { useAuthStore } from "@/store/use-auth-store";
 
 export function StoriesRail() {
   const byUser = useStoriesStore((s) => s.byUser);
+  const profiles = useStoriesStore((s) => s.profiles);
   const openViewer = useStoriesStore((s) => s.openViewer);
+  const meId = useAuthStore((s) => s.user?.id);
   const reels = Object.values(byUser)
     .filter((r) => r.slides.length > 0)
     // your own reel first, then everyone else
-    .sort((a, b) => (a.userId === "me" ? -1 : b.userId === "me" ? 1 : 0));
+    .sort((a, b) =>
+      a.userId === meId ? -1 : b.userId === meId ? 1 : 0
+    );
 
   return (
     <div className="flex gap-2.5 overflow-x-auto px-4 py-3 no-scrollbar">
       <CreateTile />
       {reels.map((r) => {
-        const author = users.find((u) => u.id === r.userId);
+        const cached = profiles[r.userId];
+        const mock = users.find((u) => u.id === r.userId);
+        const author = cached
+          ? { name: cached.name || cached.username, avatar: cached.avatar }
+          : mock;
         return (
           <StoryTile
             key={r.userId}
             reel={r}
-            authorName={author?.name.split(" ")[0]}
+            authorName={author?.name?.split(" ")[0]}
             authorAvatar={author?.avatar}
             onOpen={() => openViewer(r.userId)}
           />
@@ -39,6 +48,7 @@ export function StoriesRail() {
 
 function CreateTile() {
   const t = useT();
+  const meAvatar = useAuthStore((s) => s.user?.avatar);
   return (
     <Link
       href="/stories/create"
@@ -59,7 +69,7 @@ function CreateTile() {
       >
         <div className="relative">
           <Avatar className="size-12 ring-2 ring-white/20">
-            <AvatarImage src={currentUser.avatar} />
+            <AvatarImage src={meAvatar} />
           </Avatar>
           <div className="absolute -bottom-1 -right-1 size-[22px] rounded-full bg-gradient-to-br from-cyan-400 to-blue-500 grid place-items-center ring-[3px] ring-[hsl(240_22%_8%)] shadow-[0_4px_12px_rgba(34,211,238,0.55)]">
             <Plus className="size-3 text-white" strokeWidth={3} />

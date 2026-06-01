@@ -555,8 +555,17 @@ export function ScheduleMessageDialog({
     d.setSeconds(0, 0);
     return d;
   }, []);
-  const [date, setDate] = React.useState(initial.toISOString().slice(0, 10));
-  const [time, setTime] = React.useState(initial.toTimeString().slice(0, 5));
+  const pad = (n: number) => String(n).padStart(2, "0");
+  // Both `date` and `time` must be expressed in LOCAL time — submit parses
+  // `new Date(\`${date}T${time}\`)` as local, so mixing a UTC date with a local
+  // time produces a phantom past timestamp for users whose local date ≠ UTC
+  // date (i.e. near midnight east/west of UTC).
+  const [date, setDate] = React.useState(
+    `${initial.getFullYear()}-${pad(initial.getMonth() + 1)}-${pad(initial.getDate())}`
+  );
+  const [time, setTime] = React.useState(
+    `${pad(initial.getHours())}:${pad(initial.getMinutes())}`
+  );
   const [msg, setMsg] = React.useState("");
 
   const submit = () => {
@@ -589,7 +598,10 @@ export function ScheduleMessageDialog({
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            min={new Date().toISOString().slice(0, 10)}
+            min={(() => {
+              const n = new Date();
+              return `${n.getFullYear()}-${pad(n.getMonth() + 1)}-${pad(n.getDate())}`;
+            })()}
             className="h-10 px-3 rounded-xl glass-subtle bg-transparent text-sm outline-none focus:ring-2 focus:ring-cyan-400/60"
           />
         </label>
