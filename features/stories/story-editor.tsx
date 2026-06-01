@@ -807,7 +807,7 @@ export function StoryEditor() {
    *  is attached and committed once the bar completes. Music is kept out of the
    *  baked PNG and re-attached as live metadata so it spins / plays in the
    *  viewer (Instagram-style). */
-  const shareStory = () => {
+  const shareStory = async () => {
     const dispRect = canvasRef.current?.getBoundingClientRect();
     const music = musicLayer
       ? {

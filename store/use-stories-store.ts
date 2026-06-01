@@ -278,24 +278,105 @@ export const useStoriesStore = create<StoriesState>((set, get) => ({
     if (slide.kind === "image" && slide.src) {
       contentUrl = await uploadStoryImage(slide.src);
     }
-    const metadata = {
-      music: slide.music,
-      overlays: slide.overlays
+    // Re-host every overlay whose src is a blob:/data: URL — those are only
+    // valid in the sender's browser, so the recipient would see dead links
+    // (and the live GIF / image wouldn't animate on their viewer).
+    let overlays: StoryOverlay[] | undefined = slide.overlays;
+    if (overlays?.length) {
+      overlays = await Promise.all(
+        overlays.map(async (o) => {
+          if (o.src.startsWith("blob:") || o.src.startsWith("data:")) {
+            const uploaded = await uploadStoryImage(o.src);
+            return uploaded ? { ...o, src: uploaded } : o;
+          }
+          return o;
+        })
+      );
+    }
+    // Same for the music cover / preview (album art could be a blob: from a
+    // local file pick).
+    let music: StoryMusic | undefined = slide.music;
+    if (music?.cover && (music.cover.startsWith("blob:") || music.cover.startsWith("data:"))) {
+      const uploaded = await uploadStoryImage(music.cover);
+      if (uploaded) music = { ...music, cover: uploaded };
+    }
+    const metadata = { music, overlays };
+    const baseRow = {
+      author_id: me.id,
+      type: slide.kind === "text" ? "text" : "image",
+      content_url: contentUrl,
+      bg_gradient: slide.bg ?? null,
+      text_content: slide.text ?? null
     };
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("stories")
-      .insert({
-        author_id: me.id,
-        type: slide.kind === "text" ? "text" : "image",
-        content_url: contentUrl,
-        bg_gradient: slide.bg ?? null,
-        text_content: slide.text ?? null,
-        metadata
-      })
+      .insert({ ...baseRow, metadata })
       .select("*")
       .single<StoryRow>();
+    // Graceful fallback: if the database still lacks the `metadata` column
+    // (section 10 of APPLY_PENDING.sql hasn't been applied yet), retry the
+    // insert without it so the story still posts. Music/overlay metadata is
+    // lost on this slide until the SQL is run.
+    if (
+      error &&
+      /metadata/i.test((error as unknown as { message?: string }).message || "") &&
+      /(does not exist|schema cache|not find)/i.test(
+        (error as unknown as { message?: string }).message || ""
+      )
+    ) {
+      console.warn(
+        "[addStory] stories.metadata column missing — falling back without music/overlay metadata. Re-run supabase/APPLY_PENDING.sql section 10 to enable it."
+      );
+      const retry = await supabase
+        .from("stories")
+        .insert(baseRow)
+        .select("*")
+        .single<StoryRow>();
+      data = retry.data;
+      error = retry.error;
+    }
     if (error || !data) {
-      console.error("[addStory] insert failed", error);
+      // Postgres/Storage error objects use non-enumerable own properties; the
+      // browser console collapses them to `{}`. Walk own-property names and
+      // JSON-stringify the result so we ALWAYS see the underlying fields, then
+      // also log line-by-line so nothing is collapsed in DevTools.
+      const errAny = error as unknown as Record<string, unknown> | null;
+      const ownProps: Record<string, unknown> = {};
+      if (errAny) {
+        Object.getOwnPropertyNames(errAny).forEach((k) => {
+          ownProps[k] = errAny[k];
+        });
+      }
+      const msg = (errAny?.message as string | undefined) || "";
+      const hint =
+        /metadata/i.test(msg) && /(does not exist|schema cache|not find)/i.test(msg)
+          ? "The stories.metadata column hasn't been added yet — re-run supabase/APPLY_PENDING.sql section 10."
+          : /story_likes/i.test(msg) && /(does not exist|schema cache|not find)/i.test(msg)
+          ? "The story_likes table is missing — re-run supabase/APPLY_PENDING.sql section 10."
+          : (errAny?.code === "42501" || /policy|denied|unauthorized/i.test(msg))
+          ? "RLS rejected the insert. Check that the 'Users can manage their own stories' policy exists on the stories table."
+          : null;
+      console.error(
+        "[addStory] insert failed —",
+        "message:",
+        msg || "(empty)",
+        "| code:",
+        String(errAny?.code ?? "(none)"),
+        "| details:",
+        String(errAny?.details ?? "(none)"),
+        "| hint:",
+        String(hint ?? "(no diagnosis)"),
+        "| kind:",
+        slide.kind,
+        "| contentUrl:",
+        String(contentUrl ?? "(none)"),
+        "| ownProps:",
+        JSON.stringify(ownProps),
+        "| dataIsNull:",
+        String(!data),
+        "| rawErrorIsNull:",
+        String(error === null)
+      );
       // Still optimistically show the author their own slide.
       const local: StorySlide = {
         id: slide.kind === "text" ? `local-${Date.now()}` : `local-${Date.now()}`,
@@ -316,7 +397,15 @@ export const useStoriesStore = create<StoriesState>((set, get) => ({
       });
       return null;
     }
-    const next = rowToSlide(data);
+    // Fall back to the in-memory input for music + overlays so the AUTHOR
+    // still sees their story animate locally even when the metadata column
+    // is missing from the database (recipients won't see them until the SQL
+    // is applied, but at least the editor's owner gets the full preview).
+    const next: StorySlide = {
+      ...rowToSlide(data),
+      music: rowToSlide(data).music ?? music,
+      overlays: rowToSlide(data).overlays ?? overlays
+    };
     set((st) => {
       const existing = st.byUser[me.id];
       const entry: UserStories = existing
@@ -478,7 +567,17 @@ export const useStoriesStore = create<StoriesState>((set, get) => ({
   initializeRealtime: () => {
     const me = useAuthStore.getState().user;
     if (!me) return;
-    if (get().storyChannel) return;
+    // Defensive cleanup: HMR / double-init / auth-listener firing twice can
+    // leave a channel registered with the same topic already subscribed.
+    // `.on()` then throws "cannot add postgres_changes callbacks after
+    // subscribe()". Tear it down before creating a fresh one.
+    const topic = `realtime:nova_stories_${me.id}`;
+    supabase.getChannels().forEach((c) => {
+      if (c.topic === topic) supabase.removeChannel(c);
+    });
+    if (get().storyChannel) {
+      set({ storyChannel: null });
+    }
     const channel = supabase
       .channel(`nova_stories_${me.id}`)
       .on(

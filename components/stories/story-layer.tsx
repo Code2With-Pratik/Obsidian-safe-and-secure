@@ -29,6 +29,9 @@ import { users, currentUser } from "@/lib/mock-data";
 import { initials, formatRelative } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { useAuthStore } from "@/store/use-auth-store";
+import { createClient } from "@/lib/supabase/client";
+
+const supabase = createClient();
 
 /** Resolve a user record from the in-memory profile cache first, then the
  *  mock seed data (for dev-only fixtures), then fall back to the legacy "me"
@@ -594,9 +597,17 @@ function MyStoryBar({
     Array<{ id: string; name?: string; username?: string; avatar?: string }>
   >([]);
 
-  // Refresh whenever the visible slide changes.
+  // Refresh whenever the visible slide changes, AND keep them live: subscribe
+  // to story_views + story_likes for this slide so the counters update the
+  // moment someone views or hearts the story. The recipient sees the cyan
+  // ring on the rail dim from a separate path; this hook is only for the
+  // author's "Viewers / Likers" footer.
   React.useEffect(() => {
     let cancelled = false;
+    // strip the "slide-" prefix we add in rowToSlide so we can use the real
+    // database id in both fetch + realtime filters.
+    const dbId = slide.id.startsWith("slide-") ? slide.id.slice("slide-".length) : slide.id;
+
     const load = async () => {
       const [v, l] = await Promise.all([
         getStoryViewers(slide.id),
@@ -607,8 +618,38 @@ function MyStoryBar({
       setLikers(l);
     };
     void load();
+
+    const channel = supabase
+      .channel(`story_stats_${dbId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "story_views",
+          filter: `story_id=eq.${dbId}`
+        },
+        () => {
+          void load();
+        }
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "story_likes",
+          filter: `story_id=eq.${dbId}`
+        },
+        () => {
+          void load();
+        }
+      )
+      .subscribe();
+
     return () => {
       cancelled = true;
+      supabase.removeChannel(channel);
     };
   }, [slide.id, reel.userId, getStoryViewers, getStoryLikers]);
 
