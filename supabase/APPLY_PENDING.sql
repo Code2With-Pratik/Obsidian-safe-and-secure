@@ -459,4 +459,243 @@ SELECT cron.schedule(
   $job$
 );
 
+-- ---------------------------------------------------------------------
+-- 17. Communities ecosystem.
+--
+--     • communities          — one row per community. host_id locks
+--                              posting + delete; everyone else can only
+--                              join / react / poll-vote.
+--     • community_members    — join table. last_seen_at drives the live
+--                              "online" count (presence within 5 minutes).
+--     • community_posts      — host-authored posts (text / image / video /
+--                              song / poll). media/poll/song stored as
+--                              JSONB so the columns stay narrow.
+--     • community_reactions  — per-user emoji toggle per post.
+--     • community_poll_votes — per-user vote per option (one vote allowed,
+--                              switchable via UPSERT).
+--     • community_covers     — public storage bucket for cover uploads.
+--
+--     RLS deny-by-default: everyone reads, only host writes posts,
+--     members manage their own membership + reactions + votes.
+-- ---------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS communities (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name         TEXT NOT NULL,
+  description  TEXT,
+  cover        TEXT,
+  category     TEXT,
+  host_id      UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  interests    TEXT[] DEFAULT '{}',
+  theme        TEXT,
+  verified     BOOLEAN DEFAULT false,
+  trending     BOOLEAN DEFAULT false,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS communities_host_idx ON communities(host_id);
+CREATE INDEX IF NOT EXISTS communities_created_idx ON communities(created_at DESC);
+
+CREATE TABLE IF NOT EXISTS community_members (
+  community_id  UUID NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+  user_id       UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  joined_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  last_seen_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (community_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS community_members_user_idx ON community_members(user_id);
+CREATE INDEX IF NOT EXISTS community_members_seen_idx ON community_members(last_seen_at);
+
+CREATE TABLE IF NOT EXISTS community_posts (
+  id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  community_id  UUID NOT NULL REFERENCES communities(id) ON DELETE CASCADE,
+  author_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  kind          TEXT NOT NULL CHECK (kind IN ('text','image','video','song','poll')),
+  content       TEXT,
+  media         JSONB,
+  song          JSONB,
+  poll          JSONB,
+  mentions      UUID[] DEFAULT '{}',
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS community_posts_community_idx
+  ON community_posts(community_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS community_reactions (
+  post_id   UUID NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
+  user_id   UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  emoji     TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (post_id, user_id, emoji)
+);
+
+CREATE INDEX IF NOT EXISTS community_reactions_post_idx ON community_reactions(post_id);
+
+CREATE TABLE IF NOT EXISTS community_poll_votes (
+  post_id    UUID NOT NULL REFERENCES community_posts(id) ON DELETE CASCADE,
+  user_id    UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  option_id  TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  -- One vote per user per post (re-voting switches the option via UPSERT).
+  PRIMARY KEY (post_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS community_poll_votes_post_idx ON community_poll_votes(post_id);
+
+ALTER TABLE communities          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE community_members    ENABLE ROW LEVEL SECURITY;
+ALTER TABLE community_posts      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE community_reactions  ENABLE ROW LEVEL SECURITY;
+ALTER TABLE community_poll_votes ENABLE ROW LEVEL SECURITY;
+
+-- communities: everyone can browse, anyone authenticated can create
+-- (host_id = auth.uid()), only host can update/delete.
+DROP POLICY IF EXISTS communities_select_all ON communities;
+CREATE POLICY communities_select_all
+  ON communities FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS communities_insert_self ON communities;
+CREATE POLICY communities_insert_self
+  ON communities FOR INSERT
+  WITH CHECK (host_id = auth.uid());
+
+DROP POLICY IF EXISTS communities_update_host ON communities;
+CREATE POLICY communities_update_host
+  ON communities FOR UPDATE
+  USING (host_id = auth.uid());
+
+DROP POLICY IF EXISTS communities_delete_host ON communities;
+CREATE POLICY communities_delete_host
+  ON communities FOR DELETE
+  USING (host_id = auth.uid());
+
+-- community_members: everyone reads (counts are public), users insert/update
+-- only their own row, delete only their own row (= leave community).
+DROP POLICY IF EXISTS community_members_select_all ON community_members;
+CREATE POLICY community_members_select_all
+  ON community_members FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS community_members_insert_self ON community_members;
+CREATE POLICY community_members_insert_self
+  ON community_members FOR INSERT
+  WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS community_members_update_self ON community_members;
+CREATE POLICY community_members_update_self
+  ON community_members FOR UPDATE
+  USING (user_id = auth.uid());
+
+DROP POLICY IF EXISTS community_members_delete_self ON community_members;
+CREATE POLICY community_members_delete_self
+  ON community_members FOR DELETE
+  USING (user_id = auth.uid());
+
+-- community_posts: everyone reads, ONLY the host of the community can
+-- insert posts. Author can update / delete their own post (= host, since
+-- they're the only one who can post).
+DROP POLICY IF EXISTS community_posts_select_all ON community_posts;
+CREATE POLICY community_posts_select_all
+  ON community_posts FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS community_posts_insert_host ON community_posts;
+CREATE POLICY community_posts_insert_host
+  ON community_posts FOR INSERT
+  WITH CHECK (
+    author_id = auth.uid()
+    AND EXISTS (
+      SELECT 1 FROM communities c
+       WHERE c.id = community_id AND c.host_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS community_posts_update_author ON community_posts;
+CREATE POLICY community_posts_update_author
+  ON community_posts FOR UPDATE
+  USING (author_id = auth.uid());
+
+DROP POLICY IF EXISTS community_posts_delete_author ON community_posts;
+CREATE POLICY community_posts_delete_author
+  ON community_posts FOR DELETE
+  USING (author_id = auth.uid());
+
+-- community_reactions: everyone reads counts, users insert/delete their
+-- own reaction rows.
+DROP POLICY IF EXISTS community_reactions_select_all ON community_reactions;
+CREATE POLICY community_reactions_select_all
+  ON community_reactions FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS community_reactions_insert_self ON community_reactions;
+CREATE POLICY community_reactions_insert_self
+  ON community_reactions FOR INSERT
+  WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS community_reactions_delete_self ON community_reactions;
+CREATE POLICY community_reactions_delete_self
+  ON community_reactions FOR DELETE
+  USING (user_id = auth.uid());
+
+-- community_poll_votes: everyone reads tallies, users INSERT/UPDATE their
+-- own vote row (UPSERT to switch options).
+DROP POLICY IF EXISTS community_poll_votes_select_all ON community_poll_votes;
+CREATE POLICY community_poll_votes_select_all
+  ON community_poll_votes FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS community_poll_votes_insert_self ON community_poll_votes;
+CREATE POLICY community_poll_votes_insert_self
+  ON community_poll_votes FOR INSERT
+  WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS community_poll_votes_update_self ON community_poll_votes;
+CREATE POLICY community_poll_votes_update_self
+  ON community_poll_votes FOR UPDATE
+  USING (user_id = auth.uid());
+
+DROP POLICY IF EXISTS community_poll_votes_delete_self ON community_poll_votes;
+CREATE POLICY community_poll_votes_delete_self
+  ON community_poll_votes FOR DELETE
+  USING (user_id = auth.uid());
+
+-- Public storage bucket for community covers (3 MB images).
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('community-covers', 'community-covers', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Storage policies — anyone reads, only authenticated users upload, the
+-- uploading user owns + manages their own files.
+DROP POLICY IF EXISTS community_covers_read ON storage.objects;
+CREATE POLICY community_covers_read
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'community-covers');
+
+DROP POLICY IF EXISTS community_covers_insert ON storage.objects;
+CREATE POLICY community_covers_insert
+  ON storage.objects FOR INSERT
+  WITH CHECK (
+    bucket_id = 'community-covers'
+    AND auth.role() = 'authenticated'
+  );
+
+DROP POLICY IF EXISTS community_covers_update ON storage.objects;
+CREATE POLICY community_covers_update
+  ON storage.objects FOR UPDATE
+  USING (bucket_id = 'community-covers' AND owner = auth.uid());
+
+DROP POLICY IF EXISTS community_covers_delete ON storage.objects;
+CREATE POLICY community_covers_delete
+  ON storage.objects FOR DELETE
+  USING (bucket_id = 'community-covers' AND owner = auth.uid());
+
+-- Realtime — DELETE payloads carry the full row so client caches can
+-- evict by primary key.
+ALTER TABLE community_posts     REPLICA IDENTITY FULL;
+ALTER TABLE community_reactions REPLICA IDENTITY FULL;
+ALTER TABLE community_members   REPLICA IDENTITY FULL;
+
 -- Done. Reload the app — the new columns/RPC/policies/jobs are now live.

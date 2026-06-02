@@ -10,6 +10,7 @@ import {
   Hash,
   Palette,
   Plus,
+  Share2,
   Sparkles,
   Trash2,
   Users
@@ -29,6 +30,7 @@ import { Avatar, AvatarImage } from "@/components/ui/avatar";
 import { CommunityPost } from "@/features/community/community-post";
 import { CreatePostDialog } from "@/features/community/create-post-dialog";
 import { InterestMatchPopup } from "@/features/community/interest-match-popup";
+import { ShareCommunitySheet } from "@/features/community/share-community-sheet";
 import { ChatThemeDialog } from "@/features/chat/chat-theme-dialog";
 import {
   CHAT_THEMES,
@@ -59,6 +61,20 @@ export default function CommunityDetailPage() {
   const posts = useCommunityStore(
     (s) => s.postsByCommunity[params.id ?? ""] ?? EMPTY_POSTS
   );
+  const fetchCommunities = useCommunityStore((s) => s.fetchCommunities);
+  const fetchPosts = useCommunityStore((s) => s.fetchPosts);
+  const loaded = useCommunityStore((s) => s.loaded);
+
+  // First mount → make sure the community list is loaded so this page can
+  // find its community by id. Subsequent visits reuse the cached state.
+  React.useEffect(() => {
+    if (!loaded) void fetchCommunities();
+  }, [loaded, fetchCommunities]);
+
+  // Always (re)load posts when the route id changes.
+  React.useEffect(() => {
+    if (params.id) void fetchPosts(params.id);
+  }, [params.id, fetchPosts]);
   const joined = useCommunityStore((s) =>
     params.id ? s.joinedIds.includes(params.id) : false
   );
@@ -92,6 +108,7 @@ export default function CommunityDetailPage() {
 
   const [postDialogOpen, setPostDialogOpen] = React.useState(false);
   const [themeDialogOpen, setThemeDialogOpen] = React.useState(false);
+  const [shareOpen, setShareOpen] = React.useState(false);
   const [match, setMatch] = React.useState<{ open: boolean; count: number }>({
     open: false,
     count: 0
@@ -116,13 +133,13 @@ export default function CommunityDetailPage() {
 
   const host = users.find((u) => u.id === community.hostId) ?? users[0];
 
-  const handleJoin = () => {
-    const { matched } = joinCommunity(community.id);
+  const handleJoin = async () => {
+    const { matched } = await joinCommunity(community.id);
     setMatch({ open: true, count: matched });
   };
 
-  const handleDelete = () => {
-    deleteCommunity(community.id);
+  const handleDelete = async () => {
+    await deleteCommunity(community.id);
     router.push(backHref);
   };
 
@@ -227,6 +244,16 @@ export default function CommunityDetailPage() {
                 </p>
               </div>
               <div className="flex gap-2">
+                {/* Share — always available, sits to the LEFT of the
+                    Join / Joined / host action so non-members can still
+                    share a community they haven't joined. */}
+                <Button
+                  variant="glass"
+                  onClick={() => setShareOpen(true)}
+                  aria-label={t("Share community")}
+                >
+                  <Share2 /> {t("Share")}
+                </Button>
                 {isHost ? (
                   <>
                     <Button variant="gradient" onClick={() => setPostDialogOpen(true)}>
@@ -247,7 +274,7 @@ export default function CommunityDetailPage() {
                           <Palette /> {t("Community theme")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
-                          onSelect={handleDelete}
+                          onSelect={() => void handleDelete()}
                           className="!text-rose-400 focus:!text-rose-300"
                         >
                           <Trash2 /> {t("Delete community")}
@@ -258,12 +285,12 @@ export default function CommunityDetailPage() {
                 ) : joined ? (
                   <Button
                     variant="glass"
-                    onClick={() => leaveCommunity(community.id)}
+                    onClick={() => void leaveCommunity(community.id)}
                   >
                     <CheckCircle2 /> {t("Joined")}
                   </Button>
                 ) : (
-                  <Button variant="gradient" onClick={handleJoin}>
+                  <Button variant="gradient" onClick={() => void handleJoin()}>
                     <Sparkles /> {t("Join community")}
                   </Button>
                 )}
@@ -323,6 +350,19 @@ export default function CommunityDetailPage() {
         count={match.count}
         communityName={community.name}
         onClose={() => setMatch({ open: false, count: 0 })}
+      />
+
+      <ShareCommunitySheet
+        open={shareOpen}
+        onClose={() => setShareOpen(false)}
+        community={{
+          id: community.id,
+          name: community.name,
+          description: community.description,
+          cover: community.cover,
+          category: community.category,
+          members: community.members
+        }}
       />
     </ScrollArea>
   );

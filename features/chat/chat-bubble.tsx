@@ -188,7 +188,8 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
           // an explicit `flex-1 w-full` (not just max-w) so the column
           // actually CLAIMS the full row width — max-w alone collapses to
           // intrinsic content size in a flex parent and the card looks tiny.
-          message.kind === "contact" && (message.contacts?.length ?? 0) === 1
+          (message.kind === "contact" && (message.contacts?.length ?? 0) === 1) ||
+          (message.kind === "community" && message.community)
             ? "flex-1 w-full max-w-[16rem] md:max-w-[22rem]"
             : "max-w-[78%] md:max-w-[68%]",
           me && "items-end"
@@ -218,7 +219,8 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
             // hero layout has room to grow. All other bubbles keep `w-fit`
             // so they hug their content (the bubble shape is what you'd
             // expect for a text / image / voice message).
-            message.kind === "contact" && (message.contacts?.length ?? 0) === 1
+            (message.kind === "contact" && (message.contacts?.length ?? 0) === 1) ||
+            (message.kind === "community" && message.community)
               ? "w-full"
               : "w-fit",
             me && "ml-auto self-end"
@@ -430,6 +432,8 @@ function ReplyContext({
         return "📍 Location";
       case "contact":
         return "👤 Contact";
+      case "community":
+        return "🏘 Community";
       default:
         return "Message";
     }
@@ -542,6 +546,10 @@ function BubbleBody({
 
   if (message.kind === "contact" && message.contacts) {
     return <ContactsBubble me={me} bubbleMe={bubbleMe} meStyle={meStyle} message={message} />;
+  }
+
+  if (message.kind === "community" && message.community) {
+    return <CommunityCardBubble me={me} community={message.community} />;
   }
 
   if (message.kind === "location" && message.location) {
@@ -1459,6 +1467,73 @@ function ProfileCardBubble({
         className="block w-full text-center text-xs font-medium py-1.5 border-t border-border/40 text-cyan-400 hover:bg-foreground/[0.04] transition"
       >
         View profile →
+      </button>
+    </div>
+  );
+}
+
+/** Shared community card. Same proportions as ProfileCardBubble (banner +
+ *  identity hero + footer CTA) but with community wording — the hero
+ *  taps through to the community detail page, and the footer is a
+ *  "Join community →" CTA. */
+function CommunityCardBubble({
+  me,
+  community
+}: {
+  me: boolean;
+  community: NonNullable<Message["community"]>;
+}) {
+  const router = useRouter();
+
+  const openCommunity = () => {
+    router.push(`/discover/community/${community.id}`);
+  };
+
+  const bannerStyle: React.CSSProperties = community.cover
+    ? { background: `url("${community.cover}") center/cover no-repeat` }
+    : { background: "linear-gradient(135deg,#8B5CF6,#06B6D4)" };
+
+  return (
+    <div
+      className={cn(
+        "rounded-2xl overflow-hidden w-full",
+        "glass glass-specular border border-border/60",
+        me ? "rounded-br-none" : "rounded-bl-none"
+      )}
+    >
+      <button
+        type="button"
+        onClick={openCommunity}
+        className="block w-full text-left hover:bg-foreground/[0.03] transition"
+      >
+        <div className="relative h-32 w-full" style={bannerStyle}>
+          <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/0 to-black/40" />
+        </div>
+        <div className="px-5 pt-3 pb-3 text-center">
+          <p className="text-base font-semibold truncate max-w-full inline-flex items-center justify-center gap-1.5">
+            {community.name}
+          </p>
+          {community.category && (
+            <p className="text-xs text-muted-foreground truncate max-w-full">
+              {community.category}
+              {typeof community.members === "number"
+                ? ` · ${community.members.toLocaleString()} members`
+                : ""}
+            </p>
+          )}
+          {community.description && (
+            <p className="mt-2 text-xs text-muted-foreground line-clamp-2">
+              {community.description}
+            </p>
+          )}
+        </div>
+      </button>
+      <button
+        type="button"
+        onClick={openCommunity}
+        className="block w-full text-center text-xs font-medium py-1.5 border-t border-border/40 text-cyan-400 hover:bg-foreground/[0.04] transition"
+      >
+        Join community →
       </button>
     </div>
   );

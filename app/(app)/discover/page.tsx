@@ -35,6 +35,11 @@ export default function DiscoverPage() {
   const joinedIds = useCommunityStore((s) => s.joinedIds);
   const hostedIds = useCommunityStore((s) => s.hostedIds);
   const joinCommunity = useCommunityStore((s) => s.joinCommunity);
+  const fetchCommunities = useCommunityStore((s) => s.fetchCommunities);
+  const loaded = useCommunityStore((s) => s.loaded);
+  React.useEffect(() => {
+    if (!loaded) void fetchCommunities();
+  }, [loaded, fetchCommunities]);
   const [q, setQ] = React.useState("");
   const [filter, setFilter] = React.useState<CommunityFilter>("all");
   const [match, setMatch] = React.useState<{
@@ -62,14 +67,14 @@ export default function DiscoverPage() {
       });
   }, [q, communities, filter, joinedIds, hostedIds]);
 
-  const handleJoin = (e: React.MouseEvent, c: Community) => {
+  const handleJoin = async (e: React.MouseEvent, c: Community) => {
     e.preventDefault();
     e.stopPropagation();
     if (joinedIds.includes(c.id)) {
       router.push(`/discover/community/${c.id}`);
       return;
     }
-    const { matched } = joinCommunity(c.id);
+    const { matched } = await joinCommunity(c.id);
     setMatch({ open: true, count: matched, name: c.name });
     window.setTimeout(() => {
       router.push(`/discover/community/${c.id}`);
