@@ -186,7 +186,9 @@ export function ChatThread({ chat }: { chat: Chat }) {
         <MessageInput
           chatId={chat.id}
           onSend={(text) => send(chat.id, text)}
-          onSendVoice={(durationSec, waveform) => sendVoice(chat.id, durationSec, waveform)}
+          onSendVoice={(durationSec, waveform, audioBlob) =>
+            sendVoice(chat.id, durationSec, waveform, audioBlob)
+          }
           onSendAttachment={(payload) => sendAttachment(chat.id, payload)}
           onPickerToggle={(picking) => {
             setPickerOpen(picking);

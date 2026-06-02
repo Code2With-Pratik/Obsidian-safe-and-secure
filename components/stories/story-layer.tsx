@@ -491,13 +491,21 @@ function OtherStoryBar({
   const t = useT();
   const toggleLike = useStoriesStore((s) => s.toggleLike);
   const replyToStory = useStoriesStore((s) => s.replyToStory);
-  const liked = !!reel.likedByMe;
+  // Per-slide like state — clicking the heart on slide 2 must not light up
+  // the heart on slide 1.
+  const liked = !!slide.likedByMe;
   const [reply, setReply] = React.useState("");
   const [sent, setSent] = React.useState(false);
   // The button's fill is delayed until the flying heart drops back down, so it
   // reads as "a heart jumps up, then falls back to fill the like button".
   const [filled, setFilled] = React.useState(liked);
   const [pops, setPops] = React.useState(0);
+
+  // Re-sync the fill state when the visible slide changes — otherwise scrolling
+  // to the next slide keeps showing the previous one's heart state.
+  React.useEffect(() => {
+    setFilled(liked);
+  }, [slide.id, liked]);
 
   const like = () => {
     void toggleLike(reel.userId, slide.id);
@@ -653,7 +661,26 @@ function MyStoryBar({
     };
   }, [slide.id, reel.userId, getStoryViewers, getStoryLikers]);
 
-  const likerIds = new Set(likers.map((u) => u.id));
+  const likerIds = React.useMemo(
+    () => new Set(likers.map((u) => u.id)),
+    [likers]
+  );
+
+  // Union viewers + likers so anyone who liked but didn't register as a viewer
+  // (rare — likes across a refresh) still appears in the list. Likers float
+  // to the top so the author sees who reacted first.
+  const audience = React.useMemo(() => {
+    const byId = new Map<string, { id: string; name?: string; username?: string; avatar?: string }>();
+    viewers.forEach((u) => byId.set(u.id, u));
+    likers.forEach((u) => {
+      if (!byId.has(u.id)) byId.set(u.id, u);
+    });
+    return Array.from(byId.values()).sort((a, b) => {
+      const aLiked = likerIds.has(a.id) ? 1 : 0;
+      const bLiked = likerIds.has(b.id) ? 1 : 0;
+      return bLiked - aLiked;
+    });
+  }, [viewers, likers, likerIds]);
 
   const openList = () => {
     setOpen(true);
@@ -677,17 +704,32 @@ function MyStoryBar({
             {viewers.length} {t("viewers")}
           </span>
         </button>
-        <div className="flex items-center gap-1.5 text-white">
-          <div className="flex -space-x-2">
-            {likers.map((u) => (
-              <Avatar key={u.id} className="size-6 ring-2 ring-black/60">
-                <AvatarImage src={u.avatar} />
-              </Avatar>
-            ))}
-          </div>
-          <Heart className="size-4 fill-rose-500 text-rose-500" />
+        <button
+          onClick={openList}
+          className="flex items-center gap-1.5 text-white hover:opacity-90"
+          aria-label={t("Likers")}
+        >
+          {likers.length > 0 && (
+            <div className="flex -space-x-2">
+              {likers.slice(0, 3).map((u) => (
+                <Avatar key={u.id} className="size-6 ring-2 ring-black/60">
+                  <AvatarImage src={u.avatar} />
+                  <AvatarFallback className="text-[9px]">
+                    {initials(u.name)}
+                  </AvatarFallback>
+                </Avatar>
+              ))}
+            </div>
+          )}
+          <Heart
+            className={`size-4 ${
+              likers.length > 0
+                ? "fill-rose-500 text-rose-500"
+                : "text-white/50"
+            }`}
+          />
           <span className="text-[11px] font-medium">{likers.length}</span>
-        </div>
+        </button>
       </div>
 
       <AnimatePresence>
@@ -707,29 +749,59 @@ function MyStoryBar({
               transition={{ type: "spring", stiffness: 340, damping: 34 }}
               className="rounded-t-3xl glass-strong border-t border-white/15 max-h-[70%] flex flex-col"
             >
-              <div className="pt-3 pb-2 flex flex-col items-center shrink-0">
-                <div className="w-10 h-1 rounded-full bg-white/25 mb-2" />
-                <p className="text-sm font-semibold text-foreground">
-                  {viewers.length} {t("viewers")}
-                </p>
+              <div className="pt-3 pb-3 flex flex-col items-center shrink-0">
+                <div className="w-10 h-1 rounded-full bg-white/25 mb-3" />
+                <div className="flex items-center gap-4">
+                  <span className="text-sm font-semibold text-foreground">
+                    {viewers.length} {t("viewers")}
+                  </span>
+                  <span className="text-white/30">·</span>
+                  <span className="inline-flex items-center gap-1.5 text-sm font-semibold text-foreground">
+                    <Heart className="size-3.5 fill-rose-500 text-rose-500" />
+                    {likers.length}
+                  </span>
+                </div>
               </div>
-              <div className="flex-1 overflow-y-auto no-scrollbar px-3 pb-5 space-y-1">
-                {viewers.map((u) => (
-                  <div key={u.id} className="flex items-center gap-3 px-2 py-2 rounded-xl">
-                    <Avatar className="size-9">
-                      <AvatarImage src={u.avatar} />
-                      <AvatarFallback>{initials(u.name)}</AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-foreground truncate">{u.name}</p>
-                      <p className="text-[11px] text-muted-foreground">@{u.username}</p>
-                    </div>
-                    {likerIds.has(u.id) && (
-                      <Heart className="size-4 fill-rose-500 text-rose-500 shrink-0" />
-                    )}
-                  </div>
-                ))}
-              </div>
+              {audience.length === 0 ? (
+                <div className="flex-1 grid place-items-center pb-8 px-6 text-center">
+                  <p className="text-sm text-muted-foreground">
+                    {t("No one has seen this story yet")}
+                  </p>
+                </div>
+              ) : (
+                <div className="flex-1 overflow-y-auto no-scrollbar px-3 pb-5 space-y-1">
+                  {audience.map((u) => {
+                    const liked = likerIds.has(u.id);
+                    return (
+                      <div
+                        key={u.id}
+                        className="flex items-center gap-3 px-2 py-2 rounded-xl hover:bg-white/5"
+                      >
+                        <Avatar className="size-9">
+                          <AvatarImage src={u.avatar} />
+                          <AvatarFallback>{initials(u.name)}</AvatarFallback>
+                        </Avatar>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-foreground truncate">
+                            {u.name}
+                          </p>
+                          {u.username && (
+                            <p className="text-[11px] text-muted-foreground truncate">
+                              @{u.username}
+                            </p>
+                          )}
+                        </div>
+                        {liked && (
+                          <Heart
+                            className="size-4 fill-rose-500 text-rose-500 shrink-0"
+                            aria-label="Liked"
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </motion.div>
           </motion.div>
         )}

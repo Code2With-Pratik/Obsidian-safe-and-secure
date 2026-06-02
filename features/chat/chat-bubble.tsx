@@ -402,6 +402,7 @@ function BubbleBody({
         bubbleMe={bubbleMe}
         durationSec={message.voice.durationSec}
         waveform={message.voice.waveform}
+        url={message.voice.url}
       />
     );
   }

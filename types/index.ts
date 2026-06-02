@@ -101,7 +101,7 @@ export interface Message {
   pinned?: boolean;
   edited?: boolean;
   media?: { url: string; w?: number; h?: number; alt?: string; mime?: string }[];
-  voice?: { durationSec: number; waveform: number[] };
+  voice?: { durationSec: number; waveform: number[]; url?: string };
   audio?: { url?: string; name: string; size?: number; durationSec?: number };
   file?: { url?: string; name: string; size?: number; mime?: string };
   sticker?: { src: string; alt?: string };
