@@ -405,7 +405,13 @@ export function ChatDetailsPanel({ chat }: { chat: Chat }) {
         <ShareProfileSheet
           open={shareOpen}
           onClose={() => setShareOpen(false)}
-          profile={{ id: partner.id, name: partner.name, username: partner.username }}
+          profile={{
+            id: partner.id,
+            name: partner.name,
+            username: partner.username,
+            avatar: partner.avatar,
+            banner: partner.banner
+          }}
         />
       )}
 

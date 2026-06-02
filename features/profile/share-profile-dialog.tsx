@@ -21,7 +21,13 @@ export function ShareProfileDialog({ profile, open, onOpenChange }: Props) {
     <ShareProfileSheet
       open={open}
       onClose={() => onOpenChange(false)}
-      profile={{ id: profile.id, name: profile.name, username: profile.username }}
+      profile={{
+        id: profile.id,
+        name: profile.name,
+        username: profile.username,
+        avatar: profile.avatar,
+        banner: profile.banner
+      }}
     />
   );
 }

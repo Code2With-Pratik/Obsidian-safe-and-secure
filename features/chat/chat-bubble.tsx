@@ -1353,8 +1353,63 @@ function PollBubble({ me, bubbleMe, meStyle, message }: SubProps) {
   );
 }
 
-/** Shared contact card(s). */
+/** Shared contact / profile card. Single-entry cards with a `url` render
+ *  as a vertical profile card (avatar + name + handle + "View profile"
+ *  link) — that's what the Share-profile sheet sends. Multi-entry phonebook
+ *  shares fall back to the original compact list layout. */
 function ContactsBubble({ me, bubbleMe, meStyle, message }: SubProps) {
+  const contacts = message.contacts ?? [];
+  const single = contacts.length === 1 ? contacts[0] : null;
+
+  if (single && single.url) {
+    // Profile-card layout: banner strip → avatar overlapping the banner
+    // edge → name + handle → tappable "View profile" footer. Glass-styled
+    // on BOTH sides so it reads identically in light + dark.
+    const bannerStyle: React.CSSProperties = single.banner
+      ? {
+          background: `url("${single.banner}") center/cover no-repeat`
+        }
+      : {
+          background: "linear-gradient(135deg,#8B5CF6,#EC4899)"
+        };
+    return (
+      <div
+        className={cn(
+          // Wider than a normal bubble so the banner has room to breathe.
+          "rounded-2xl overflow-hidden w-[min(26rem,100%)]",
+          "glass glass-specular border border-border/60",
+          me ? "rounded-br-none" : "rounded-bl-none"
+        )}
+      >
+        <div className="relative h-24 w-full" style={bannerStyle}>
+          <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/0 to-black/35" />
+        </div>
+        <div className="px-5 pt-0 pb-4 -mt-10 flex flex-col items-center text-center">
+          <Avatar className="size-20 ring-4 ring-background shadow-floating">
+            <AvatarImage src={single.avatar} />
+            <AvatarFallback className="text-lg">{initials(single.name)}</AvatarFallback>
+          </Avatar>
+          <p className="mt-2 text-base font-semibold truncate max-w-full text-foreground">
+            {single.name}
+          </p>
+          {single.username && (
+            <p className="text-xs text-muted-foreground truncate max-w-full">
+              @{single.username}
+            </p>
+          )}
+        </div>
+        <a
+          href={single.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block text-center text-sm font-medium py-2.5 border-t border-border/40 text-cyan-400 hover:bg-foreground/[0.04] transition"
+        >
+          View profile →
+        </a>
+      </div>
+    );
+  }
+
   return (
     <div
       style={me ? meStyle : undefined}
@@ -1365,7 +1420,7 @@ function ContactsBubble({ me, bubbleMe, meStyle, message }: SubProps) {
           : "rounded-bl-none glass border border-border/60"
       )}
     >
-      {(message.contacts ?? []).map((c, i) => (
+      {contacts.map((c, i) => (
         <div key={`${c.username ?? c.name}-${i}`} className="flex items-center gap-3">
           <Avatar className="size-10 shrink-0">
             <AvatarImage src={c.avatar} />

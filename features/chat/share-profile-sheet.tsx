@@ -17,11 +17,14 @@ import { createClient } from "@/lib/supabase/client";
 
 /** Minimal profile shape the share sheet renders. Accepts either a real
  *  Supabase profile (with username + name) or any object that surfaces an
- *  id + display name. */
+ *  id + display name. Avatar is optional — when present, sent recipients
+ *  see the profile photo inside the shared card. */
 export interface ShareableProfile {
   id: string;
   name?: string;
   username?: string;
+  avatar?: string;
+  banner?: string;
 }
 
 /**
@@ -73,7 +76,7 @@ export function ShareProfileSheet({
   const meId = useAuthStore((s) => s.user?.id);
   const chats = useChatStore((s) => s.chats);
   const startDM = useChatStore((s) => s.startDM);
-  const sendMessage = useChatStore((s) => s.sendMessage);
+  const sendAttachment = useChatStore((s) => s.sendAttachment);
   const [copied, setCopied] = React.useState(false);
   const [mounted, setMounted] = React.useState(false);
   const [search, setSearch] = React.useState("");
@@ -199,19 +202,31 @@ export function ShareProfileSheet({
     if (picked.size === 0 || sending) return;
     setSending(true);
     const keys = Array.from(picked);
-    const body = `${t("Check out")} ${
-      profile.name || `@${profile.username || "this profile"}`
-    } — ${profileUrl}`;
+    // Send as a single-entry contact card — the bubble renders it as a
+    // proper profile card (avatar + name + handle + View profile link)
+    // instead of a plain text+URL line.
+    const contactPayload = {
+      kind: "contact" as const,
+      contacts: [
+        {
+          name: profile.name || profile.username || "User",
+          username: profile.username,
+          avatar: profile.avatar,
+          banner: profile.banner,
+          url: profileUrl
+        }
+      ]
+    };
     try {
       for (const key of keys) {
         const [kind, id] = key.split(":");
         if (kind === "person") {
           const dm = await startDM(id);
           const chatId = dm.data?.id;
-          if (chatId) await sendMessage(chatId, body);
+          if (chatId) await sendAttachment(chatId, contactPayload);
         } else if (kind === "chat") {
           // Direct post into the group / channel.
-          await sendMessage(id, body);
+          await sendAttachment(id, contactPayload);
         }
       }
       setSentTo(keys.length);
@@ -235,8 +250,8 @@ export function ShareProfileSheet({
         <div className="p-5 shrink-0">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <h3 className="text-base font-semibold">{t("Share profile")}</h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <h3 className="text-lg font-display font-semibold">{t("Share profile")}</h3>
+              <p className="text-xs text-muted-foreground mt-1">
                 {t("Send")}{" "}
                 <strong>{profile.name || `@${profile.username}`}</strong>{" "}
                 {t("anywhere — pick an app or a contact below.")}
