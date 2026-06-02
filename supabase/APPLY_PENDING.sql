@@ -346,4 +346,70 @@ CREATE POLICY "story_views_delete_own" ON story_views
   FOR DELETE TO authenticated
   USING (user_id = auth.uid());
 
+-- ---------------------------------------------------------------------
+-- 12. chat_members UPDATE + DELETE policies. The original schema only
+--     defined SELECT + INSERT for chat_members, so every UPDATE of
+--     pinned / muted / favorite / last_read_at was silently denied by
+--     RLS — pin and "Add to favorites" appeared to work but reverted on
+--     the next reload. Same for "Remove member" (DELETE).
+-- ---------------------------------------------------------------------
+DROP POLICY IF EXISTS "chat_members_update_own" ON chat_members;
+CREATE POLICY "chat_members_update_own" ON chat_members
+  FOR UPDATE TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "chat_members_delete_own" ON chat_members;
+CREATE POLICY "chat_members_delete_own" ON chat_members
+  FOR DELETE TO authenticated
+  USING (user_id = auth.uid());
+
+-- ---------------------------------------------------------------------
+-- 13. chats UPDATE + DELETE policies. The schema had SELECT + INSERT
+--     only, so per-chat theme writes (UPDATE chats SET theme=…) were
+--     silently denied by RLS — the picker looked like it worked but the
+--     theme reverted on reload. Same gap blocked "Delete chat".
+-- ---------------------------------------------------------------------
+DROP POLICY IF EXISTS "chats_update_by_members" ON chats;
+CREATE POLICY "chats_update_by_members" ON chats
+  FOR UPDATE TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM chat_members
+      WHERE chat_members.chat_id = chats.id
+        AND chat_members.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM chat_members
+      WHERE chat_members.chat_id = chats.id
+        AND chat_members.user_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS "chats_delete_by_members" ON chats;
+CREATE POLICY "chats_delete_by_members" ON chats
+  FOR DELETE TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM chat_members
+      WHERE chat_members.chat_id = chats.id
+        AND chat_members.user_id = auth.uid()
+    )
+  );
+
+-- ---------------------------------------------------------------------
+-- 14. WhatsApp-style block visibility — let users also SELECT rows
+--     where they're the blocked party. Required so the client can
+--     filter the blocker's presence + typing locally (the blocker
+--     becomes invisible to the blocked user, same as WhatsApp). The
+--     blocker still owns the row, so unblock semantics don't change.
+-- ---------------------------------------------------------------------
+DROP POLICY IF EXISTS "blocked_users_select_own" ON blocked_users;
+DROP POLICY IF EXISTS "blocked_users_select_own_or_blocked" ON blocked_users;
+CREATE POLICY "blocked_users_select_own_or_blocked" ON blocked_users
+  FOR SELECT TO authenticated
+  USING (blocker_id = auth.uid() OR blocked_id = auth.uid());
+
 -- Done. Reload the app — the new columns/RPC/policies/jobs are now live.

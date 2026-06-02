@@ -145,6 +145,9 @@ export interface Message {
   link?: { url: string; title: string; description?: string; image?: string };
   /** Optional schedule for delayed delivery — server delivers when due. */
   scheduleAt?: string;
+  /** True for messages produced by Forward — the bubble renders a small
+   *  "↪ Forwarded" tag above the content. */
+  forwarded?: boolean;
   status?: "sending" | "sent" | "delivered" | "read" | "scheduled";
 }
 

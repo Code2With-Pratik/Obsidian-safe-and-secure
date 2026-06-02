@@ -60,7 +60,9 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
   const me = message.authorId === user?.id;
   const chats = useChatStore((s) => s.chats);
   const chat = chats.find(c => c.id === message.chatId);
-  
+  const profileCache = useChatStore((s) => s.profiles[message.authorId]);
+  const ensureProfile = useChatStore((s) => s.ensureProfile);
+
   const [author, setAuthor] = React.useState<{ name: string; avatar?: string } | null>(null);
 
   React.useEffect(() => {
@@ -69,18 +71,35 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
       return;
     }
 
-    // Try to find author in local users first
+    // 1. Profile cache (real Supabase users, populated by fetchChats /
+    //    ensureProfile / realtime). This is what makes group bubbles show
+    //    the correct avatar + name.
+    if (profileCache) {
+      setAuthor({
+        name: profileCache.name || profileCache.username || "User",
+        avatar: profileCache.avatar
+      });
+      return;
+    }
+
+    // 2. Mock seed users (for dev fixtures).
     const localUser = users.find((u) => u.id === message.authorId);
     if (localUser) {
       setAuthor({ name: localUser.name, avatar: localUser.avatar });
       return;
     }
 
-    // Otherwise, it might be the other person in a DM
+    // 3. DM fallback — the chat's own name/avatar is the peer.
     if (chat?.type === 'dm' && chat.name) {
       setAuthor({ name: chat.name, avatar: chat.avatar });
     }
-  }, [me, user, message.authorId, chat]);
+
+    // 4. Otherwise lazy-fetch from Supabase so the next render has a real
+    //    name + avatar to show.
+    if (message.authorId) {
+      void ensureProfile(message.authorId);
+    }
+  }, [me, user, message.authorId, chat, profileCache, ensureProfile]);
 
   const toggleReaction = useChatStore((s) => s.toggleReaction);
   const pinMessage = useChatStore((s) => s.pinMessage);
@@ -129,6 +148,8 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
       onHoverStart={() => setShowActions(true)}
       onHoverEnd={() => setShowActions(false)}
       onClick={handleBubbleClick}
+      // Anchor for reply-context "scroll to source" jumps.
+      data-message-id={message.id}
       className={cn(
         "group relative flex gap-2 rounded-2xl transition-colors",
         me && "flex-row-reverse",
@@ -163,6 +184,17 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
         {!me && (
           <div className="text-[11px] font-medium text-muted-foreground mb-1 ml-1">
             {author?.name ?? "User"}
+          </div>
+        )}
+        {message.forwarded && (
+          <div
+            className={cn(
+              "inline-flex items-center gap-1 text-[11px] italic opacity-70 mb-0.5",
+              me ? "self-end mr-1" : "self-start ml-1"
+            )}
+          >
+            <ForwardIcon className="size-3" />
+            Forwarded
           </div>
         )}
 
@@ -377,10 +409,27 @@ function ReplyContext({
         return "Message";
     }
   })();
+  // Tap → scroll the original bubble into view and highlight it briefly so
+  // the user can see what's being referenced (WhatsApp behavior).
+  const onJump = () => {
+    if (typeof document === "undefined") return;
+    const el = document.querySelector(
+      `[data-message-id="${replyTo}"]`
+    ) as HTMLElement | null;
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("ring-2", "ring-cyan-400/70", "transition", "duration-500");
+    window.setTimeout(() => {
+      el.classList.remove("ring-2", "ring-cyan-400/70");
+    }, 1200);
+  };
+
   return (
-    <div
+    <button
+      type="button"
+      onClick={onJump}
       className={cn(
-        "flex items-stretch gap-2 rounded-2xl pl-1.5 pr-3 py-1.5 max-w-full",
+        "flex items-stretch gap-2 rounded-2xl pl-1.5 pr-3 py-1.5 max-w-full text-left hover:opacity-90 transition",
         me ? "self-end bg-white/10" : "self-start glass border border-border/60"
       )}
     >
@@ -391,7 +440,7 @@ function ReplyContext({
         </p>
         <p className="text-[11px] opacity-70 truncate">{snippet}</p>
       </div>
-    </div>
+    </button>
   );
 }
 
