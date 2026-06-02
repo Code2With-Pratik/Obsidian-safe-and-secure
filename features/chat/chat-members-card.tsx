@@ -16,6 +16,7 @@ import { useT } from "@/lib/i18n";
 import { useChatStore } from "@/store/use-chat-store";
 import { useAuthStore } from "@/store/use-auth-store";
 import { users as allUsers } from "@/lib/mock-data";
+import { createClient } from "@/lib/supabase/client";
 import type { Chat, User } from "@/types";
 
 /**
@@ -30,15 +31,56 @@ export function ChatMembersCard({ chat }: { chat: Chat }) {
   const removeMembers = useChatStore((s) => s.removeMembers);
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [removeTarget, setRemoveTarget] = React.useState<User | null>(null);
+  const [members, setMembers] = React.useState<User[]>([]);
+
+  const memberIds = React.useMemo(() => chat.memberIds ?? [], [chat.memberIds]);
+
+  // Hydrate real profiles from Supabase, falling back to mock-data so the
+  // demo seed groups still render.
+  React.useEffect(() => {
+    if (chat.type === "dm" || memberIds.length === 0) {
+      setMembers([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const supabase = createClient();
+      const { data } = await supabase
+        .from("profiles")
+        .select("id, name, username, avatar")
+        .in("id", memberIds);
+      if (cancelled) return;
+      const fromDb = new Map(
+        ((data || []) as Array<{
+          id: string;
+          name?: string;
+          username?: string;
+          avatar?: string;
+        }>).map((p) => [p.id, p])
+      );
+      const hydrated = memberIds.map((id): User | null => {
+        const p = fromDb.get(id);
+        if (p) {
+          return {
+            id: p.id,
+            name: p.name || p.username || "User",
+            username: p.username || "user",
+            avatar: p.avatar || "",
+            status: "offline"
+          };
+        }
+        const m = allUsers.find((u) => u.id === id);
+        return m ?? null;
+      }).filter((u): u is User => !!u);
+      setMembers(hydrated);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [chat.type, memberIds]);
 
   if (chat.type === "dm") return null;
 
-  const memberIds = chat.memberIds ?? [];
-  const members: User[] = memberIds
-    .map((id) => allUsers.find((u) => u.id === id))
-    .filter((u): u is User => !!u);
-
-  const eligible = allUsers.filter((u) => !memberIds.includes(u.id) && u.id !== meId);
 
   return (
     <div className="mt-6">
@@ -96,7 +138,7 @@ export function ChatMembersCard({ chat }: { chat: Chat }) {
       <AddMemberDialog
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
-        eligible={eligible}
+        excludeIds={memberIds}
         onAdd={(ids) => addMembers(chat.id, ids)}
       />
 
@@ -166,30 +208,74 @@ function RemoveMemberDialog({
 function AddMemberDialog({
   open,
   onClose,
-  eligible,
+  excludeIds,
   onAdd
 }: {
   open: boolean;
   onClose: () => void;
-  eligible: User[];
+  /** User ids that are already members — filtered out of the search results. */
+  excludeIds: string[];
   onAdd: (userIds: string[]) => void | Promise<void>;
 }) {
   const t = useT();
+  const meId = useAuthStore((s) => s.user?.id);
   const [picked, setPicked] = React.useState<Set<string>>(new Set());
   const [q, setQ] = React.useState("");
+  const [results, setResults] = React.useState<User[]>([]);
+  const [searching, setSearching] = React.useState(false);
 
   React.useEffect(() => {
     if (!open) {
       setPicked(new Set());
       setQ("");
+      setResults([]);
     }
   }, [open]);
 
-  const filtered = eligible.filter((u) => {
-    if (!q.trim()) return true;
-    const needle = q.toLowerCase();
-    return u.name.toLowerCase().includes(needle) || u.username.toLowerCase().includes(needle);
-  });
+  // Debounced Supabase profile search — excludes me and existing members.
+  React.useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setSearching(true);
+    const supabase = createClient();
+    const timer = setTimeout(async () => {
+      let query = supabase
+        .from("profiles")
+        .select("id, name, username, avatar")
+        .limit(20);
+      const term = q.trim();
+      if (term) {
+        query = query.or(`name.ilike.%${term}%,username.ilike.%${term}%`);
+      } else {
+        query = query.order("last_seen_at", { ascending: false, nullsFirst: false });
+      }
+      const { data } = await query;
+      if (cancelled) return;
+      const exclude = new Set([...excludeIds, ...(meId ? [meId] : [])]);
+      const rows = ((data || []) as Array<{
+        id: string;
+        name?: string;
+        username?: string;
+        avatar?: string;
+      }>)
+        .filter((u) => !exclude.has(u.id))
+        .map((u) => ({
+          id: u.id,
+          name: u.name || u.username || "User",
+          username: u.username || "user",
+          avatar: u.avatar || "",
+          status: "offline" as const
+        }));
+      setResults(rows);
+      setSearching(false);
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [q, open, excludeIds, meId]);
+
+  const filtered = results;
 
   const toggle = (id: string) =>
     setPicked((prev) => {

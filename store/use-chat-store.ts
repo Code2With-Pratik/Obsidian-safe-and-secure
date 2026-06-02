@@ -84,6 +84,12 @@ interface ChatState {
   onlineUsers: string[];
   /** UserIds I've blocked — DM rows from them are hidden in the chat list. */
   blockedIds: string[];
+  /** Per-chat reply target — id of the message the user is currently replying
+   *  to. The composer reads this to render the quoted-preview pill, and
+   *  sendMessage / sendAttachment include it as `reply_to`. */
+  replyTargets: Record<string, string | null>;
+  setReplyTarget: (chatId: string, messageId: string | null) => void;
+  forwardMessages: (sourceMessageIds: string[], targetChatIds: string[]) => Promise<void>;
 
   presenceChannel: RealtimeChannel | null;
   messageChannel: RealtimeChannel | null;
@@ -179,6 +185,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   typing: {},
   onlineUsers: [],
   blockedIds: [],
+  replyTargets: {},
 
   presenceChannel: null,
   messageChannel: null,
@@ -719,6 +726,64 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  setReplyTarget: (chatId, messageId) => {
+    set((s) => ({ replyTargets: { ...s.replyTargets, [chatId]: messageId } }));
+  },
+
+  /** Forward an existing set of messages into one or more chats. Re-inserts
+   *  each source's kind / content / payload under the current user. */
+  forwardMessages: async (sourceMessageIds, targetChatIds) => {
+    const me = useAuthStore.getState().user;
+    if (!me || sourceMessageIds.length === 0 || targetChatIds.length === 0) return;
+    // Find each source in local state (it must be visible to be forwarded).
+    const sources: Message[] = [];
+    const state = get();
+    for (const id of sourceMessageIds) {
+      for (const cid of Object.keys(state.messages)) {
+        const m = state.messages[cid].find((x) => x.id === id);
+        if (m) {
+          sources.push(m);
+          break;
+        }
+      }
+    }
+    if (sources.length === 0) return;
+    // Build the insert rows. Payload reuses the existing rich fields.
+    const rows: Array<Record<string, unknown>> = [];
+    for (const target of targetChatIds) {
+      for (const src of sources) {
+        const payload: Record<string, unknown> = {};
+        if (src.media) payload.media = src.media;
+        if (src.audio) payload.audio = src.audio;
+        if (src.file) payload.file = src.file;
+        if (src.voice) payload.voice = src.voice;
+        if (src.sticker) payload.sticker = src.sticker;
+        if (src.gif) payload.gif = src.gif;
+        if (src.poll) payload.poll = src.poll;
+        if (src.contacts) payload.contacts = src.contacts;
+        if (src.location) payload.location = src.location;
+        if (src.link) payload.link = src.link;
+        rows.push({
+          chat_id: target,
+          author_id: me.id,
+          kind: src.kind,
+          content: src.content,
+          status: "sent",
+          payload,
+          client_id: newId()
+        });
+      }
+    }
+    const { error } = await supabase.from("messages").insert(rows);
+    if (error) {
+      console.error("[forwardMessages] insert failed", {
+        message: (error as unknown as { message?: string }).message,
+        targets: targetChatIds.length,
+        sources: sources.length
+      });
+    }
+  },
+
   /* ----- sending ----- */
 
   sendMessage: async (chatId, content) => {
@@ -726,6 +791,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!me) return;
     const cid = newId();
     const now = new Date().toISOString();
+    // Pull and clear the reply target up front so this send carries it and
+    // subsequent sends are fresh.
+    const replyTo = get().replyTargets[chatId] || null;
+    if (replyTo) {
+      set((s) => ({ replyTargets: { ...s.replyTargets, [chatId]: null } }));
+    }
     set((s) => ({
       messages: {
         ...s.messages,
@@ -738,21 +809,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
             kind: "text",
             content,
             createdAt: now,
-            status: "sending"
+            status: "sending",
+            replyTo: replyTo || undefined
           }
         ]
       }
     }));
+    const insertRow: Record<string, unknown> = {
+      chat_id: chatId,
+      author_id: me.id,
+      kind: "text",
+      content,
+      status: "sent",
+      client_id: cid
+    };
+    if (replyTo) insertRow.reply_to = replyTo;
     const { data, error } = await supabase
       .from("messages")
-      .insert({
-        chat_id: chatId,
-        author_id: me.id,
-        kind: "text",
-        content,
-        status: "sent",
-        client_id: cid
-      })
+      .insert(insertRow)
       .select()
       .single();
     if (error || !data) {
@@ -955,6 +1029,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     };
     const cid = newId();
     const now = new Date().toISOString();
+    // Pull and clear the reply target up front so attachment sends thread off
+    // the message the user was replying to.
+    const replyTo = get().replyTargets[chatId] || null;
+    if (replyTo) {
+      set((s) => ({ replyTargets: { ...s.replyTargets, [chatId]: null } }));
+    }
     // If a future scheduleAt is set, hold the message at status='scheduled'.
     // pg_cron flips it to 'sent' when due (see migration 20260601160000).
     const isScheduled =
@@ -968,6 +1048,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       createdAt: now,
       status: isScheduled ? "scheduled" : "sending",
       scheduleAt: isScheduled ? scheduleAt : undefined,
+      replyTo: replyTo || undefined,
       ...rest
     } as Message;
     set((s) => ({
@@ -985,6 +1066,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       payload: rest,
       client_id: cid
     };
+    if (replyTo) insertRow.reply_to = replyTo;
     if (isScheduled) insertRow.schedule_at = scheduleAt;
     const { data, error } = await supabase
       .from("messages")

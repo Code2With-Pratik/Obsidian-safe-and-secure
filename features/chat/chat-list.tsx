@@ -592,20 +592,8 @@ export function ChatList({
       <NewGroupDialog
         open={groupOpen}
         onOpenChange={setGroupOpen}
-        onCreate={async ({ name, description, members }) => {
-          try {
-            const created = await addGroup({
-              name,
-              description,
-              memberIds: members
-            });
-            router.push(`/chats/${created.id}`);
-          } catch (err) {
-            toast({
-              title: "Couldn't create group",
-              description: err instanceof Error ? err.message : "Try again."
-            });
-          }
+        onCreated={(chatId) => {
+          router.push(`/chats/${chatId}`);
         }}
       />
 

@@ -22,9 +22,20 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { users } from "@/lib/mock-data";
-import { cn, initials } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
+import { useChatStore } from "@/store/use-chat-store";
+import { useAuthStore } from "@/store/use-auth-store";
+import { createClient } from "@/lib/supabase/client";
+
+const supabase = createClient();
+
+interface DirectoryUser {
+  id: string;
+  name: string;
+  username: string;
+  avatar?: string;
+}
 
 const GRADIENTS = [
   "linear-gradient(135deg,#8B5CF6,#EC4899)",
@@ -38,48 +49,120 @@ const GRADIENTS = [
 interface Props {
   open: boolean;
   onOpenChange: (v: boolean) => void;
+  /** Optional override — when omitted, the dialog creates the group itself
+   *  via the chat store. Kept for backwards compatibility with callers that
+   *  want to intercept the create payload. */
   onCreate?: (group: { name: string; description: string; members: string[] }) => void;
+  /** Fires after the group has actually been created in Supabase. Receives
+   *  the new chat id so callers can navigate to it. Only invoked when
+   *  `onCreate` is NOT provided (the dialog owns the persistence). */
+  onCreated?: (chatId: string) => void;
 }
 
-export function NewGroupDialog({ open, onOpenChange, onCreate }: Props) {
+export function NewGroupDialog({ open, onOpenChange, onCreate, onCreated }: Props) {
   const t = useT();
+  const me = useAuthStore((s) => s.user);
+  const addGroup = useChatStore((s) => s.addGroup);
+  const uploadAttachment = useChatStore((s) => s.uploadAttachment);
   const [banner, setBanner] = React.useState(GRADIENTS[0]);
   const [avatarSrc, setAvatarSrc] = React.useState<string | null>(null);
+  const [avatarFile, setAvatarFile] = React.useState<File | null>(null);
   const [name, setName] = React.useState("");
   const [description, setDescription] = React.useState("");
-  const [picked, setPicked] = React.useState<string[]>([]);
+  const [picked, setPicked] = React.useState<DirectoryUser[]>([]);
   const [search, setSearch] = React.useState("");
+  const [results, setResults] = React.useState<DirectoryUser[]>([]);
+  const [searching, setSearching] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
   const avatarInputRef = React.useRef<HTMLInputElement>(null);
 
-  const directory = users.filter(
-    (u) =>
-      u.id !== "me" &&
-      u.name.toLowerCase().includes(search.toLowerCase())
-  );
+  // Debounced live profile search against Supabase. Empty query lists the
+  // most-recently-active profiles so the picker doesn't feel empty on open.
+  React.useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setSearching(true);
+    const timer = setTimeout(async () => {
+      const q = search.trim();
+      let query = supabase
+        .from("profiles")
+        .select("id, name, username, avatar")
+        .limit(20);
+      if (q) {
+        query = query.or(`name.ilike.%${q}%,username.ilike.%${q}%`);
+      } else {
+        query = query.order("last_seen_at", { ascending: false, nullsFirst: false });
+      }
+      if (me?.id) query = query.neq("id", me.id);
+      const { data } = await query;
+      if (cancelled) return;
+      setResults((data || []) as DirectoryUser[]);
+      setSearching(false);
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [search, open, me?.id]);
 
   const onAvatarFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setAvatarFile(file);
     setAvatarSrc(URL.createObjectURL(file));
   };
 
-  const togglePick = (id: string) =>
+  const togglePick = (u: DirectoryUser) =>
     setPicked((cur) =>
-      cur.includes(id) ? cur.filter((x) => x !== id) : [...cur, id]
+      cur.find((x) => x.id === u.id) ? cur.filter((x) => x.id !== u.id) : [...cur, u]
     );
 
   const valid = name.trim().length >= 2 && picked.length >= 1;
 
-  const submit = () => {
-    if (!valid) return;
-    onCreate?.({ name: name.trim(), description: description.trim(), members: picked });
-    onOpenChange(false);
-    // reset
+  const resetForm = () => {
     setName("");
     setDescription("");
     setPicked([]);
     setAvatarSrc(null);
+    setAvatarFile(null);
     setBanner(GRADIENTS[0]);
+    setSearch("");
+  };
+
+  const submit = async () => {
+    if (!valid || saving) return;
+    setSaving(true);
+    try {
+      // If the caller passed onCreate, hand off the payload — keeps any legacy
+      // callsite working. Otherwise we own the persistence.
+      if (onCreate) {
+        onCreate({
+          name: name.trim(),
+          description: description.trim(),
+          members: picked.map((u) => u.id)
+        });
+      } else {
+        let avatarUrl: string | undefined;
+        if (avatarFile) {
+          const uploaded = await uploadAttachment(avatarFile);
+          if (uploaded) avatarUrl = uploaded;
+        }
+        const created = await addGroup({
+          name: name.trim(),
+          description: description.trim(),
+          memberIds: picked.map((u) => u.id),
+          banner,
+          avatar: avatarUrl
+        });
+        onCreated?.(created.id);
+      }
+      onOpenChange(false);
+      resetForm();
+    } catch (err) {
+      console.error("[NewGroupDialog] create failed", err);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -191,37 +274,33 @@ export function NewGroupDialog({ open, onOpenChange, onCreate }: Props) {
 
             {picked.length > 0 && (
               <div className="flex flex-wrap gap-1.5 pt-2">
-                {picked.map((id) => {
-                  const u = users.find((x) => x.id === id);
-                  if (!u) return null;
-                  return (
-                    <motion.button
-                      key={id}
-                      layout
-                      initial={{ scale: 0.6, opacity: 0 }}
-                      animate={{ scale: 1, opacity: 1 }}
-                      exit={{ scale: 0.6, opacity: 0 }}
-                      onClick={() => togglePick(id)}
-                      className="inline-flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full glass border border-white/15 text-xs"
-                    >
-                      <Avatar className="size-5">
-                        <AvatarImage src={u.avatar} />
-                      </Avatar>
-                      {u.name.split(" ")[0]}
-                      <X className="size-3 text-muted-foreground" />
-                    </motion.button>
-                  );
-                })}
+                {picked.map((u) => (
+                  <motion.button
+                    key={u.id}
+                    layout
+                    initial={{ scale: 0.6, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0.6, opacity: 0 }}
+                    onClick={() => togglePick(u)}
+                    className="inline-flex items-center gap-1.5 pl-1 pr-2.5 py-1 rounded-full glass border border-white/15 text-xs"
+                  >
+                    <Avatar className="size-5">
+                      <AvatarImage src={u.avatar} />
+                    </Avatar>
+                    {(u.name || u.username || "User").split(" ")[0]}
+                    <X className="size-3 text-muted-foreground" />
+                  </motion.button>
+                ))}
               </div>
             )}
 
             <div className="mt-2 grid grid-cols-1 gap-1 max-h-56 overflow-y-auto no-scrollbar">
-              {directory.map((u) => {
-                const sel = picked.includes(u.id);
+              {results.map((u) => {
+                const sel = !!picked.find((p) => p.id === u.id);
                 return (
                   <button
                     key={u.id}
-                    onClick={() => togglePick(u.id)}
+                    onClick={() => togglePick(u)}
                     className={cn(
                       "flex items-center gap-3 p-2 rounded-xl transition text-left",
                       sel ? "bg-primary/10" : "hover:bg-foreground/[0.04]"
@@ -231,7 +310,9 @@ export function NewGroupDialog({ open, onOpenChange, onCreate }: Props) {
                       <AvatarImage src={u.avatar} />
                     </Avatar>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium truncate">{u.name}</p>
+                      <p className="text-sm font-medium truncate">
+                        {u.name || u.username}
+                      </p>
                       <p className="text-[11px] text-muted-foreground truncate">
                         @{u.username}
                       </p>
@@ -249,9 +330,14 @@ export function NewGroupDialog({ open, onOpenChange, onCreate }: Props) {
                   </button>
                 );
               })}
-              {directory.length === 0 && (
+              {!searching && results.length === 0 && (
                 <p className="text-xs text-muted-foreground text-center py-4">
                   {t("No matches")}
+                </p>
+              )}
+              {searching && (
+                <p className="text-xs text-muted-foreground text-center py-4">
+                  {t("Searching…")}
                 </p>
               )}
             </div>
@@ -268,8 +354,8 @@ export function NewGroupDialog({ open, onOpenChange, onCreate }: Props) {
             <Button variant="ghost" onClick={() => onOpenChange(false)}>
               {t("Cancel")}
             </Button>
-            <Button variant="gradient" disabled={!valid} onClick={submit}>
-              {t("Save group")}
+            <Button variant="gradient" disabled={!valid || saving} onClick={submit}>
+              {saving ? t("Creating…") : t("Save group")}
             </Button>
           </div>
         </div>

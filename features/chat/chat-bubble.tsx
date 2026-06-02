@@ -23,7 +23,8 @@ import {
   CalendarClock,
   Music as MusicIcon,
   Phone,
-  Video as VideoIcon
+  Video as VideoIcon,
+  Forward as ForwardIcon
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -38,6 +39,7 @@ import { useT } from "@/lib/i18n";
 import { cn, copyText, formatTime, initials } from "@/lib/utils";
 import { ReactionPicker } from "./reaction-picker";
 import { DeleteMessageDialog } from "./delete-message-dialog";
+import { ForwardDialog } from "./forward-dialog";
 import { useImageLightbox } from "./image-lightbox";
 import { useChatStore } from "../../store/use-chat-store";
 import { useMessageSelectionStore } from "../../store/use-message-selection-store";
@@ -82,6 +84,8 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
 
   const toggleReaction = useChatStore((s) => s.toggleReaction);
   const pinMessage = useChatStore((s) => s.pinMessage);
+  const setReplyTarget = useChatStore((s) => s.setReplyTarget);
+  const [forwardOpen, setForwardOpen] = React.useState(false);
   const removeMessages = useChatStore((s) => s.removeMessages);
   const hideMessages = useChatStore((s) => s.hideMessages);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
@@ -256,7 +260,11 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
             <Smile className="size-3.5" />
           </button>
         </ReactionPicker>
-        <button className="size-6 grid place-items-center rounded-full hover:bg-foreground/10">
+        <button
+          onClick={() => setReplyTarget(message.chatId, message.id)}
+          aria-label="Reply"
+          className="size-6 grid place-items-center rounded-full hover:bg-foreground/10"
+        >
           <Reply className="size-3.5" />
         </button>
         <button
@@ -285,6 +293,14 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
               <CopyIcon />
               Copy
             </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setReplyTarget(message.chatId, message.id)}>
+              <Reply />
+              Reply
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setForwardOpen(true)}>
+              <ForwardIcon />
+              Forward
+            </DropdownMenuItem>
             <DropdownMenuItem onSelect={handleDelete} className="!text-red-400 focus:!text-red-300">
               <Trash2 />
               Delete
@@ -307,7 +323,75 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
           setDeleteOpen(false);
         }}
       />
+
+      <ForwardDialog
+        open={forwardOpen}
+        onClose={() => setForwardOpen(false)}
+        messageIds={[message.id]}
+      />
     </motion.div>
+  );
+}
+
+/** Renders a compact preview of the message this bubble is replying to —
+ *  small accent strip + author name + truncated snippet. Looks up the source
+ *  message in local state so it works for both my-side and recipient-side
+ *  views as long as that source is loaded. */
+function ReplyContext({
+  me,
+  chatId,
+  replyTo
+}: {
+  me: boolean;
+  chatId: string;
+  replyTo: string;
+}) {
+  const messages = useChatStore((s) => s.messages);
+  const source = (messages[chatId] || []).find((m) => m.id === replyTo);
+  if (!source) return null;
+  const author = users.find((u) => u.id === source.authorId);
+  const snippet = (() => {
+    if (source.content) return source.content;
+    switch (source.kind) {
+      case "image":
+        return "📷 Photo";
+      case "video":
+        return "🎬 Video";
+      case "voice":
+        return "🎙️ Voice note";
+      case "audio":
+        return "🎵 Audio";
+      case "file":
+        return "📎 File";
+      case "sticker":
+        return "Sticker";
+      case "gif":
+        return "GIF";
+      case "poll":
+        return "📊 Poll";
+      case "location":
+        return "📍 Location";
+      case "contact":
+        return "👤 Contact";
+      default:
+        return "Message";
+    }
+  })();
+  return (
+    <div
+      className={cn(
+        "flex items-stretch gap-2 rounded-2xl pl-1.5 pr-3 py-1.5 max-w-full",
+        me ? "self-end bg-white/10" : "self-start glass border border-border/60"
+      )}
+    >
+      <span className="w-[3px] rounded-full bg-cyan-400 shrink-0" />
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-medium text-cyan-400 truncate">
+          {author?.name || "User"}
+        </p>
+        <p className="text-[11px] opacity-70 truncate">{snippet}</p>
+      </div>
+    </div>
   );
 }
 
@@ -449,6 +533,7 @@ function BubbleBody({
 
   return (
     <div className="flex flex-col gap-1.5 max-w-full">
+      {message.replyTo && <ReplyContext me={me} chatId={message.chatId} replyTo={message.replyTo} />}
       {message.storyReply && (
         <div
           className={cn(
@@ -690,24 +775,47 @@ function VoiceBubble({
   meStyle,
   bubbleMe,
   durationSec,
-  waveform
+  waveform,
+  url
 }: {
   me: boolean;
   meStyle: React.CSSProperties;
   bubbleMe?: string;
   durationSec: number;
   waveform: number[];
+  url?: string;
 }) {
   const [playing, setPlaying] = React.useState(false);
   const [progress, setProgress] = React.useState(0); // 0..1
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
   const rafRef = React.useRef<number | null>(null);
   const startedAtRef = React.useRef<number>(0);
   const offsetRef = React.useRef<number>(0); // resume position 0..1
+
+  // Lazily create the <audio> element on first play so SSR doesn't ship one
+  // per bubble, and so reload doesn't auto-fetch every voice note on the page.
+  const getAudio = React.useCallback(() => {
+    if (!url) return null;
+    if (!audioRef.current) {
+      const el = new Audio(url);
+      el.preload = "metadata";
+      el.addEventListener("ended", () => {
+        setPlaying(false);
+        setProgress(1);
+        offsetRef.current = 0;
+      });
+      audioRef.current = el;
+    }
+    return audioRef.current;
+  }, [url]);
 
   const stop = React.useCallback(() => {
     if (rafRef.current != null) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
+    }
+    if (audioRef.current && !audioRef.current.paused) {
+      audioRef.current.pause();
     }
     setPlaying(false);
   }, []);
@@ -724,9 +832,44 @@ function VoiceBubble({
       offsetRef.current = 0;
       setProgress(0);
     }
+
+    const total = durationSec * 1000;
+    const audio = getAudio();
+    if (audio) {
+      // Real audio source — drive progress off the audio element's currentTime
+      // so the waveform and the actual playback stay in lockstep.
+      audio.currentTime = offsetRef.current * durationSec;
+      audio.play().catch((err) => {
+        if (err?.name === "AbortError") return;
+        console.error("[VoiceBubble] play failed", {
+          url,
+          message: err?.message
+        });
+      });
+      setPlaying(true);
+      const tick = () => {
+        const cur = audio.currentTime;
+        const p = Math.min(1, durationSec > 0 ? cur / durationSec : 0);
+        setProgress(p);
+        if (audio.paused || audio.ended) {
+          if (audio.ended) {
+            offsetRef.current = 0;
+            setProgress(1);
+          }
+          setPlaying(false);
+          return;
+        }
+        rafRef.current = requestAnimationFrame(tick);
+      };
+      rafRef.current = requestAnimationFrame(tick);
+      return;
+    }
+
+    // Fallback when no audio URL is attached (legacy messages from before
+    // the upload wiring landed) — just animate the bars off the duration so
+    // the bubble still looks alive.
     startedAtRef.current = performance.now();
     setPlaying(true);
-    const total = durationSec * 1000;
     const tick = () => {
       const elapsed = performance.now() - startedAtRef.current;
       const p = Math.min(1, offsetRef.current + elapsed / total);
