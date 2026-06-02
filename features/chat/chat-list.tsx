@@ -109,6 +109,11 @@ export function ChatList({
   const joinedCommunityIds = useCommunityStore((s) => s.joinedIds);
   const hostedCommunityIds = useCommunityStore((s) => s.hostedIds);
   const joinCommunityById = useCommunityStore((s) => s.joinCommunity);
+  const fetchCommunities = useCommunityStore((s) => s.fetchCommunities);
+  const communitiesLoaded = useCommunityStore((s) => s.loaded);
+  React.useEffect(() => {
+    if (!communitiesLoaded) void fetchCommunities();
+  }, [communitiesLoaded, fetchCommunities]);
 
   const [filter, setFilter] = React.useState<Filter>("all");
   const [communityFilter, setCommunityFilter] =
@@ -224,7 +229,7 @@ export function ChatList({
       return true;
     });
 
-  const handleJoinCommunityFromCard = (
+  const handleJoinCommunityFromCard = async (
     e: React.MouseEvent,
     community: Community
   ) => {
@@ -235,7 +240,7 @@ export function ChatList({
       router.push(target);
       return;
     }
-    const { matched } = joinCommunityById(community.id);
+    const { matched } = await joinCommunityById(community.id);
     setMatch({ open: true, count: matched, name: community.name });
     window.setTimeout(() => {
       router.push(target);

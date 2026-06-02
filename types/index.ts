@@ -76,6 +76,7 @@ export type MessageKind =
   | "gif"
   | "poll"
   | "contact"
+  | "community"
   | "location"
   | "schedule";
 
@@ -117,6 +118,18 @@ export interface Message {
     multi?: boolean;
   };
   contacts?: { id?: string; name: string; username?: string; avatar?: string; banner?: string; url?: string }[];
+  /** Shared community card — rendered by `ContactsBubble` as a cover-banner
+   *  card with a "Join community" footer. Carries the community's id so
+   *  the recipient can tap straight into the detail page. */
+  community?: {
+    id: string;
+    name: string;
+    description?: string;
+    cover?: string;
+    category?: string;
+    members?: number;
+    url?: string;
+  };
   location?: { lat: number; lng: number; live?: boolean };
   /** Story-reply context — when a user replies to someone's story from the
    *  viewer, the resulting DM carries a small thumbnail + caption of the

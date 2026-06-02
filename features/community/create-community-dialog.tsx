@@ -114,8 +114,8 @@ export function CreateCommunityDialog({
   const removeInterest = (tag: string) =>
     setInterests((t) => t.filter((x) => x !== tag));
 
-  const handleSubmit = () => {
-    const community = createCommunity({
+  const handleSubmit = async () => {
+    const community = await createCommunity({
       name,
       description,
       category,
@@ -123,7 +123,7 @@ export function CreateCommunityDialog({
       interests
     });
     setOpen(false);
-    router.push(`/discover/community/${community.id}`);
+    if (community) router.push(`/discover/community/${community.id}`);
   };
 
   return (
@@ -331,7 +331,7 @@ export function CreateCommunityDialog({
           <Button variant="ghost" onClick={() => setOpen(false)}>
             {t("Cancel")}
           </Button>
-          <Button variant="gradient" onClick={handleSubmit} disabled={!name.trim()}>
+          <Button variant="gradient" onClick={() => void handleSubmit()} disabled={!name.trim()}>
             <Sparkles /> {t("Launch community")}
           </Button>
         </DialogFooter>
