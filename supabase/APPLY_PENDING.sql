@@ -346,4 +346,117 @@ CREATE POLICY "story_views_delete_own" ON story_views
   FOR DELETE TO authenticated
   USING (user_id = auth.uid());
 
+-- ---------------------------------------------------------------------
+-- 12. chat_members UPDATE + DELETE policies. The original schema only
+--     defined SELECT + INSERT for chat_members, so every UPDATE of
+--     pinned / muted / favorite / last_read_at was silently denied by
+--     RLS — pin and "Add to favorites" appeared to work but reverted on
+--     the next reload. Same for "Remove member" (DELETE).
+-- ---------------------------------------------------------------------
+DROP POLICY IF EXISTS "chat_members_update_own" ON chat_members;
+CREATE POLICY "chat_members_update_own" ON chat_members
+  FOR UPDATE TO authenticated
+  USING (user_id = auth.uid())
+  WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "chat_members_delete_own" ON chat_members;
+CREATE POLICY "chat_members_delete_own" ON chat_members
+  FOR DELETE TO authenticated
+  USING (user_id = auth.uid());
+
+-- ---------------------------------------------------------------------
+-- 13. chats UPDATE + DELETE policies. The schema had SELECT + INSERT
+--     only, so per-chat theme writes (UPDATE chats SET theme=…) were
+--     silently denied by RLS — the picker looked like it worked but the
+--     theme reverted on reload. Same gap blocked "Delete chat".
+-- ---------------------------------------------------------------------
+DROP POLICY IF EXISTS "chats_update_by_members" ON chats;
+CREATE POLICY "chats_update_by_members" ON chats
+  FOR UPDATE TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM chat_members
+      WHERE chat_members.chat_id = chats.id
+        AND chat_members.user_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM chat_members
+      WHERE chat_members.chat_id = chats.id
+        AND chat_members.user_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS "chats_delete_by_members" ON chats;
+CREATE POLICY "chats_delete_by_members" ON chats
+  FOR DELETE TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM chat_members
+      WHERE chat_members.chat_id = chats.id
+        AND chat_members.user_id = auth.uid()
+    )
+  );
+
+-- ---------------------------------------------------------------------
+-- 14. WhatsApp-style block visibility — let users also SELECT rows
+--     where they're the blocked party. Required so the client can
+--     filter the blocker's presence + typing locally (the blocker
+--     becomes invisible to the blocked user, same as WhatsApp). The
+--     blocker still owns the row, so unblock semantics don't change.
+-- ---------------------------------------------------------------------
+DROP POLICY IF EXISTS "blocked_users_select_own" ON blocked_users;
+DROP POLICY IF EXISTS "blocked_users_select_own_or_blocked" ON blocked_users;
+CREATE POLICY "blocked_users_select_own_or_blocked" ON blocked_users
+  FOR SELECT TO authenticated
+  USING (blocker_id = auth.uid() OR blocked_id = auth.uid());
+
+-- ---------------------------------------------------------------------
+-- 15. profiles.created_at — drives the "Joined" line in the chat-details
+--     panel. Backfilled from auth.users.created_at where available; new
+--     rows default to NOW().
+-- ---------------------------------------------------------------------
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
+UPDATE profiles p
+   SET created_at = u.created_at
+  FROM auth.users u
+ WHERE p.id = u.id
+   AND p.created_at IS DISTINCT FROM u.created_at
+   AND u.created_at IS NOT NULL;
+
+-- ---------------------------------------------------------------------
+-- 16. Disappearing messages — chats.disappearing_seconds (NULL = off)
+--     plus a pg_cron job that deletes every message older than the
+--     window. Triggered by the "Disappearing messages" row in the chat
+--     details panel; mirrors WhatsApp's behaviour.
+-- ---------------------------------------------------------------------
+ALTER TABLE chats
+  ADD COLUMN IF NOT EXISTS disappearing_seconds INTEGER;
+
+DO $$
+BEGIN
+  PERFORM cron.unschedule('cleanup-disappearing-messages')
+  WHERE EXISTS (
+    SELECT 1 FROM cron.job WHERE jobname = 'cleanup-disappearing-messages'
+  );
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END $$;
+
+SELECT cron.schedule(
+  'cleanup-disappearing-messages',
+  '*/5 * * * *',
+  $job$
+    DELETE FROM messages m
+     USING chats c
+     WHERE m.chat_id = c.id
+       AND c.disappearing_seconds IS NOT NULL
+       AND c.disappearing_seconds > 0
+       AND m.created_at < NOW() - (c.disappearing_seconds || ' seconds')::INTERVAL;
+  $job$
+);
+
 -- Done. Reload the app — the new columns/RPC/policies/jobs are now live.

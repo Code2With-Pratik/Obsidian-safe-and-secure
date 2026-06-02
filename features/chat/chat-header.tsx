@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -54,6 +55,7 @@ import { copyText } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { ChatThemeDialog } from "./chat-theme-dialog";
 import { DeleteMessageDialog } from "./delete-message-dialog";
+import { ScheduleMessageDialog } from "./attachment-dialogs";
 
 /** Stable empty array used as the fallback for `selected[chat.id]` so the
  *  Zustand selector doesn't return a fresh `[]` on every render (which
@@ -109,6 +111,13 @@ export function ChatHeader({
   // sheet has been removed to avoid two competing profile UIs.
   const openProfile = () => setRightPanel(rightPanel === "details" ? null : "details");
   const [themeOpen, setThemeOpen] = React.useState(false);
+  const [scheduleOpen, setScheduleOpen] = React.useState(false);
+  const [reportOpen, setReportOpen] = React.useState(false);
+  const [deleteChatOpen, setDeleteChatOpen] = React.useState(false);
+  const [clearChatOpen, setClearChatOpen] = React.useState(false);
+  const [blockOpen, setBlockOpen] = React.useState(false);
+  const sendAttachment = useChatStore((s) => s.sendAttachment);
+  const profileCache = useChatStore((s) => s.profiles);
 
   // DM → resolve the single user to show their story ring on the header avatar.
   const storyUserId = chat.type === "dm" ? otherMemberId : undefined;
@@ -392,7 +401,7 @@ export function ChatHeader({
                 <Sparkles className="size-2" /> new
               </Badge>
             </DropdownMenuItem>
-            <DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setScheduleOpen(true)}>
               <CalendarClock />
               {t("Schedule message")}
             </DropdownMenuItem>
@@ -413,32 +422,65 @@ export function ChatHeader({
 
             <DropdownMenuItem
               onSelect={() => {
-                // Serialize the current chat's messages and trigger a download.
+                // Export as a printable HTML transcript — opens in a new tab
+                // where the user can choose "Save as PDF" from the print
+                // dialog. Avoids pulling in a PDF library client-side.
                 if (typeof window === "undefined") return;
                 const list = messages[chat.id] ?? [];
-                const blob = new Blob([JSON.stringify(list, null, 2)], {
-                  type: "application/json"
-                });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `${chat.name.replace(/[^\w-]+/g, "_") || "chat"}.json`;
-                document.body.appendChild(a);
-                a.click();
-                document.body.removeChild(a);
-                setTimeout(() => URL.revokeObjectURL(url), 1000);
+                const meId = me?.id;
+                const resolveName = (uid: string) => {
+                  if (uid === meId) return me?.name || "You";
+                  const p = profileCache[uid];
+                  if (p) return p.name || p.username || "User";
+                  return "User";
+                };
+                const esc = (s: string) =>
+                  String(s)
+                    .replace(/&/g, "&amp;")
+                    .replace(/</g, "&lt;")
+                    .replace(/>/g, "&gt;")
+                    .replace(/"/g, "&quot;");
+                const rows = list
+                  .map((m) => {
+                    const when = new Date(m.createdAt).toLocaleString();
+                    const body = m.content
+                      ? esc(m.content)
+                      : `<em>[${esc(m.kind)}]</em>`;
+                    return `<tr><td class="t">${esc(when)}</td><td class="a">${esc(
+                      resolveName(m.authorId)
+                    )}</td><td>${body}</td></tr>`;
+                  })
+                  .join("\n");
+                const html = `<!doctype html><html><head><meta charset="utf-8"><title>${esc(
+                  chat.name
+                )} — chat export</title><style>
+                  body{font-family:system-ui,sans-serif;margin:32px;color:#111;}
+                  h1{margin:0 0 4px;font-size:20px;}
+                  .sub{color:#666;margin-bottom:16px;font-size:13px;}
+                  table{width:100%;border-collapse:collapse;font-size:14px;}
+                  th,td{padding:8px 10px;border-bottom:1px solid #eee;vertical-align:top;text-align:left;}
+                  .t{width:160px;color:#666;font-size:12px;white-space:nowrap;}
+                  .a{width:140px;font-weight:600;}
+                  @media print{body{margin:18mm;}}
+                </style></head><body>
+                  <h1>${esc(chat.name)}</h1>
+                  <div class="sub">Exported ${esc(
+                    new Date().toLocaleString()
+                  )} · ${list.length} messages</div>
+                  <table><thead><tr><th class="t">Time</th><th class="a">From</th><th>Message</th></tr></thead><tbody>${rows}</tbody></table>
+                  <script>window.addEventListener('load',()=>setTimeout(()=>window.print(),300));</script>
+                </body></html>`;
+                const w = window.open("", "_blank");
+                if (w) {
+                  w.document.write(html);
+                  w.document.close();
+                }
               }}
             >
               <Download />
               {t("Export chat")}
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onSelect={() => {
-                if (typeof window !== "undefined" && window.confirm(t("Clear all messages in this chat?"))) {
-                  void clearChat(chat.id);
-                }
-              }}
-            >
+            <DropdownMenuItem onSelect={() => setClearChatOpen(true)}>
               <Eraser />
               {t("Clear chat")}
             </DropdownMenuItem>
@@ -446,36 +488,25 @@ export function ChatHeader({
             <DropdownMenuSeparator />
 
             <DropdownMenuItem
-              className="text-rose-600 focus:text-rose-400"
+              className="!text-rose-500 hover:!text-rose-400 focus:!text-rose-400 dark:!text-rose-400 dark:hover:!text-rose-300 font-medium"
               onSelect={() => {
                 if (chat.type !== "dm" || !otherMemberId) return;
-                if (
-                  typeof window !== "undefined" &&
-                  window.confirm(
-                    t("Block this contact? They won't be able to message you and this chat will close.")
-                  )
-                ) {
-                  void (async () => {
-                    await blockUser(otherMemberId);
-                    await removeChat(chat.id);
-                    router.push("/chats");
-                  })();
-                }
+                setBlockOpen(true);
               }}
             >
               <Ban />
               {t("Block contact")}
             </DropdownMenuItem>
-            <DropdownMenuItem className="text-rose-600 focus:text-rose-400">
+            <DropdownMenuItem
+              className="!text-rose-500 hover:!text-rose-400 focus:!text-rose-400 dark:!text-rose-400 dark:hover:!text-rose-300 font-medium"
+              onSelect={() => setReportOpen(true)}
+            >
               <Flag />
               {t("Report")}
             </DropdownMenuItem>
             <DropdownMenuItem
-              className="text-rose-600 focus:text-rose-400"
-              onSelect={() => {
-                removeChat(chat.id);
-                router.push("/chats");
-              }}
+              className="!text-rose-500 hover:!text-rose-400 focus:!text-rose-400 dark:!text-rose-400 dark:hover:!text-rose-300 font-medium"
+              onSelect={() => setDeleteChatOpen(true)}
             >
               <Trash2 />
               {t("Delete chat")}
@@ -502,7 +533,269 @@ export function ChatHeader({
           setDeleteOpen(false);
         }}
       />
+
+      <ScheduleMessageDialog
+        open={scheduleOpen}
+        onClose={() => setScheduleOpen(false)}
+        onSchedule={(when, content) => {
+          void sendAttachment(chat.id, {
+            kind: "text",
+            content,
+            scheduleAt: when.toISOString()
+          });
+        }}
+      />
+
+      <ReportDialog
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        chatName={chat.name}
+      />
+
+      <ConfirmChatDeletionDialog
+        open={deleteChatOpen}
+        chatName={chat.name}
+        onClose={() => setDeleteChatOpen(false)}
+        onConfirm={async () => {
+          await removeChat(chat.id);
+          setDeleteChatOpen(false);
+          router.push("/chats");
+        }}
+      />
+
+      <GlassConfirmDialog
+        open={clearChatOpen}
+        icon={<Eraser className="size-5" />}
+        accent="rose"
+        title={t("Clear chat?")}
+        body={
+          <>
+            {t("This removes every message in")} <strong>{chat.name}</strong>{" "}
+            {t("for you. The chat stays in your list.")}
+          </>
+        }
+        confirmLabel={t("Clear chat")}
+        onCancel={() => setClearChatOpen(false)}
+        onConfirm={async () => {
+          await clearChat(chat.id);
+          setClearChatOpen(false);
+        }}
+      />
+
+      <GlassConfirmDialog
+        open={blockOpen}
+        icon={<Ban className="size-5" />}
+        accent="rose"
+        title={t("Block contact?")}
+        body={
+          <>
+            {t("They won't be able to message you. You can unblock from this chat at any time.")}
+          </>
+        }
+        confirmLabel={t("Block")}
+        onCancel={() => setBlockOpen(false)}
+        onConfirm={async () => {
+          if (chat.type !== "dm" || !otherMemberId) return;
+          await blockUser(otherMemberId);
+          setBlockOpen(false);
+          // Stay on the chat — the BlockedOverlay rendered by chat-thread
+          // takes over the surface with an Unblock button.
+        }}
+      />
     </div>
+  );
+}
+
+/** A reusable glass confirmation modal with an icon, body, and a single
+ *  destructive (rose) or primary (cyan) action button. */
+function GlassConfirmDialog({
+  open,
+  icon,
+  accent = "rose",
+  title,
+  body,
+  confirmLabel,
+  onCancel,
+  onConfirm
+}: {
+  open: boolean;
+  icon: React.ReactNode;
+  accent?: "rose" | "cyan";
+  title: string;
+  body: React.ReactNode;
+  confirmLabel: string;
+  onCancel: () => void;
+  onConfirm: () => void | Promise<void>;
+}) {
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
+  if (!open || !mounted || typeof document === "undefined") return null;
+  const accentBgIcon = accent === "rose" ? "bg-rose-500/15 text-rose-400" : "bg-cyan-500/15 text-cyan-400";
+  const accentBtn =
+    accent === "rose"
+      ? "bg-rose-500 hover:bg-rose-500/90 text-white"
+      : "bg-cyan-500 hover:bg-cyan-500/90 text-white";
+  // Portal to <body> so a transformed/scrolled ancestor doesn't pull the
+  // overlay off-center.
+  return createPortal(
+    <div
+      onClick={onCancel}
+      className="fixed inset-0 z-[300] grid place-items-center bg-black/60 backdrop-blur-sm p-4 animate-in fade-in"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm rounded-3xl glass-strong border border-border/60 p-5 shadow-floating animate-in zoom-in-95"
+      >
+        <div className={`mx-auto mb-2 size-12 rounded-2xl grid place-items-center ${accentBgIcon}`}>
+          {icon}
+        </div>
+        <h3 className="text-center text-base font-semibold">{title}</h3>
+        <div className="text-center text-xs text-muted-foreground mt-1 px-2">{body}</div>
+        <div className="flex gap-2 mt-4">
+          <Button variant="ghost" onClick={onCancel} className="flex-1">
+            Cancel
+          </Button>
+          <Button onClick={() => void onConfirm()} className={`flex-1 ${accentBtn}`}>
+            {confirmLabel}
+          </Button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+/** Minimal "Report this chat" dialog — captures a reason locally and shows
+ *  an in-app confirmation. Persisting the report to a moderation queue is
+ *  out of scope here. */
+function ReportDialog({
+  open,
+  onClose,
+  chatName
+}: {
+  open: boolean;
+  onClose: () => void;
+  chatName: string;
+}) {
+  const t = useT();
+  const [reason, setReason] = React.useState("");
+  const [sent, setSent] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!open) {
+      setReason("");
+      setSent(false);
+    }
+  }, [open]);
+
+  const submit = () => {
+    if (!reason.trim()) return;
+    // For now: just acknowledge locally. When a moderation pipeline exists,
+    // POST to it here.
+    console.info("[report]", { chat: chatName, reason: reason.trim() });
+    setSent(true);
+    window.setTimeout(() => onClose(), 1400);
+  };
+
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
+  if (!open || !mounted || typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-[300] grid place-items-center bg-black/60 backdrop-blur-sm p-4"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm rounded-3xl glass-strong border border-border/60 p-5 shadow-floating"
+      >
+        <div className="mx-auto mb-2 size-12 rounded-2xl bg-rose-500/15 text-rose-400 grid place-items-center">
+          <Flag className="size-5" />
+        </div>
+        <h3 className="text-center text-base font-semibold">{t("Report chat")}</h3>
+        <p className="text-center text-xs text-muted-foreground mt-1">
+          {t("Tell us what's wrong with")} <strong>{chatName}</strong>.
+        </p>
+        {sent ? (
+          <p className="text-center text-sm mt-4 text-emerald-400">
+            {t("Thanks — your report has been sent.")}
+          </p>
+        ) : (
+          <>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={3}
+              placeholder={t("What happened?")}
+              className="w-full rounded-2xl glass-subtle px-4 py-3 text-sm outline-none resize-none mt-4 focus:ring-2 focus:ring-rose-400/60"
+              autoFocus
+            />
+            <div className="flex gap-2 mt-3">
+              <Button variant="ghost" onClick={onClose} className="flex-1">
+                {t("Cancel")}
+              </Button>
+              <Button
+                onClick={submit}
+                disabled={!reason.trim()}
+                className="flex-1 bg-rose-500 hover:bg-rose-500/90 text-white"
+              >
+                {t("Submit")}
+              </Button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>,
+    document.body
+  );
+}
+
+function ConfirmChatDeletionDialog({
+  open,
+  chatName,
+  onClose,
+  onConfirm
+}: {
+  open: boolean;
+  chatName: string;
+  onClose: () => void;
+  onConfirm: () => void | Promise<void>;
+}) {
+  const t = useT();
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
+  if (!open || !mounted || typeof document === "undefined") return null;
+  return createPortal(
+    <div
+      onClick={onClose}
+      className="fixed inset-0 z-[300] grid place-items-center bg-black/60 backdrop-blur-sm p-4"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm rounded-3xl glass-strong border border-border/60 p-5 shadow-floating"
+      >
+        <div className="mx-auto mb-2 size-12 rounded-2xl bg-rose-500/15 text-rose-400 grid place-items-center">
+          <Trash2 className="size-5" />
+        </div>
+        <h3 className="text-center text-base font-semibold">{t("Delete chat?")}</h3>
+        <p className="text-center text-xs text-muted-foreground mt-1 px-2">
+          {t("This permanently removes")} <strong>{chatName}</strong>{" "}
+          {t("and every message inside it for everyone. This can't be undone.")}
+        </p>
+        <div className="flex gap-2 mt-4">
+          <Button variant="ghost" onClick={onClose} className="flex-1">
+            {t("Cancel")}
+          </Button>
+          <Button
+            onClick={() => void onConfirm()}
+            className="flex-1 bg-rose-500 hover:bg-rose-500/90 text-white"
+          >
+            {t("Delete chat")}
+          </Button>
+        </div>
+      </div>
+    </div>,
+    document.body
   );
 }
 

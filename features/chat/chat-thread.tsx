@@ -17,22 +17,48 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { ImageLightboxProvider } from "./image-lightbox";
 import type { Chat, Message } from "@/types";
 import { motion } from "framer-motion";
+import { Ban, ChevronLeft, Lock } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { useT } from "@/lib/i18n";
+import { useAuthStore } from "@/store/use-auth-store";
+import { useRouter } from "next/navigation";
 
 const EMPTY_MESSAGES: Message[] = [];
 
 export function ChatThread({ chat }: { chat: Chat }) {
+  const t = useT();
   const messages = useChatStore((s) => s.messages[chat.id] ?? EMPTY_MESSAGES);
   const markRead = useChatStore((s) => s.markRead);
   const send = useChatStore((s) => s.sendMessage);
   const sendVoice = useChatStore((s) => s.sendVoice);
   const sendAttachment = useChatStore((s) => s.sendAttachment);
+  const blockedIds = useChatStore((s) => s.blockedIds);
+  const unblockUser = useChatStore((s) => s.unblockUser);
+  const meId = useAuthStore((s) => s.user?.id);
+  // DM: figure out the other party. When they're in our blocked list the
+  // overlay covers the thread with an Unblock button.
+  const otherMemberId =
+    chat.type === "dm" ? chat.memberIds?.find((id) => id !== meId) : undefined;
+  const isBlocked = !!(
+    chat.type === "dm" &&
+    otherMemberId &&
+    blockedIds.includes(otherMemberId)
+  );
 
-  // Sync state on mount or chat change
+  // Sync state on mount or chat change — but NOT for chats where I've
+  // blocked the other party. WhatsApp-style: their outgoing messages stay
+  // at single-tick (sent) on their end because I never read them.
   useEffect(() => {
-    if (chat.id) {
-      markRead(chat.id);
+    if (!chat.id) return;
+    if (
+      chat.type === "dm" &&
+      chat.memberIds?.find((id) => id !== meId) &&
+      blockedIds.includes(chat.memberIds.find((id) => id !== meId) as string)
+    ) {
+      return;
     }
-  }, [chat.id, markRead]);
+    markRead(chat.id);
+  }, [chat.id, chat.type, chat.memberIds, markRead, blockedIds, meId]);
   const overrideThemeId = useChatThemeStore((s) => s.byChat[chat.id]);
   const overrideCustomBg = useChatThemeStore((s) => s.customBgByChat[chat.id]);
   const globalThemeId = useChatThemeStore((s) => s.globalTheme);
@@ -83,9 +109,16 @@ export function ChatThread({ chat }: { chat: Chat }) {
   // When the search has a non-empty query, narrow the list to messages whose
   // content (or attachment names) contain it. Matches are case-insensitive.
   const visibleMessages = React.useMemo(() => {
+    // Always hide legacy "Disappearing messages turned …" system entries —
+    // the state is now shown by the sticky banner above the thread, so the
+    // old inline bubbles would just duplicate the info.
+    const baseList = messages.filter((m) => {
+      if (m.kind !== "system") return true;
+      return !/^disappearing messages turned/i.test(m.content ?? "");
+    });
     const q = (search ?? "").trim().toLowerCase();
-    if (!q) return messages;
-    return messages.filter((m) => {
+    if (!q) return baseList;
+    return baseList.filter((m) => {
       if (m.kind === "system") return false;
       const haystack =
         (m.content ?? "") +
@@ -140,6 +173,7 @@ export function ChatThread({ chat }: { chat: Chat }) {
           </div>
         )}
         <PinnedBar pinned={pinned?.content} />
+        <DisappearingBanner seconds={chat.disappearingSeconds ?? null} />
 
         <ScrollArea className="flex-1 px-3 md:px-6 py-4 scroll-fade-y" key={theme}>
           <div className="mx-auto w-full max-w-[min(100%,1200px)] space-y-4">
@@ -183,31 +217,125 @@ export function ChatThread({ chat }: { chat: Chat }) {
           </div>
         </ScrollArea>
 
-        <MessageInput
-          chatId={chat.id}
-          onSend={(text) => send(chat.id, text)}
-          onSendVoice={(durationSec, waveform, audioBlob) =>
-            sendVoice(chat.id, durationSec, waveform, audioBlob)
-          }
-          onSendAttachment={(payload) => sendAttachment(chat.id, payload)}
-          onPickerToggle={(picking) => {
-            setPickerOpen(picking);
-            // Desktop popover floats above the composer and doesn't cover the
-            // messages, so there's nothing to scroll past — leave the list put.
-            if (!picking || isDesktop) return;
-            // Mobile only — wait for the padding-bottom transition to expand
-            // the scroll area, then scroll the latest bubble to the new
-            // visible bottom (just above the picker).
-            window.setTimeout(() => {
-              endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-            }, 50);
-          }}
-          themeBubbleMe={themeObj.bubbleMe}
-          themeAccent={themeObj.accent}
-        />
+        {isBlocked ? (
+          <div className="px-4 py-3 border-t border-border/40 bg-background/40 backdrop-blur-xl flex items-center justify-center gap-3">
+            <Ban className="size-4 text-rose-400" />
+            <span className="text-sm text-muted-foreground">
+              {t("You blocked this contact")}
+            </span>
+            <Button
+              size="sm"
+              variant="glass"
+              onClick={() => {
+                if (otherMemberId) void unblockUser(otherMemberId);
+              }}
+              className="text-rose-400 border border-rose-400/40"
+            >
+              {t("Unblock")}
+            </Button>
+          </div>
+        ) : (
+          <MessageInput
+            chatId={chat.id}
+            onSend={(text) => send(chat.id, text)}
+            onSendVoice={(durationSec, waveform, audioBlob) =>
+              sendVoice(chat.id, durationSec, waveform, audioBlob)
+            }
+            onSendAttachment={(payload) => sendAttachment(chat.id, payload)}
+            onPickerToggle={(picking) => {
+              setPickerOpen(picking);
+              // Desktop popover floats above the composer and doesn't cover the
+              // messages, so there's nothing to scroll past — leave the list put.
+              if (!picking || isDesktop) return;
+              // Mobile only — wait for the padding-bottom transition to expand
+              // the scroll area, then scroll the latest bubble to the new
+              // visible bottom (just above the picker).
+              window.setTimeout(() => {
+                endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+              }, 50);
+            }}
+            themeBubbleMe={themeObj.bubbleMe}
+            themeAccent={themeObj.accent}
+          />
+        )}
       </div>
+      {isBlocked && (
+        <BlockedCenterOverlay
+          onUnblock={() => {
+            if (otherMemberId) void unblockUser(otherMemberId);
+          }}
+          name={chat.name}
+        />
+      )}
     </div>
     </ImageLightboxProvider>
+  );
+}
+
+/** Centered "blocked" card shown inside the chat thread area only — does
+ *  NOT cover the sidebar / chat list, so the user can navigate away normally.
+ *  Includes a Back button that routes to /chats for explicit dismissal. */
+function BlockedCenterOverlay({
+  name,
+  onUnblock
+}: {
+  name: string;
+  onUnblock: () => void;
+}) {
+  const t = useT();
+  const router = useRouter();
+  return (
+    <div className="absolute inset-0 z-[40] grid place-items-center bg-background/55 backdrop-blur-md p-4 animate-in fade-in">
+      <div className="w-full max-w-sm rounded-3xl glass-strong border border-border/60 p-6 shadow-floating animate-in zoom-in-95 text-center">
+        <div className="mx-auto mb-3 size-14 rounded-2xl bg-rose-500/15 text-rose-400 grid place-items-center">
+          <Ban className="size-6" />
+        </div>
+        <h3 className="text-base font-semibold">{t("You blocked this account")}</h3>
+        <p className="text-xs text-muted-foreground mt-1.5">
+          <strong>{name}</strong> {t("can't message you. Unblock to start chatting again.")}
+        </p>
+        <Button
+          onClick={onUnblock}
+          className="mt-5 w-full bg-rose-500 hover:bg-rose-500/90 text-white"
+        >
+          {t("Unblock")}
+        </Button>
+        {/* Only useful on mobile — desktop already shows the chat list in
+            the sidebar, so we hide the back link at lg and up. */}
+        <button
+          onClick={() => router.push("/chats")}
+          className="mt-3 inline-flex items-center justify-center gap-1 w-full text-xs text-muted-foreground hover:text-foreground transition lg:hidden"
+        >
+          <ChevronLeft className="size-3.5" />
+          {t("Back to chats")}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Sticky banner shown at the top of the thread when disappearing messages
+ *  are turned on for this chat. Mirrors WhatsApp's bar — single pill that
+ *  reflects the *current* state, instead of spamming a new system message
+ *  every time the setting changes. */
+function DisappearingBanner({ seconds }: { seconds: number | null }) {
+  const t = useT();
+  if (!seconds || seconds <= 0) return null;
+  const label =
+    seconds <= 24 * 3600
+      ? "24 hours"
+      : seconds <= 7 * 24 * 3600
+      ? "7 days"
+      : seconds <= 31 * 24 * 3600
+      ? "31 days"
+      : "90 days";
+  return (
+    <div className="px-4 py-1.5 grid place-items-center border-b border-border/40 bg-card/40 backdrop-blur">
+      <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground rounded-full px-3 py-1 glass-subtle">
+        <Lock className="size-3 text-cyan-400" />
+        {t("Disappearing messages")} · {t(label)}
+      </span>
+    </div>
   );
 }
 

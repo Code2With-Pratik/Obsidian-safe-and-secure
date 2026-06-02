@@ -53,6 +53,9 @@ export interface Chat {
   online?: boolean;
   /** ISO timestamp of the DM peer's last online presence, for "last seen at" */
   lastSeenAt?: string;
+  /** Number of seconds to keep messages before pg_cron auto-deletes them.
+   *  null / undefined / 0 = disappearing OFF (messages persist forever). */
+  disappearingSeconds?: number | null;
   encrypted?: boolean;
   color?: string;
   favorite?: boolean;
@@ -113,7 +116,7 @@ export interface Message {
     options: PollOption[];
     multi?: boolean;
   };
-  contacts?: { name: string; username?: string; avatar?: string }[];
+  contacts?: { id?: string; name: string; username?: string; avatar?: string; banner?: string; url?: string }[];
   location?: { lat: number; lng: number; live?: boolean };
   /** Story-reply context — when a user replies to someone's story from the
    *  viewer, the resulting DM carries a small thumbnail + caption of the
@@ -145,6 +148,9 @@ export interface Message {
   link?: { url: string; title: string; description?: string; image?: string };
   /** Optional schedule for delayed delivery — server delivers when due. */
   scheduleAt?: string;
+  /** True for messages produced by Forward — the bubble renders a small
+   *  "↪ Forwarded" tag above the content. */
+  forwarded?: boolean;
   status?: "sending" | "sent" | "delivered" | "read" | "scheduled";
 }
 

@@ -23,7 +23,9 @@ import {
   CalendarClock,
   Music as MusicIcon,
   Phone,
-  Video as VideoIcon
+  Video as VideoIcon,
+  Forward as ForwardIcon,
+  CheckCircle2
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -38,6 +40,7 @@ import { useT } from "@/lib/i18n";
 import { cn, copyText, formatTime, initials } from "@/lib/utils";
 import { ReactionPicker } from "./reaction-picker";
 import { DeleteMessageDialog } from "./delete-message-dialog";
+import { ForwardDialog } from "./forward-dialog";
 import { useImageLightbox } from "./image-lightbox";
 import { useChatStore } from "../../store/use-chat-store";
 import { useMessageSelectionStore } from "../../store/use-message-selection-store";
@@ -58,7 +61,9 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
   const me = message.authorId === user?.id;
   const chats = useChatStore((s) => s.chats);
   const chat = chats.find(c => c.id === message.chatId);
-  
+  const profileCache = useChatStore((s) => s.profiles[message.authorId]);
+  const ensureProfile = useChatStore((s) => s.ensureProfile);
+
   const [author, setAuthor] = React.useState<{ name: string; avatar?: string } | null>(null);
 
   React.useEffect(() => {
@@ -67,21 +72,40 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
       return;
     }
 
-    // Try to find author in local users first
+    // 1. Profile cache (real Supabase users, populated by fetchChats /
+    //    ensureProfile / realtime). This is what makes group bubbles show
+    //    the correct avatar + name.
+    if (profileCache) {
+      setAuthor({
+        name: profileCache.name || profileCache.username || "User",
+        avatar: profileCache.avatar
+      });
+      return;
+    }
+
+    // 2. Mock seed users (for dev fixtures).
     const localUser = users.find((u) => u.id === message.authorId);
     if (localUser) {
       setAuthor({ name: localUser.name, avatar: localUser.avatar });
       return;
     }
 
-    // Otherwise, it might be the other person in a DM
+    // 3. DM fallback — the chat's own name/avatar is the peer.
     if (chat?.type === 'dm' && chat.name) {
       setAuthor({ name: chat.name, avatar: chat.avatar });
     }
-  }, [me, user, message.authorId, chat]);
+
+    // 4. Otherwise lazy-fetch from Supabase so the next render has a real
+    //    name + avatar to show.
+    if (message.authorId) {
+      void ensureProfile(message.authorId);
+    }
+  }, [me, user, message.authorId, chat, profileCache, ensureProfile]);
 
   const toggleReaction = useChatStore((s) => s.toggleReaction);
   const pinMessage = useChatStore((s) => s.pinMessage);
+  const setReplyTarget = useChatStore((s) => s.setReplyTarget);
+  const [forwardOpen, setForwardOpen] = React.useState(false);
   const removeMessages = useChatStore((s) => s.removeMessages);
   const hideMessages = useChatStore((s) => s.hideMessages);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
@@ -125,8 +149,10 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
       onHoverStart={() => setShowActions(true)}
       onHoverEnd={() => setShowActions(false)}
       onClick={handleBubbleClick}
+      // Anchor for reply-context "scroll to source" jumps.
+      data-message-id={message.id}
       className={cn(
-        "group relative flex gap-2 rounded-2xl transition-colors",
+        "group relative flex gap-2 rounded-2xl transition-colors w-full",
         me && "flex-row-reverse",
         selectionActive && "cursor-pointer pl-9 py-1",
         isSelected && "bg-cyan-400/20 ring-1 ring-cyan-400/60 shadow-[0_0_0_2px_rgba(34,211,238,0.08)]"
@@ -155,14 +181,49 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
           <AvatarFallback>{initials(author?.name)}</AvatarFallback>
         </Avatar>
       )}
-      <div className={cn("max-w-[78%] md:max-w-[68%] min-w-0 flex flex-col", me && "items-end")}>
+      <div
+        className={cn(
+          "min-w-0 flex flex-col",
+          // Profile-card bubbles need a wider column than text bubbles. Use
+          // an explicit `flex-1 w-full` (not just max-w) so the column
+          // actually CLAIMS the full row width — max-w alone collapses to
+          // intrinsic content size in a flex parent and the card looks tiny.
+          message.kind === "contact" && (message.contacts?.length ?? 0) === 1
+            ? "flex-1 w-full max-w-[16rem] md:max-w-[22rem]"
+            : "max-w-[78%] md:max-w-[68%]",
+          me && "items-end"
+        )}
+      >
         {!me && (
           <div className="text-[11px] font-medium text-muted-foreground mb-1 ml-1">
             {author?.name ?? "User"}
           </div>
         )}
+        {message.forwarded && (
+          <div
+            className={cn(
+              "inline-flex items-center gap-1 text-[11px] italic opacity-70 mb-0.5",
+              me ? "self-end mr-1" : "self-start ml-1"
+            )}
+          >
+            <ForwardIcon className="size-3" />
+            Forwarded
+          </div>
+        )}
 
-        <div className={cn("relative w-fit", me && "ml-auto self-end")}>
+        <div
+          className={cn(
+            "relative",
+            // Profile-card bubbles need to fill the column so the landscape
+            // hero layout has room to grow. All other bubbles keep `w-fit`
+            // so they hug their content (the bubble shape is what you'd
+            // expect for a text / image / voice message).
+            message.kind === "contact" && (message.contacts?.length ?? 0) === 1
+              ? "w-full"
+              : "w-fit",
+            me && "ml-auto self-end"
+          )}
+        >
           <BubbleBody
             me={me}
             message={message}
@@ -256,7 +317,11 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
             <Smile className="size-3.5" />
           </button>
         </ReactionPicker>
-        <button className="size-6 grid place-items-center rounded-full hover:bg-foreground/10">
+        <button
+          onClick={() => setReplyTarget(message.chatId, message.id)}
+          aria-label="Reply"
+          className="size-6 grid place-items-center rounded-full hover:bg-foreground/10"
+        >
           <Reply className="size-3.5" />
         </button>
         <button
@@ -285,6 +350,14 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
               <CopyIcon />
               Copy
             </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setReplyTarget(message.chatId, message.id)}>
+              <Reply />
+              Reply
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => setForwardOpen(true)}>
+              <ForwardIcon />
+              Forward
+            </DropdownMenuItem>
             <DropdownMenuItem onSelect={handleDelete} className="!text-red-400 focus:!text-red-300">
               <Trash2 />
               Delete
@@ -307,7 +380,92 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
           setDeleteOpen(false);
         }}
       />
+
+      <ForwardDialog
+        open={forwardOpen}
+        onClose={() => setForwardOpen(false)}
+        messageIds={[message.id]}
+      />
     </motion.div>
+  );
+}
+
+/** Renders a compact preview of the message this bubble is replying to —
+ *  small accent strip + author name + truncated snippet. Looks up the source
+ *  message in local state so it works for both my-side and recipient-side
+ *  views as long as that source is loaded. */
+function ReplyContext({
+  me,
+  chatId,
+  replyTo
+}: {
+  me: boolean;
+  chatId: string;
+  replyTo: string;
+}) {
+  const messages = useChatStore((s) => s.messages);
+  const source = (messages[chatId] || []).find((m) => m.id === replyTo);
+  if (!source) return null;
+  const author = users.find((u) => u.id === source.authorId);
+  const snippet = (() => {
+    if (source.content) return source.content;
+    switch (source.kind) {
+      case "image":
+        return "📷 Photo";
+      case "video":
+        return "🎬 Video";
+      case "voice":
+        return "🎙️ Voice note";
+      case "audio":
+        return "🎵 Audio";
+      case "file":
+        return "📎 File";
+      case "sticker":
+        return "Sticker";
+      case "gif":
+        return "GIF";
+      case "poll":
+        return "📊 Poll";
+      case "location":
+        return "📍 Location";
+      case "contact":
+        return "👤 Contact";
+      default:
+        return "Message";
+    }
+  })();
+  // Tap → scroll the original bubble into view and highlight it briefly so
+  // the user can see what's being referenced (WhatsApp behavior).
+  const onJump = () => {
+    if (typeof document === "undefined") return;
+    const el = document.querySelector(
+      `[data-message-id="${replyTo}"]`
+    ) as HTMLElement | null;
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("ring-2", "ring-cyan-400/70", "transition", "duration-500");
+    window.setTimeout(() => {
+      el.classList.remove("ring-2", "ring-cyan-400/70");
+    }, 1200);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={onJump}
+      className={cn(
+        "flex items-stretch gap-2 rounded-2xl pl-1.5 pr-3 py-1.5 max-w-full text-left hover:opacity-90 transition",
+        me ? "self-end bg-white/10" : "self-start glass border border-border/60"
+      )}
+    >
+      <span className="w-[3px] rounded-full bg-cyan-400 shrink-0" />
+      <div className="min-w-0 flex-1">
+        <p className="text-[11px] font-medium text-cyan-400 truncate">
+          {author?.name || "User"}
+        </p>
+        <p className="text-[11px] opacity-70 truncate">{snippet}</p>
+      </div>
+    </button>
   );
 }
 
@@ -449,6 +607,7 @@ function BubbleBody({
 
   return (
     <div className="flex flex-col gap-1.5 max-w-full">
+      {message.replyTo && <ReplyContext me={me} chatId={message.chatId} replyTo={message.replyTo} />}
       {message.storyReply && (
         <div
           className={cn(
@@ -690,24 +849,47 @@ function VoiceBubble({
   meStyle,
   bubbleMe,
   durationSec,
-  waveform
+  waveform,
+  url
 }: {
   me: boolean;
   meStyle: React.CSSProperties;
   bubbleMe?: string;
   durationSec: number;
   waveform: number[];
+  url?: string;
 }) {
   const [playing, setPlaying] = React.useState(false);
   const [progress, setProgress] = React.useState(0); // 0..1
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
   const rafRef = React.useRef<number | null>(null);
   const startedAtRef = React.useRef<number>(0);
   const offsetRef = React.useRef<number>(0); // resume position 0..1
+
+  // Lazily create the <audio> element on first play so SSR doesn't ship one
+  // per bubble, and so reload doesn't auto-fetch every voice note on the page.
+  const getAudio = React.useCallback(() => {
+    if (!url) return null;
+    if (!audioRef.current) {
+      const el = new Audio(url);
+      el.preload = "metadata";
+      el.addEventListener("ended", () => {
+        setPlaying(false);
+        setProgress(1);
+        offsetRef.current = 0;
+      });
+      audioRef.current = el;
+    }
+    return audioRef.current;
+  }, [url]);
 
   const stop = React.useCallback(() => {
     if (rafRef.current != null) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
+    }
+    if (audioRef.current && !audioRef.current.paused) {
+      audioRef.current.pause();
     }
     setPlaying(false);
   }, []);
@@ -724,9 +906,44 @@ function VoiceBubble({
       offsetRef.current = 0;
       setProgress(0);
     }
+
+    const total = durationSec * 1000;
+    const audio = getAudio();
+    if (audio) {
+      // Real audio source — drive progress off the audio element's currentTime
+      // so the waveform and the actual playback stay in lockstep.
+      audio.currentTime = offsetRef.current * durationSec;
+      audio.play().catch((err) => {
+        if (err?.name === "AbortError") return;
+        console.error("[VoiceBubble] play failed", {
+          url,
+          message: err?.message
+        });
+      });
+      setPlaying(true);
+      const tick = () => {
+        const cur = audio.currentTime;
+        const p = Math.min(1, durationSec > 0 ? cur / durationSec : 0);
+        setProgress(p);
+        if (audio.paused || audio.ended) {
+          if (audio.ended) {
+            offsetRef.current = 0;
+            setProgress(1);
+          }
+          setPlaying(false);
+          return;
+        }
+        rafRef.current = requestAnimationFrame(tick);
+      };
+      rafRef.current = requestAnimationFrame(tick);
+      return;
+    }
+
+    // Fallback when no audio URL is attached (legacy messages from before
+    // the upload wiring landed) — just animate the bars off the duration so
+    // the bubble still looks alive.
     startedAtRef.current = performance.now();
     setPlaying(true);
-    const total = durationSec * 1000;
     const tick = () => {
       const elapsed = performance.now() - startedAtRef.current;
       const p = Math.min(1, offsetRef.current + elapsed / total);
@@ -1161,8 +1378,116 @@ function PollBubble({ me, bubbleMe, meStyle, message }: SubProps) {
   );
 }
 
-/** Shared contact card(s). */
+/** Vertical hero-style profile card sent by the Share-profile sheet. Wider
+ *  than a normal bubble so the banner has room to breathe; tapping "View
+ *  profile" opens a DM with that user when the payload carries an `id`,
+ *  and falls back to the public profile URL otherwise. */
+function ProfileCardBubble({
+  me,
+  contact,
+  bannerStyle
+}: {
+  me: boolean;
+  contact: {
+    id?: string;
+    name: string;
+    username?: string;
+    avatar?: string;
+    banner?: string;
+    url?: string;
+  };
+  bannerStyle: React.CSSProperties;
+}) {
+  const router = useRouter();
+  const startDM = useChatStore((s) => s.startDM);
+
+  const startChat = async () => {
+    if (!contact.id) return;
+    const result = await startDM(contact.id);
+    const chatId = result.data?.id;
+    if (chatId) router.push(`/chats/${chatId}`);
+  };
+
+  const openProfile = () => {
+    if (contact.url) {
+      window.open(contact.url, "_blank", "noopener,noreferrer");
+    } else if (contact.username) {
+      window.open(`/profile/${contact.username}`, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  return (
+    <div
+      className={cn(
+        // Take the full bubble column (the parent already opens it up for
+        // profile-card kind). Flat vertical proportions so the card reads
+        // as a landscape rectangle, not a tall column.
+        "rounded-2xl overflow-hidden w-full",
+        "glass glass-specular border border-border/60",
+        me ? "rounded-br-none" : "rounded-bl-none"
+      )}
+    >
+      {/* Whole hero area (banner + avatar + name + handle) is a single
+          tappable target that starts a DM with the shared user. */}
+      <button
+        type="button"
+        onClick={() => void startChat()}
+        className="block w-full text-left hover:bg-foreground/[0.03] transition"
+      >
+        <div className="relative h-32 w-full" style={bannerStyle}>
+          <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/0 to-black/30" />
+        </div>
+        <div className="px-5 pt-0 pb-2 -mt-12 flex flex-col items-center text-center">
+          <Avatar className="size-24 ring-4 ring-background shadow-floating">
+            <AvatarImage src={contact.avatar} />
+            <AvatarFallback className="text-xl">{initials(contact.name)}</AvatarFallback>
+          </Avatar>
+          <p className="mt-1 text-base font-semibold truncate max-w-full text-foreground inline-flex items-center justify-center gap-1.5">
+            {contact.name}
+            <CheckCircle2 className="size-4 text-cyan-400 shrink-0" aria-label="Verified" />
+          </p>
+          {contact.username && (
+            <p className="text-xs text-muted-foreground truncate max-w-full">
+              @{contact.username}
+            </p>
+          )}
+        </div>
+      </button>
+      <button
+        type="button"
+        onClick={openProfile}
+        className="block w-full text-center text-xs font-medium py-1.5 border-t border-border/40 text-cyan-400 hover:bg-foreground/[0.04] transition"
+      >
+        View profile →
+      </button>
+    </div>
+  );
+}
+
+/** Shared contact / profile card. Single-entry cards with a `url` render
+ *  as a vertical profile card (avatar + name + handle + "View profile"
+ *  link) — that's what the Share-profile sheet sends. Multi-entry phonebook
+ *  shares fall back to the original compact list layout. */
 function ContactsBubble({ me, bubbleMe, meStyle, message }: SubProps) {
+  const contacts = message.contacts ?? [];
+  const single = contacts.length === 1 ? contacts[0] : null;
+
+  if (single && single.url) {
+    // Profile-card layout: banner strip → avatar overlapping the banner
+    // edge → name + handle → tappable "View profile" footer. Glass-styled
+    // on BOTH sides so it reads identically in light + dark.
+    const bannerStyle: React.CSSProperties = single.banner
+      ? {
+          background: `url("${single.banner}") center/cover no-repeat`
+        }
+      : {
+          background: "linear-gradient(135deg,#8B5CF6,#EC4899)"
+        };
+    return (
+      <ProfileCardBubble me={me} contact={single} bannerStyle={bannerStyle} />
+    );
+  }
+
   return (
     <div
       style={me ? meStyle : undefined}
@@ -1173,7 +1498,7 @@ function ContactsBubble({ me, bubbleMe, meStyle, message }: SubProps) {
           : "rounded-bl-none glass border border-border/60"
       )}
     >
-      {(message.contacts ?? []).map((c, i) => (
+      {contacts.map((c, i) => (
         <div key={`${c.username ?? c.name}-${i}`} className="flex items-center gap-3">
           <Avatar className="size-10 shrink-0">
             <AvatarImage src={c.avatar} />

@@ -57,6 +57,13 @@ export function MessageInput({
   const t = useT();
   const setTyping = useChatStore((s) => s.setTyping);
   const uploadAttachment = useChatStore((s) => s.uploadAttachment);
+  const replyTo = useChatStore((s) => s.replyTargets[chatId] ?? null);
+  const setReplyTarget = useChatStore((s) => s.setReplyTarget);
+  const messagesForChat = useChatStore((s) => s.messages[chatId]);
+  const replySource = React.useMemo(() => {
+    if (!replyTo) return null;
+    return (messagesForChat || []).find((m) => m.id === replyTo) || null;
+  }, [messagesForChat, replyTo]);
   const [text, setText] = React.useState("");
   const [showAi, setShowAi] = React.useState(false);
 
@@ -573,6 +580,49 @@ export function MessageInput({
       )}
     >
       <AnimatePresence>
+        {replyTo && (
+          <motion.div
+            key="reply-pill"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 8 }}
+            className="mb-2 flex items-stretch gap-2 rounded-2xl pl-1.5 pr-2 py-1.5 glass border border-border/60"
+          >
+            <span className="w-[3px] rounded-full bg-cyan-400 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-medium text-cyan-400 truncate">
+                {t("Replying to")}{" "}
+                {(() => {
+                  if (!replySource) return "";
+                  // Author lookup falls back to "User" — chat-thread renders
+                  // member names elsewhere; here we just want a non-empty label.
+                  return replySource.authorId;
+                })()}
+              </p>
+              <p className="text-[11px] opacity-70 truncate">
+                {replySource?.content ||
+                  (replySource?.kind === "voice"
+                    ? "🎙️ Voice note"
+                    : replySource?.kind === "image"
+                    ? "📷 Photo"
+                    : replySource?.kind === "video"
+                    ? "🎬 Video"
+                    : replySource?.kind === "file"
+                    ? "📎 File"
+                    : replySource?.kind
+                    ? replySource.kind
+                    : "")}
+              </p>
+            </div>
+            <button
+              onClick={() => setReplyTarget(chatId, null)}
+              aria-label="Cancel reply"
+              className="size-6 grid place-items-center rounded-full hover:bg-foreground/10 text-muted-foreground"
+            >
+              ×
+            </button>
+          </motion.div>
+        )}
         {showAi && !hasText && !isVoiceMode && (
           <motion.div
             initial={{ opacity: 0, y: 8 }}

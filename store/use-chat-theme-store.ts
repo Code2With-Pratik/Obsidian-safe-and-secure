@@ -305,28 +305,62 @@ export const useChatThemeStore = create<State>()(
       globalTheme: "default",
       globalCustomBg: undefined,
       setTheme: (chatId, themeId) => {
-        // Optimistic local update — both participants get the same theme via
-        // the chats realtime UPDATE event once the DB write lands.
+        // Capture previous state for rollback if the DB write fails (most
+        // common cause: missing chats UPDATE RLS policy).
+        const prev = get().byChat[chatId];
         set((s) => ({ byChat: { ...s.byChat, [chatId]: themeId } }));
-        // Clear custom_bg unless the new theme IS custom (caller will pair
-        // setCustomBg with the choice in that case).
-        void supabase
-          .from("chats")
-          .update({
-            theme: themeId,
-            ...(themeId === CUSTOM_THEME_ID ? {} : { custom_bg: null })
-          })
-          .eq("id", chatId);
+        void (async () => {
+          const { error } = await supabase
+            .from("chats")
+            .update({
+              theme: themeId,
+              ...(themeId === CUSTOM_THEME_ID ? {} : { custom_bg: null })
+            })
+            .eq("id", chatId);
+          if (error) {
+            console.error("[setTheme] update failed — theme will revert on reload", {
+              message: (error as unknown as { message?: string }).message,
+              code: (error as unknown as { code?: string }).code,
+              hint: "Run supabase/APPLY_PENDING.sql section 13 to add the chats UPDATE policy."
+            });
+            set((s) => {
+              const nb = { ...s.byChat };
+              if (prev) nb[chatId] = prev;
+              else delete nb[chatId];
+              return { byChat: nb };
+            });
+          }
+        })();
       },
       setCustomBg: (chatId, image) => {
+        const prevTheme = get().byChat[chatId];
+        const prevBg = get().customBgByChat[chatId];
         set((s) => ({
           customBgByChat: { ...s.customBgByChat, [chatId]: image },
           byChat: { ...s.byChat, [chatId]: CUSTOM_THEME_ID }
         }));
-        void supabase
-          .from("chats")
-          .update({ theme: CUSTOM_THEME_ID, custom_bg: image })
-          .eq("id", chatId);
+        void (async () => {
+          const { error } = await supabase
+            .from("chats")
+            .update({ theme: CUSTOM_THEME_ID, custom_bg: image })
+            .eq("id", chatId);
+          if (error) {
+            console.error("[setCustomBg] update failed — wallpaper will revert on reload", {
+              message: (error as unknown as { message?: string }).message,
+              code: (error as unknown as { code?: string }).code,
+              hint: "Run supabase/APPLY_PENDING.sql section 13 to add the chats UPDATE policy."
+            });
+            set((s) => {
+              const nbg = { ...s.customBgByChat };
+              const nbc = { ...s.byChat };
+              if (prevBg) nbg[chatId] = prevBg;
+              else delete nbg[chatId];
+              if (prevTheme) nbc[chatId] = prevTheme;
+              else delete nbc[chatId];
+              return { customBgByChat: nbg, byChat: nbc };
+            });
+          }
+        })();
       },
       setGlobalTheme: (themeId) => set({ globalTheme: themeId }),
       setGlobalCustomBg: (image) =>

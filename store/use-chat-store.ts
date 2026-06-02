@@ -84,6 +84,21 @@ interface ChatState {
   onlineUsers: string[];
   /** UserIds I've blocked — DM rows from them are hidden in the chat list. */
   blockedIds: string[];
+  /** UserIds who have BLOCKED ME — used to filter the blocker's presence /
+   *  typing locally so the blocked user (me) sees them as offline + never
+   *  gets read receipts on outgoing messages (WhatsApp-style). */
+  blockedMeIds: string[];
+  /** Per-chat reply target — id of the message the user is currently replying
+   *  to. The composer reads this to render the quoted-preview pill, and
+   *  sendMessage / sendAttachment include it as `reply_to`. */
+  replyTargets: Record<string, string | null>;
+  /** Profile cache (id → minimal profile) so chat bubbles render the right
+   *  name + avatar without each bubble running its own Supabase fetch.
+   *  Populated by fetchChats and topped up by ensureProfile on cache miss. */
+  profiles: Record<string, { id: string; name?: string; username?: string; avatar?: string }>;
+  setReplyTarget: (chatId: string, messageId: string | null) => void;
+  forwardMessages: (sourceMessageIds: string[], targetChatIds: string[]) => Promise<void>;
+  ensureProfile: (userId: string) => Promise<void>;
 
   presenceChannel: RealtimeChannel | null;
   messageChannel: RealtimeChannel | null;
@@ -147,6 +162,10 @@ interface ChatState {
   pinChat: (chatId: string, pinned: boolean) => Promise<void>;
   muteChat: (chatId: string, muted: boolean) => Promise<void>;
   favouriteChat: (chatId: string, favorite: boolean) => Promise<void>;
+  /** Set the disappearing-messages window for a chat. Pass 0 / null to turn
+   *  off. Writes the column and inserts a system message so both sides see
+   *  the change in their thread. */
+  setDisappearingTimer: (chatId: string, seconds: number | null) => Promise<void>;
   clearChat: (chatId: string) => Promise<void>;
   removeChat: (chatId: string) => Promise<void>;
   fetchBlocked: () => Promise<void>;
@@ -179,6 +198,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
   typing: {},
   onlineUsers: [],
   blockedIds: [],
+  blockedMeIds: [],
+  replyTargets: {},
+  profiles: {},
 
   presenceChannel: null,
   messageChannel: null,
@@ -226,11 +248,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
         .on("presence", { event: "sync" }, () => {
           const state = channel.presenceState();
           const meId = useAuthStore.getState().user?.id;
+          // WhatsApp-style block visibility — anyone I've blocked OR who has
+          // blocked me should appear offline in my UI.
+          const hidden = new Set([...get().blockedIds, ...get().blockedMeIds]);
           const online: string[] = [];
           Object.values(state).forEach((presences) => {
             (presences as Array<Record<string, unknown>>).forEach((p) => {
               const uid = p.user_id as string | undefined;
               if (!uid || uid === meId) return;
+              if (hidden.has(uid)) return;
               online.push(uid);
             });
           });
@@ -264,6 +290,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
             | undefined;
           if (!p?.user_id || !p?.chat_id) return;
           if (p.user_id === me.id) return;
+          // Ignore typing from users I've blocked or who have blocked me —
+          // they're invisible on my screen (WhatsApp-style).
+          const blocked = get().blockedIds;
+          const blockedMe = get().blockedMeIds;
+          if (blocked.includes(p.user_id) || blockedMe.includes(p.user_id)) return;
           const userId = p.user_id;
           const chatId = p.chat_id;
           const prev = typingClearTimers.get(`${chatId}:${userId}`);
@@ -542,6 +573,29 @@ export const useChatStore = create<ChatState>((set, get) => ({
     );
     const { data: profiles } = await supabase.from("profiles").select("*").in("id", pIds);
     const pMap = new Map((profiles || []).map((p: { id: string }) => [p.id, p]));
+    // Stash everyone we just fetched into the profile cache so chat bubbles
+    // (especially in groups) can render their avatar + name without a second
+    // round-trip per author.
+    if (profiles && profiles.length > 0) {
+      const profileEntries = (profiles as Array<{
+        id: string;
+        name?: string;
+        username?: string;
+        avatar?: string;
+      }>).reduce<Record<string, { id: string; name?: string; username?: string; avatar?: string }>>(
+        (acc, p) => {
+          acc[p.id] = {
+            id: p.id,
+            name: p.name,
+            username: p.username,
+            avatar: p.avatar
+          };
+          return acc;
+        },
+        {}
+      );
+      set((s) => ({ profiles: { ...s.profiles, ...profileEntries } }));
+    }
 
     const formatted: Chat[] = userChats.map((c: Record<string, unknown>) => {
       const members = (c.members as Array<{
@@ -580,6 +634,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         pinned: mine?.pinned ?? false,
         muted: mine?.muted ?? false,
         favorite: mine?.favorite ?? false,
+        disappearingSeconds:
+          (c.disappearing_seconds as number | null | undefined) ?? null,
         lastSeenAt
       };
     });
@@ -719,6 +775,84 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }
   },
 
+  setReplyTarget: (chatId, messageId) => {
+    set((s) => ({ replyTargets: { ...s.replyTargets, [chatId]: messageId } }));
+  },
+
+  /** Fetch a profile from Supabase if it isn't already cached. Used by the
+   *  chat bubble to resolve real (non-mock) author names + avatars in
+   *  groups, where the bubble can't fall back to the chat's own name/avatar. */
+  ensureProfile: async (userId) => {
+    if (!userId) return;
+    if (get().profiles[userId]) return;
+    const { data } = await supabase
+      .from("profiles")
+      .select("id, name, username, avatar")
+      .eq("id", userId)
+      .single();
+    if (data) {
+      set((s) => ({ profiles: { ...s.profiles, [data.id]: data } }));
+    }
+  },
+
+  /** Forward an existing set of messages into one or more chats. Re-inserts
+   *  each source's kind / content / payload under the current user. */
+  forwardMessages: async (sourceMessageIds, targetChatIds) => {
+    const me = useAuthStore.getState().user;
+    if (!me || sourceMessageIds.length === 0 || targetChatIds.length === 0) return;
+    // Find each source in local state (it must be visible to be forwarded).
+    const sources: Message[] = [];
+    const state = get();
+    for (const id of sourceMessageIds) {
+      for (const cid of Object.keys(state.messages)) {
+        const m = state.messages[cid].find((x) => x.id === id);
+        if (m) {
+          sources.push(m);
+          break;
+        }
+      }
+    }
+    if (sources.length === 0) return;
+    // Build the insert rows. Payload reuses the existing rich fields.
+    const rows: Array<Record<string, unknown>> = [];
+    for (const target of targetChatIds) {
+      for (const src of sources) {
+        const payload: Record<string, unknown> = {};
+        if (src.media) payload.media = src.media;
+        if (src.audio) payload.audio = src.audio;
+        if (src.file) payload.file = src.file;
+        if (src.voice) payload.voice = src.voice;
+        if (src.sticker) payload.sticker = src.sticker;
+        if (src.gif) payload.gif = src.gif;
+        if (src.poll) payload.poll = src.poll;
+        if (src.contacts) payload.contacts = src.contacts;
+        if (src.location) payload.location = src.location;
+        if (src.link) payload.link = src.link;
+        // Mark the forwarded copy so the recipient's bubble can render the
+        // "↪ Forwarded" tag. Stored inside the JSONB payload (no schema
+        // change needed) and surfaced by rowToMessage's payload spread.
+        payload.forwarded = true;
+        rows.push({
+          chat_id: target,
+          author_id: me.id,
+          kind: src.kind,
+          content: src.content,
+          status: "sent",
+          payload,
+          client_id: newId()
+        });
+      }
+    }
+    const { error } = await supabase.from("messages").insert(rows);
+    if (error) {
+      console.error("[forwardMessages] insert failed", {
+        message: (error as unknown as { message?: string }).message,
+        targets: targetChatIds.length,
+        sources: sources.length
+      });
+    }
+  },
+
   /* ----- sending ----- */
 
   sendMessage: async (chatId, content) => {
@@ -726,6 +860,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!me) return;
     const cid = newId();
     const now = new Date().toISOString();
+    // Pull and clear the reply target up front so this send carries it and
+    // subsequent sends are fresh.
+    const replyTo = get().replyTargets[chatId] || null;
+    if (replyTo) {
+      set((s) => ({ replyTargets: { ...s.replyTargets, [chatId]: null } }));
+    }
     set((s) => ({
       messages: {
         ...s.messages,
@@ -738,21 +878,24 @@ export const useChatStore = create<ChatState>((set, get) => ({
             kind: "text",
             content,
             createdAt: now,
-            status: "sending"
+            status: "sending",
+            replyTo: replyTo || undefined
           }
         ]
       }
     }));
+    const insertRow: Record<string, unknown> = {
+      chat_id: chatId,
+      author_id: me.id,
+      kind: "text",
+      content,
+      status: "sent",
+      client_id: cid
+    };
+    if (replyTo) insertRow.reply_to = replyTo;
     const { data, error } = await supabase
       .from("messages")
-      .insert({
-        chat_id: chatId,
-        author_id: me.id,
-        kind: "text",
-        content,
-        status: "sent",
-        client_id: cid
-      })
+      .insert(insertRow)
       .select()
       .single();
     if (error || !data) {
@@ -955,6 +1098,12 @@ export const useChatStore = create<ChatState>((set, get) => ({
     };
     const cid = newId();
     const now = new Date().toISOString();
+    // Pull and clear the reply target up front so attachment sends thread off
+    // the message the user was replying to.
+    const replyTo = get().replyTargets[chatId] || null;
+    if (replyTo) {
+      set((s) => ({ replyTargets: { ...s.replyTargets, [chatId]: null } }));
+    }
     // If a future scheduleAt is set, hold the message at status='scheduled'.
     // pg_cron flips it to 'sent' when due (see migration 20260601160000).
     const isScheduled =
@@ -968,6 +1117,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       createdAt: now,
       status: isScheduled ? "scheduled" : "sending",
       scheduleAt: isScheduled ? scheduleAt : undefined,
+      replyTo: replyTo || undefined,
       ...rest
     } as Message;
     set((s) => ({
@@ -985,6 +1135,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
       payload: rest,
       client_id: cid
     };
+    if (replyTo) insertRow.reply_to = replyTo;
     if (isScheduled) insertRow.schedule_at = scheduleAt;
     const { data, error } = await supabase
       .from("messages")
@@ -1265,34 +1416,93 @@ export const useChatStore = create<ChatState>((set, get) => ({
   pinChat: async (chatId, pinned) => {
     const me = useAuthStore.getState().user;
     if (!me) return;
+    const prev = get().chats;
     set((s) => ({ chats: s.chats.map((c) => (c.id === chatId ? { ...c, pinned } : c)) }));
-    await supabase
+    const { error } = await supabase
       .from("chat_members")
       .update({ pinned })
       .eq("chat_id", chatId)
       .eq("user_id", me.id);
+    if (error) {
+      // Roll back so the UI matches the DB. The most common cause is the
+      // missing chat_members UPDATE RLS policy (re-run APPLY_PENDING.sql
+      // section 12 to install it).
+      console.error("[pinChat] update failed", {
+        message: (error as unknown as { message?: string }).message,
+        code: (error as unknown as { code?: string }).code,
+        hint: "Run supabase/APPLY_PENDING.sql section 12 to add the chat_members UPDATE policy."
+      });
+      set({ chats: prev });
+    }
   },
 
   muteChat: async (chatId, muted) => {
     const me = useAuthStore.getState().user;
     if (!me) return;
+    const prev = get().chats;
     set((s) => ({ chats: s.chats.map((c) => (c.id === chatId ? { ...c, muted } : c)) }));
-    await supabase
+    const { error } = await supabase
       .from("chat_members")
       .update({ muted })
       .eq("chat_id", chatId)
       .eq("user_id", me.id);
+    if (error) {
+      console.error("[muteChat] update failed", {
+        message: (error as unknown as { message?: string }).message,
+        code: (error as unknown as { code?: string }).code,
+        hint: "Run supabase/APPLY_PENDING.sql section 12 to add the chat_members UPDATE policy."
+      });
+      set({ chats: prev });
+    }
   },
 
   favouriteChat: async (chatId, favorite) => {
     const me = useAuthStore.getState().user;
     if (!me) return;
+    const prev = get().chats;
     set((s) => ({ chats: s.chats.map((c) => (c.id === chatId ? { ...c, favorite } : c)) }));
-    await supabase
+    const { error } = await supabase
       .from("chat_members")
       .update({ favorite })
       .eq("chat_id", chatId)
       .eq("user_id", me.id);
+    if (error) {
+      console.error("[favouriteChat] update failed", {
+        message: (error as unknown as { message?: string }).message,
+        code: (error as unknown as { code?: string }).code,
+        hint: "Run supabase/APPLY_PENDING.sql section 12 to add the chat_members UPDATE policy."
+      });
+      set({ chats: prev });
+    }
+  },
+
+  setDisappearingTimer: async (chatId, seconds) => {
+    const me = useAuthStore.getState().user;
+    if (!me) return;
+    const value = seconds && seconds > 0 ? seconds : null;
+    const prev = get().chats;
+    // Optimistic local update so the SettingRow flips instantly.
+    set((s) => ({
+      chats: s.chats.map((c) =>
+        c.id === chatId ? { ...c, disappearingSeconds: value } : c
+      )
+    }));
+    const { error } = await supabase
+      .from("chats")
+      .update({ disappearing_seconds: value })
+      .eq("id", chatId);
+    if (error) {
+      console.error("[setDisappearingTimer] update failed", {
+        message: (error as unknown as { message?: string }).message,
+        code: (error as unknown as { code?: string }).code,
+        hint:
+          "Run supabase/APPLY_PENDING.sql section 16 to add chats.disappearing_seconds + cron, and section 13 for the chats UPDATE policy."
+      });
+      set({ chats: prev });
+    }
+    // No system message — the state is reflected by a sticky banner at the
+    // top of the chat (`DisappearingBanner` in chat-thread). Both sides see
+    // it update live via the chats realtime channel.
   },
 
   clearChat: async (chatId) => {
@@ -1316,11 +1526,23 @@ export const useChatStore = create<ChatState>((set, get) => ({
   fetchBlocked: async () => {
     const me = useAuthStore.getState().user;
     if (!me) return;
-    const { data } = await supabase
-      .from("blocked_users")
-      .select("blocked_id")
-      .eq("blocker_id", me.id);
-    set({ blockedIds: (data || []).map((r: { blocked_id: string }) => r.blocked_id) });
+    const [outgoing, incoming] = await Promise.all([
+      supabase
+        .from("blocked_users")
+        .select("blocked_id")
+        .eq("blocker_id", me.id),
+      // Incoming blocks (users who have blocked ME) — requires the section
+      // 14 SELECT policy. Errors are non-fatal; we just default to "nobody
+      // has blocked me" so the rest of the UI still functions.
+      supabase
+        .from("blocked_users")
+        .select("blocker_id")
+        .eq("blocked_id", me.id)
+    ]);
+    set({
+      blockedIds: (outgoing.data || []).map((r: { blocked_id: string }) => r.blocked_id),
+      blockedMeIds: (incoming.data || []).map((r: { blocker_id: string }) => r.blocker_id)
+    });
   },
 
   blockUser: async (userId) => {
