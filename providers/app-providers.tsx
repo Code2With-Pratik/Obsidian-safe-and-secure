@@ -9,6 +9,7 @@ import { SettingsEffects } from "@/components/settings-effects";
 import { Toaster } from "@/components/ui/toaster";
 import { StoryLayer } from "@/components/stories/story-layer";
 import AuthListener from "@/components/auth-listener";
+import { IncomingCallModal } from "@/features/calls/incoming-call-modal";
 
 export function AppProviders({ children }: { children: React.ReactNode }) {
   return (
@@ -21,6 +22,7 @@ export function AppProviders({ children }: { children: React.ReactNode }) {
             <CommandPalette />
             <AIAssistant />
             <StoryLayer />
+            <IncomingCallModal />
           </Toaster>
         </SettingsEffects>
       </QueryProvider>
