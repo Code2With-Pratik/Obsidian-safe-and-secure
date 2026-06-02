@@ -17,7 +17,7 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { ImageLightboxProvider } from "./image-lightbox";
 import type { Chat, Message } from "@/types";
 import { motion } from "framer-motion";
-import { Ban, ChevronLeft } from "lucide-react";
+import { Ban, ChevronLeft, Lock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useT } from "@/lib/i18n";
 import { useAuthStore } from "@/store/use-auth-store";
@@ -109,9 +109,16 @@ export function ChatThread({ chat }: { chat: Chat }) {
   // When the search has a non-empty query, narrow the list to messages whose
   // content (or attachment names) contain it. Matches are case-insensitive.
   const visibleMessages = React.useMemo(() => {
+    // Always hide legacy "Disappearing messages turned …" system entries —
+    // the state is now shown by the sticky banner above the thread, so the
+    // old inline bubbles would just duplicate the info.
+    const baseList = messages.filter((m) => {
+      if (m.kind !== "system") return true;
+      return !/^disappearing messages turned/i.test(m.content ?? "");
+    });
     const q = (search ?? "").trim().toLowerCase();
-    if (!q) return messages;
-    return messages.filter((m) => {
+    if (!q) return baseList;
+    return baseList.filter((m) => {
       if (m.kind === "system") return false;
       const haystack =
         (m.content ?? "") +
@@ -166,6 +173,7 @@ export function ChatThread({ chat }: { chat: Chat }) {
           </div>
         )}
         <PinnedBar pinned={pinned?.content} />
+        <DisappearingBanner seconds={chat.disappearingSeconds ?? null} />
 
         <ScrollArea className="flex-1 px-3 md:px-6 py-4 scroll-fade-y" key={theme}>
           <div className="mx-auto w-full max-w-[min(100%,1200px)] space-y-4">
@@ -302,6 +310,31 @@ function BlockedCenterOverlay({
           {t("Back to chats")}
         </button>
       </div>
+    </div>
+  );
+}
+
+/** Sticky banner shown at the top of the thread when disappearing messages
+ *  are turned on for this chat. Mirrors WhatsApp's bar — single pill that
+ *  reflects the *current* state, instead of spamming a new system message
+ *  every time the setting changes. */
+function DisappearingBanner({ seconds }: { seconds: number | null }) {
+  const t = useT();
+  if (!seconds || seconds <= 0) return null;
+  const label =
+    seconds <= 24 * 3600
+      ? "24 hours"
+      : seconds <= 7 * 24 * 3600
+      ? "7 days"
+      : seconds <= 31 * 24 * 3600
+      ? "31 days"
+      : "90 days";
+  return (
+    <div className="px-4 py-1.5 grid place-items-center border-b border-border/40 bg-card/40 backdrop-blur">
+      <span className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground rounded-full px-3 py-1 glass-subtle">
+        <Lock className="size-3 text-cyan-400" />
+        {t("Disappearing messages")} · {t(label)}
+      </span>
     </div>
   );
 }

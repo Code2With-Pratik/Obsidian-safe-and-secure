@@ -53,6 +53,9 @@ export interface Chat {
   online?: boolean;
   /** ISO timestamp of the DM peer's last online presence, for "last seen at" */
   lastSeenAt?: string;
+  /** Number of seconds to keep messages before pg_cron auto-deletes them.
+   *  null / undefined / 0 = disappearing OFF (messages persist forever). */
+  disappearingSeconds?: number | null;
   encrypted?: boolean;
   color?: string;
   favorite?: boolean;

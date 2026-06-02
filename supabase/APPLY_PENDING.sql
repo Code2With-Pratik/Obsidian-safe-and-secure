@@ -412,4 +412,51 @@ CREATE POLICY "blocked_users_select_own_or_blocked" ON blocked_users
   FOR SELECT TO authenticated
   USING (blocker_id = auth.uid() OR blocked_id = auth.uid());
 
+-- ---------------------------------------------------------------------
+-- 15. profiles.created_at — drives the "Joined" line in the chat-details
+--     panel. Backfilled from auth.users.created_at where available; new
+--     rows default to NOW().
+-- ---------------------------------------------------------------------
+ALTER TABLE profiles
+  ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT NOW();
+
+UPDATE profiles p
+   SET created_at = u.created_at
+  FROM auth.users u
+ WHERE p.id = u.id
+   AND p.created_at IS DISTINCT FROM u.created_at
+   AND u.created_at IS NOT NULL;
+
+-- ---------------------------------------------------------------------
+-- 16. Disappearing messages — chats.disappearing_seconds (NULL = off)
+--     plus a pg_cron job that deletes every message older than the
+--     window. Triggered by the "Disappearing messages" row in the chat
+--     details panel; mirrors WhatsApp's behaviour.
+-- ---------------------------------------------------------------------
+ALTER TABLE chats
+  ADD COLUMN IF NOT EXISTS disappearing_seconds INTEGER;
+
+DO $$
+BEGIN
+  PERFORM cron.unschedule('cleanup-disappearing-messages')
+  WHERE EXISTS (
+    SELECT 1 FROM cron.job WHERE jobname = 'cleanup-disappearing-messages'
+  );
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END $$;
+
+SELECT cron.schedule(
+  'cleanup-disappearing-messages',
+  '*/5 * * * *',
+  $job$
+    DELETE FROM messages m
+     USING chats c
+     WHERE m.chat_id = c.id
+       AND c.disappearing_seconds IS NOT NULL
+       AND c.disappearing_seconds > 0
+       AND m.created_at < NOW() - (c.disappearing_seconds || ' seconds')::INTERVAL;
+  $job$
+);
+
 -- Done. Reload the app — the new columns/RPC/policies/jobs are now live.

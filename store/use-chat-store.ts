@@ -162,6 +162,10 @@ interface ChatState {
   pinChat: (chatId: string, pinned: boolean) => Promise<void>;
   muteChat: (chatId: string, muted: boolean) => Promise<void>;
   favouriteChat: (chatId: string, favorite: boolean) => Promise<void>;
+  /** Set the disappearing-messages window for a chat. Pass 0 / null to turn
+   *  off. Writes the column and inserts a system message so both sides see
+   *  the change in their thread. */
+  setDisappearingTimer: (chatId: string, seconds: number | null) => Promise<void>;
   clearChat: (chatId: string) => Promise<void>;
   removeChat: (chatId: string) => Promise<void>;
   fetchBlocked: () => Promise<void>;
@@ -630,6 +634,8 @@ export const useChatStore = create<ChatState>((set, get) => ({
         pinned: mine?.pinned ?? false,
         muted: mine?.muted ?? false,
         favorite: mine?.favorite ?? false,
+        disappearingSeconds:
+          (c.disappearing_seconds as number | null | undefined) ?? null,
         lastSeenAt
       };
     });
@@ -1468,6 +1474,35 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
       set({ chats: prev });
     }
+  },
+
+  setDisappearingTimer: async (chatId, seconds) => {
+    const me = useAuthStore.getState().user;
+    if (!me) return;
+    const value = seconds && seconds > 0 ? seconds : null;
+    const prev = get().chats;
+    // Optimistic local update so the SettingRow flips instantly.
+    set((s) => ({
+      chats: s.chats.map((c) =>
+        c.id === chatId ? { ...c, disappearingSeconds: value } : c
+      )
+    }));
+    const { error } = await supabase
+      .from("chats")
+      .update({ disappearing_seconds: value })
+      .eq("id", chatId);
+    if (error) {
+      console.error("[setDisappearingTimer] update failed", {
+        message: (error as unknown as { message?: string }).message,
+        code: (error as unknown as { code?: string }).code,
+        hint:
+          "Run supabase/APPLY_PENDING.sql section 16 to add chats.disappearing_seconds + cron, and section 13 for the chats UPDATE policy."
+      });
+      set({ chats: prev });
+    }
+    // No system message — the state is reflected by a sticky banner at the
+    // top of the chat (`DisappearingBanner` in chat-thread). Both sides see
+    // it update live via the chats realtime channel.
   },
 
   clearChat: async (chatId) => {

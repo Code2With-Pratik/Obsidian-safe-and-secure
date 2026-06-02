@@ -488,7 +488,7 @@ export function ChatHeader({
             <DropdownMenuSeparator />
 
             <DropdownMenuItem
-              className="text-rose-600 focus:text-rose-400"
+              className="!text-rose-500 hover:!text-rose-400 focus:!text-rose-400 dark:!text-rose-400 dark:hover:!text-rose-300 font-medium"
               onSelect={() => {
                 if (chat.type !== "dm" || !otherMemberId) return;
                 setBlockOpen(true);
@@ -498,14 +498,14 @@ export function ChatHeader({
               {t("Block contact")}
             </DropdownMenuItem>
             <DropdownMenuItem
-              className="text-rose-600 focus:text-rose-400"
+              className="!text-rose-500 hover:!text-rose-400 focus:!text-rose-400 dark:!text-rose-400 dark:hover:!text-rose-300 font-medium"
               onSelect={() => setReportOpen(true)}
             >
               <Flag />
               {t("Report")}
             </DropdownMenuItem>
             <DropdownMenuItem
-              className="text-rose-600 focus:text-rose-400"
+              className="!text-rose-500 hover:!text-rose-400 focus:!text-rose-400 dark:!text-rose-400 dark:hover:!text-rose-300 font-medium"
               onSelect={() => setDeleteChatOpen(true)}
             >
               <Trash2 />
