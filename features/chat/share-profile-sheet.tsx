@@ -209,6 +209,9 @@ export function ShareProfileSheet({
       kind: "contact" as const,
       contacts: [
         {
+          // Carry the user id so the recipient's "View profile" button can
+          // open a DM directly instead of bouncing through a profile URL.
+          id: profile.id,
           name: profile.name || profile.username || "User",
           username: profile.username,
           avatar: profile.avatar,

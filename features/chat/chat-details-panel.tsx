@@ -59,28 +59,6 @@ interface PartnerProfile {
   created_at?: string;
 }
 
-const photos = [
-  "https://images.unsplash.com/photo-1614624532983-4ce03382d63d?w=600&q=80",
-  "https://images.unsplash.com/photo-1635776062127-d379bfcba9f8?w=600&q=80",
-  "https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=600&q=80",
-  "https://images.unsplash.com/photo-1462331940025-496dfbfc7564?w=600&q=80",
-  "https://images.unsplash.com/photo-1534796636912-3b95b3ab5986?w=600&q=80",
-  "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?w=600&q=80"
-];
-
-// Mixed media set so the viewer can page across images, video, gif, pdf and
-// music. The demo carries no real binary assets, so video/pdf/music are shown
-// as rich preview surfaces inside the viewer.
-const mediaItems: MediaItem[] = [
-  { kind: "image", src: photos[0], title: "sunset-ridge.jpg", meta: "1.8 MB · today" },
-  { kind: "video", src: photos[2], poster: photos[2], title: "trailer-cut.mp4", meta: "0:42 · 12 MB" },
-  { kind: "gif", src: photos[1], title: "reaction.gif" },
-  { kind: "image", src: photos[3], title: "studio-light.jpg", meta: "2.1 MB · today" },
-  { kind: "pdf", src: "helios-spec-v1.pdf", title: "helios-spec-v1.pdf", meta: "2.4 MB · 14 pages" },
-  { kind: "music", src: "glass-cathedrals.mp3", title: "Glass Cathedrals", meta: "Obsidian FM · 3:24" },
-  { kind: "image", src: photos[4], title: "aurora.jpg", meta: "3.0 MB · yesterday" },
-  { kind: "image", src: photos[5], title: "neon-alley.jpg", meta: "1.4 MB · yesterday" }
-];
 
 export function ChatDetailsPanel({ chat }: { chat: Chat }) {
   const t = useT();
@@ -89,6 +67,103 @@ export function ChatDetailsPanel({ chat }: { chat: Chat }) {
   const favouriteChat = useChatStore((s) => s.favouriteChat);
   const muteChat = useChatStore((s) => s.muteChat);
   const setDisappearingTimer = useChatStore((s) => s.setDisappearingTimer);
+  const chatMessages = useChatStore((s) => s.messages[chat.id]);
+
+  // Derive the Media / Files / Links lists from real messages in this chat.
+  // Newest first so the panel always opens on the most recent content.
+  const { mediaItems: realMediaItems, files: realFiles, links: realLinks } =
+    React.useMemo(() => {
+      const media: MediaItem[] = [];
+      const files: Array<{
+        name: string;
+        url?: string;
+        size?: number;
+        mime?: string;
+        createdAt: string;
+      }> = [];
+      const links: Array<{
+        url: string;
+        title?: string;
+        description?: string;
+        image?: string;
+        createdAt: string;
+      }> = [];
+      const ordered = [...(chatMessages || [])].sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+      const urlRegex = /(https?:\/\/[^\s)<>"']+)/gi;
+      for (const m of ordered) {
+        if (m.kind === "image" && m.media?.length) {
+          for (const im of m.media) {
+            media.push({
+              kind: "image",
+              src: im.url,
+              title: im.alt || "image",
+              meta: new Date(m.createdAt).toLocaleString()
+            });
+          }
+        }
+        if (m.kind === "video" && m.media?.length) {
+          for (const v of m.media) {
+            media.push({
+              kind: "video",
+              src: v.url,
+              poster: v.url,
+              title: v.alt || "video",
+              meta: new Date(m.createdAt).toLocaleString()
+            });
+          }
+        }
+        if (m.kind === "gif" && m.gif?.src) {
+          media.push({
+            kind: "gif",
+            src: m.gif.src,
+            title: m.gif.alt || "gif"
+          });
+        }
+        if (m.kind === "audio" && m.audio) {
+          media.push({
+            kind: "music",
+            src: m.audio.url ?? "",
+            title: m.audio.name,
+            meta: m.audio.durationSec ? `${Math.round(m.audio.durationSec)}s` : ""
+          });
+        }
+        if (m.kind === "file" && m.file) {
+          files.push({
+            name: m.file.name,
+            url: m.file.url,
+            size: m.file.size,
+            mime: m.file.mime,
+            createdAt: m.createdAt
+          });
+        }
+        if (m.kind === "link" && m.link) {
+          links.push({
+            url: m.link.url,
+            title: m.link.title,
+            description: m.link.description,
+            image: m.link.image,
+            createdAt: m.createdAt
+          });
+        } else if (m.content) {
+          // Auto-extract any URLs from plain text messages so they show in
+          // the Links tab too — what the user expects from WhatsApp's
+          // "links shared in this chat".
+          const matches = m.content.match(urlRegex);
+          if (matches) {
+            for (const u of matches) {
+              if (!links.find((x) => x.url === u)) {
+                links.push({ url: u, createdAt: m.createdAt });
+              }
+            }
+          }
+        }
+      }
+      return { mediaItems: media, files, links };
+    }, [chatMessages]);
+
   const [muted, setMuted] = React.useState(!!chat.muted);
   const [disappearOpen, setDisappearOpen] = React.useState(false);
   // Keep the local toggle in sync if mute is flipped from another surface
@@ -145,9 +220,6 @@ export function ChatDetailsPanel({ chat }: { chat: Chat }) {
   );
   const openStoryPhoto = useStoriesStore((s) => s.openPhoto);
 
-  // Index of the first pdf in the combined media set — the Files tab opens the
-  // shared viewer here so pdf/music are reachable via the same prev/next strip.
-  const firstPdf = mediaItems.findIndex((m) => m.kind === "pdf");
 
   const body = (
     <>
@@ -192,10 +264,23 @@ export function ChatDetailsPanel({ chat }: { chat: Chat }) {
                 </Avatar>
               </button>
             )}
-            <h3 className="mt-3 text-lg font-semibold inline-flex items-center gap-1.5">
-              {displayName}
-              <CheckCircle2 className="size-4 text-cyan-400" aria-label="Verified" />
-            </h3>
+            {/* Name truly centered (3-col grid) with the pronouns chip sitting
+                just to its right — so the chip never pulls the name off
+                center. Spacer column on the left mirrors the chip column. */}
+            <div className="mt-3 grid grid-cols-[1fr_auto_1fr] items-center gap-2 w-full">
+              <span aria-hidden />
+              <h3 className="text-xl font-semibold inline-flex items-center gap-1.5 justify-center">
+                {displayName}
+                <CheckCircle2 className="size-[18px] text-cyan-400" aria-label="Verified" />
+              </h3>
+              <span className="justify-self-start min-w-0">
+                {partner?.pronouns && (
+                  <span className="inline-block text-[10px] font-medium text-muted-foreground px-1.5 py-0.5 rounded-full glass-subtle border border-border/60 whitespace-nowrap">
+                    {partner.pronouns}
+                  </span>
+                )}
+              </span>
+            </div>
             {partner?.username && (
               <p className="text-xs text-muted-foreground inline-flex items-center gap-0.5">
                 <AtSign className="size-3" />
@@ -213,21 +298,14 @@ export function ChatDetailsPanel({ chat }: { chat: Chat }) {
               </Badge>
             )}
 
-            {partner?.bio && (
-              <p className="text-xs text-muted-foreground mt-3 max-w-[22rem] whitespace-pre-line">
-                {partner.bio}
-              </p>
-            )}
+            {/* Bio — bumped to text-sm + collapsed by default with a
+                "Read more / Show less" toggle so long bios don't dominate
+                the header. */}
+            {partner?.bio && <BioBlock text={partner.bio} />}
 
-            {/* Pronouns · Location · Joined — only shows the lines we have
-                data for, keeps the header clean for groups without profiles. */}
-            {(partner?.pronouns || partner?.location || partner?.created_at) && (
+            {/* Location + Joined on their own row. */}
+            {(partner?.location || partner?.created_at) && (
               <div className="mt-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
-                {partner?.pronouns && (
-                  <span className="inline-flex items-center gap-1">
-                    <Users className="size-3" /> {partner.pronouns}
-                  </span>
-                )}
                 {partner?.location && (
                   <span className="inline-flex items-center gap-1">
                     <MapPin className="size-3" /> {partner.location}
@@ -245,10 +323,10 @@ export function ChatDetailsPanel({ chat }: { chat: Chat }) {
               </div>
             )}
 
-            {/* Links — clickable, opens in a new tab. */}
-            {partner?.links && (
-              <ProfileLinks links={partner.links} />
-            )}
+            {/* Profile links rendered as icon-only chips on a single row
+                (max 4 visible). Hover to see the URL in a tooltip, click
+                to open in a new tab. */}
+            {partner?.links && <ProfileLinkIcons links={partner.links} />}
 
             <div className="grid grid-cols-3 gap-2 w-full mt-5">
               <Button
@@ -325,76 +403,133 @@ export function ChatDetailsPanel({ chat }: { chat: Chat }) {
 
         <div className="mt-6">
           <Tabs defaultValue="media">
-            <TabsList className="w-full">
+            {/* Sticky so the tab bar stays visible when scrolling through a
+                long Media grid — and switching to a short Files / Links tab
+                doesn't auto-jump back to the top because the bar already
+                sits at the top of the viewport. */}
+            <TabsList className="w-full sticky top-0 z-10 backdrop-blur bg-background/85 border-b border-border/40">
               <TabsTrigger value="media" className="flex-1">{t("Media")}</TabsTrigger>
               <TabsTrigger value="files" className="flex-1">{t("Files")}</TabsTrigger>
               <TabsTrigger value="links" className="flex-1">{t("Links")}</TabsTrigger>
             </TabsList>
-            <TabsContent value="media" className="mt-3">
-              <div className="grid grid-cols-3 gap-1">
-                {mediaItems.map((m, i) => (
-                  <button
-                    key={i}
-                    onClick={() => setViewerIndex(i)}
-                    className="relative aspect-square w-full rounded-lg overflow-hidden group bg-foreground/5 grid place-items-center"
-                  >
-                    {m.kind === "image" || m.kind === "gif" || m.kind === "video" ? (
-                      <>
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                          src={m.poster ?? m.src}
-                          alt={m.title ?? ""}
-                          className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition"
-                        />
-                        {m.kind === "video" && (
-                          <span className="absolute inset-0 grid place-items-center bg-black/25 text-white">
-                            <Play className="size-5" />
-                          </span>
-                        )}
-                        {m.kind === "gif" && (
-                          <span className="absolute bottom-1 left-1 text-[8px] font-bold px-1 rounded bg-black/60 text-white">
-                            GIF
-                          </span>
-                        )}
-                      </>
-                    ) : m.kind === "pdf" ? (
-                      <FileText className="size-6 text-rose-400" />
-                    ) : (
-                      <MusicIcon className="size-6 text-cyan-400" />
-                    )}
-                  </button>
-                ))}
-              </div>
-            </TabsContent>
-            <TabsContent value="files" className="mt-3 space-y-2">
-              {[1, 2, 3].map((i) => (
-                <button
-                  key={i}
-                  onClick={() => firstPdf >= 0 && setViewerIndex(firstPdf)}
-                  className="w-full flex items-center gap-3 p-2 rounded-lg glass-subtle text-left hover:bg-foreground/[0.04] transition"
-                >
-                  <div className="size-9 rounded-lg bg-foreground/10 grid place-items-center">
-                    <FileText className="size-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium truncate">helios-spec-v{i}.pdf</p>
-                    <p className="text-[10px] text-muted-foreground">2.4 MB · today</p>
-                  </div>
-                </button>
-              ))}
-            </TabsContent>
-            <TabsContent value="links" className="mt-3 space-y-2">
-              {[1, 2].map((i) => (
-                <div key={i} className="flex items-center gap-3 p-2 rounded-lg glass-subtle">
-                  <div className="size-9 rounded-lg bg-foreground/10 grid place-items-center">
-                    <LinkIcon className="size-4" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium truncate">nova.fm/glass-cathedrals</p>
-                    <p className="text-[10px] text-muted-foreground">Shared by Kai</p>
-                  </div>
+            <TabsContent value="media" className="mt-3 min-h-[40vh]">
+              {realMediaItems.length === 0 ? (
+                <p className="py-6 text-center text-[11px] text-muted-foreground">
+                  {t("No media shared yet")}
+                </p>
+              ) : (
+                <div className="grid grid-cols-3 gap-1">
+                  {realMediaItems.map((m, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setViewerIndex(i)}
+                      className="relative aspect-square w-full rounded-lg overflow-hidden group bg-foreground/5 grid place-items-center"
+                      title={m.title}
+                    >
+                      {m.kind === "image" || m.kind === "gif" || m.kind === "video" ? (
+                        <>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={m.poster ?? m.src}
+                            alt={m.title ?? ""}
+                            className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition"
+                          />
+                          {m.kind === "video" && (
+                            <span className="absolute inset-0 grid place-items-center bg-black/25 text-white">
+                              <Play className="size-5" />
+                            </span>
+                          )}
+                          {m.kind === "gif" && (
+                            <span className="absolute bottom-1 left-1 text-[8px] font-bold px-1 rounded bg-black/60 text-white">
+                              GIF
+                            </span>
+                          )}
+                        </>
+                      ) : m.kind === "pdf" ? (
+                        <FileText className="size-6 text-rose-400" />
+                      ) : (
+                        <MusicIcon className="size-6 text-cyan-400" />
+                      )}
+                    </button>
+                  ))}
                 </div>
-              ))}
+              )}
+            </TabsContent>
+            <TabsContent value="files" className="mt-3 space-y-2 min-h-[40vh]">
+              {realFiles.length === 0 ? (
+                <p className="py-6 text-center text-[11px] text-muted-foreground">
+                  {t("No files shared yet")}
+                </p>
+              ) : (
+                realFiles.map((f, i) => {
+                  const sizeLabel = f.size
+                    ? `${(f.size / 1024 / 1024).toFixed(1)} MB`
+                    : "";
+                  const dateLabel = new Date(f.createdAt).toLocaleDateString();
+                  return (
+                    <a
+                      key={`${f.name}-${i}`}
+                      href={f.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="w-full flex items-center gap-3 p-2 rounded-lg glass-subtle text-left hover:bg-foreground/[0.04] transition"
+                    >
+                      <div className="size-9 rounded-lg bg-foreground/10 grid place-items-center">
+                        <FileText className="size-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium truncate">{f.name}</p>
+                        <p className="text-[10px] text-muted-foreground truncate">
+                          {[sizeLabel, dateLabel].filter(Boolean).join(" · ")}
+                        </p>
+                      </div>
+                    </a>
+                  );
+                })
+              )}
+            </TabsContent>
+            <TabsContent value="links" className="mt-3 space-y-2 min-h-[40vh]">
+              {realLinks.length === 0 ? (
+                <p className="py-6 text-center text-[11px] text-muted-foreground">
+                  {t("No links shared yet")}
+                </p>
+              ) : (
+                realLinks.map((l, i) => {
+                  const host = (() => {
+                    try {
+                      return new URL(l.url).hostname.replace(/^www\./, "");
+                    } catch {
+                      return l.url;
+                    }
+                  })();
+                  return (
+                    <a
+                      key={`${l.url}-${i}`}
+                      href={l.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-3 p-2 rounded-lg glass-subtle hover:bg-foreground/[0.04] transition"
+                    >
+                      <div className="size-9 rounded-lg bg-foreground/10 grid place-items-center overflow-hidden">
+                        {l.image ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img src={l.image} alt="" className="w-full h-full object-cover" />
+                        ) : (
+                          <LinkIcon className="size-4" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium truncate">
+                          {l.title || host}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground truncate">
+                          {l.title ? host : l.url}
+                        </p>
+                      </div>
+                    </a>
+                  );
+                })
+              )}
             </TabsContent>
           </Tabs>
         </div>
@@ -451,7 +586,7 @@ export function ChatDetailsPanel({ chat }: { chat: Chat }) {
           <div className="w-full h-full flex flex-col">{body}</div>
         </motion.aside>
         <MediaViewer
-          items={mediaItems}
+          items={realMediaItems}
           open={viewerIndex !== null}
           startIndex={viewerIndex ?? 0}
           onClose={() => setViewerIndex(null)}
@@ -462,21 +597,21 @@ export function ChatDetailsPanel({ chat }: { chat: Chat }) {
 
   // Desktop (xl+): docked panel that reflows the thread. Tween (not spring) on
   // width → the thread reflows smoothly without the overshoot/snap that made
-  // the chat input "shake". Inner content stays a fixed 340px and is revealed
+  // the chat input "shake". Inner content stays a fixed 380px and is revealed
   // via overflow-hidden, so nothing squishes.
   return (
     <>
       <motion.aside
         initial={{ width: 0, opacity: 0 }}
-        animate={{ width: 340, opacity: 1 }}
+        animate={{ width: 380, opacity: 1 }}
         exit={{ width: 0, opacity: 0 }}
         transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
         className="hidden xl:block shrink-0 overflow-hidden border-l border-border/40 bg-card/40 backdrop-blur-2xl"
       >
-        <div className="w-[340px] h-full flex flex-col">{body}</div>
+        <div className="w-[380px] h-full flex flex-col">{body}</div>
       </motion.aside>
       <MediaViewer
-        items={mediaItems}
+        items={realMediaItems}
         open={viewerIndex !== null}
         startIndex={viewerIndex ?? 0}
         onClose={() => setViewerIndex(null)}
@@ -594,10 +729,41 @@ function SettingRow({
   );
 }
 
-/** Renders the profile.links JSONB as a row of clickable chips. Known keys
- *  (website / github / twitter / spotify) get matching icons; anything else
- *  uses a generic link icon. Each chip opens in a new tab. */
-function ProfileLinks({
+/** Collapsed-by-default bio. When the bio is long enough we manually slice
+ *  it to ~two lines so the inline "Read more" sits at the very end of the
+ *  text (Twitter-style) instead of dropping to its own line under a
+ *  CSS-clamped paragraph. */
+function BioBlock({ text }: { text: string }) {
+  const t = useT();
+  const [expanded, setExpanded] = React.useState(false);
+  // ~110 chars renders as ~2 lines at text-[15px] inside the 380px panel.
+  // Tuned to match the user's reference screenshot.
+  const LIMIT = 110;
+  const needsToggle = text.length > LIMIT || text.includes("\n");
+  const collapsed = !expanded && needsToggle;
+  const shown = collapsed ? text.slice(0, LIMIT).trimEnd() + "… " : text;
+  return (
+    <div className="mt-3 max-w-[22rem]">
+      <p className="text-[15px] leading-relaxed text-muted-foreground whitespace-pre-line text-center">
+        {shown}
+        {needsToggle && (
+          <button
+            type="button"
+            onClick={() => setExpanded((v) => !v)}
+            className="text-[13px] font-medium text-cyan-400 hover:underline align-baseline"
+          >
+            {expanded ? t(" Read less") : t("Read more")}
+          </button>
+        )}
+      </p>
+    </div>
+  );
+}
+
+/** Icon-only row of profile links. Each icon is a button: hover shows a
+ *  glass tooltip with the full URL (positioned to stay inside the panel
+ *  width so it never overflows), click opens the URL in a new tab. */
+function ProfileLinkIcons({
   links
 }: {
   links: Record<string, string | undefined> | null;
@@ -612,36 +778,66 @@ function ProfileLinks({
     /^https?:\/\//i.test(url) ? url : `https://${url}`;
   const iconFor = (key: string) => {
     const k = key.toLowerCase();
-    if (k.includes("github")) return <Github className="size-3" />;
-    if (k.includes("twitter") || k === "x") return <Twitter className="size-3" />;
-    if (k.includes("spotify") || k.includes("music")) return <Music2 className="size-3" />;
-    if (k.includes("web") || k.includes("site")) return <Globe className="size-3" />;
-    return <LinkIcon className="size-3" />;
+    if (k.includes("github")) return <Github className="size-5" />;
+    if (k.includes("twitter") || k === "x") return <Twitter className="size-5" />;
+    if (k.includes("spotify") || k.includes("music")) return <Music2 className="size-5" />;
+    if (k.includes("web") || k.includes("site")) return <Globe className="size-5" />;
+    return <LinkIcon className="size-5" />;
   };
-  const labelFor = (key: string, url: string) => {
-    try {
-      const u = new URL(normalize(url));
-      return u.hostname.replace(/^www\./, "");
-    } catch {
-      return key;
-    }
-  };
+  // Cap visible icons at 4 (per the user's spec) — anything beyond goes
+  // into a +N overflow chip with the rest of the URLs in its title attr.
+  const visible = entries.slice(0, 4);
+  const overflow = entries.slice(4);
   return (
-    <div className="mt-3 flex flex-wrap items-center justify-center gap-1.5 max-w-full">
-      {entries.map(([key, url]) => (
-        <a
-          key={key}
-          href={normalize(url)}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center gap-1 max-w-full px-2.5 py-1 rounded-full glass-subtle border border-border/60 text-[11px] hover:bg-foreground/[0.06] transition"
-          title={url}
-        >
-          {iconFor(key)}
-          <span className="truncate max-w-[10rem]">{labelFor(key, url)}</span>
-        </a>
+    <div className="mt-3 flex items-center justify-center gap-3 max-w-full">
+      {visible.map(([key, url]) => (
+        <LinkIconButton key={key} icon={iconFor(key)} url={normalize(url)} />
       ))}
+      {overflow.length > 0 && (
+        <span
+          className="size-11 rounded-full grid place-items-center text-[11px] font-semibold glass-subtle border border-border/60 text-muted-foreground"
+          title={overflow.map(([, u]) => normalize(u)).join("\n")}
+        >
+          +{overflow.length}
+        </span>
+      )}
       <span className="sr-only">{t("Profile links")}</span>
     </div>
+  );
+}
+
+/** Single icon-only link. Tooltip uses absolute positioning relative to the
+ *  icon and `max-w-[14rem]` + `truncate` so it never overflows the panel. */
+function LinkIconButton({ icon, url }: { icon: React.ReactNode; url: string }) {
+  const [show, setShow] = React.useState(false);
+  return (
+    <span
+      className="relative inline-flex"
+      onMouseEnter={() => setShow(true)}
+      onMouseLeave={() => setShow(false)}
+      onFocus={() => setShow(true)}
+      onBlur={() => setShow(false)}
+    >
+      <a
+        href={url}
+        target="_blank"
+        rel="noopener noreferrer"
+        aria-label={url}
+        className="size-11 rounded-full grid place-items-center glass-subtle border border-border/60 hover:bg-foreground/[0.06] transition"
+      >
+        {icon}
+      </a>
+      {show && (
+        <span
+          role="tooltip"
+          // Anchored to the icon, but clamped width so long URLs truncate
+          // instead of pushing the tooltip out of the panel. Also nudged
+          // upward and centered so it sits cleanly above the icon.
+          className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 z-30 px-2 py-1 rounded-md bg-foreground text-background text-[10px] font-medium whitespace-nowrap max-w-[14rem] truncate shadow-floating pointer-events-none"
+        >
+          {url}
+        </span>
+      )}
+    </span>
   );
 }

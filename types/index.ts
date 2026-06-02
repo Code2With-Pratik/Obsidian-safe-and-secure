@@ -116,7 +116,7 @@ export interface Message {
     options: PollOption[];
     multi?: boolean;
   };
-  contacts?: { name: string; username?: string; avatar?: string; banner?: string; url?: string }[];
+  contacts?: { id?: string; name: string; username?: string; avatar?: string; banner?: string; url?: string }[];
   location?: { lat: number; lng: number; live?: boolean };
   /** Story-reply context — when a user replies to someone's story from the
    *  viewer, the resulting DM carries a small thumbnail + caption of the

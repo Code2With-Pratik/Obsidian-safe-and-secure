@@ -80,10 +80,14 @@ export function MediaViewer({ items, open, startIndex, onClose }: Props) {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.18 }}
+          onClick={onClose}
           className="fixed inset-0 z-[400] bg-black/30 backdrop-blur-2xl grid grid-rows-[auto_1fr_auto]"
         >
           {/* top bar */}
-          <div className="relative z-10 flex items-center justify-between gap-3 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3">
+          <div
+            className="relative z-10 flex items-center justify-between gap-3 px-3 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button
               onClick={onClose}
               className="size-10 rounded-full bg-white/10 backdrop-blur grid place-items-center text-white hover:bg-white/20 shrink-0"
@@ -155,7 +159,10 @@ export function MediaViewer({ items, open, startIndex, onClose }: Props) {
 
           {/* thumbnail strip */}
           {items.length > 1 ? (
-            <div className="flex justify-start md:justify-center gap-2 px-4 py-3 overflow-x-auto no-scrollbar">
+            <div
+              className="flex justify-start md:justify-center gap-2 px-4 py-3 overflow-x-auto no-scrollbar"
+              onClick={(e) => e.stopPropagation()}
+            >
               {items.map((it, i) => (
                 <button
                   key={it.src + i}
@@ -182,6 +189,10 @@ export function MediaViewer({ items, open, startIndex, onClose }: Props) {
 
 function MediaStage({ item }: { item: MediaItem }) {
   const [playing, setPlaying] = React.useState(false);
+
+  if (item.kind === "music") {
+    return <MusicStage item={item} />;
+  }
 
   if (item.kind === "image" || item.kind === "gif") {
     return (
@@ -255,7 +266,76 @@ function MediaStage({ item }: { item: MediaItem }) {
     );
   }
 
-  // music
+  // never reached — music has its own component above
+  return null;
+}
+
+/** Real `<audio>`-backed player for the music branch of the viewer.
+ *  - Loads `item.src` (the chat-attachments public URL) into an HTMLAudio.
+ *  - Reflects real currentTime / duration in the progress bar.
+ *  - Click anywhere on the progress bar to seek.
+ *  - Auto-pauses when the viewer unmounts so closing the modal also stops
+ *    playback (otherwise the audio keeps playing behind the closed modal). */
+function MusicStage({ item }: { item: MediaItem }) {
+  const audioRef = React.useRef<HTMLAudioElement | null>(null);
+  const [playing, setPlaying] = React.useState(false);
+  const [current, setCurrent] = React.useState(0);
+  const [duration, setDuration] = React.useState(0);
+
+  React.useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const onTime = () => setCurrent(audio.currentTime);
+    const onLoaded = () => setDuration(audio.duration || 0);
+    const onEnd = () => setPlaying(false);
+    audio.addEventListener("timeupdate", onTime);
+    audio.addEventListener("loadedmetadata", onLoaded);
+    audio.addEventListener("durationchange", onLoaded);
+    audio.addEventListener("ended", onEnd);
+    return () => {
+      audio.removeEventListener("timeupdate", onTime);
+      audio.removeEventListener("loadedmetadata", onLoaded);
+      audio.removeEventListener("durationchange", onLoaded);
+      audio.removeEventListener("ended", onEnd);
+      // Stop playback when the viewer closes or switches track.
+      audio.pause();
+    };
+  }, [item.src]);
+
+  const toggle = async () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (audio.paused) {
+      try {
+        await audio.play();
+        setPlaying(true);
+      } catch {
+        setPlaying(false);
+      }
+    } else {
+      audio.pause();
+      setPlaying(false);
+    }
+  };
+
+  const seek = (e: React.MouseEvent<HTMLDivElement>) => {
+    const audio = audioRef.current;
+    if (!audio || !duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+    audio.currentTime = ratio * duration;
+    setCurrent(audio.currentTime);
+  };
+
+  const fmt = (s: number) => {
+    if (!isFinite(s) || s <= 0) return "0:00";
+    const m = Math.floor(s / 60);
+    const sec = Math.floor(s % 60).toString().padStart(2, "0");
+    return `${m}:${sec}`;
+  };
+
+  const pct = duration ? (current / duration) * 100 : 0;
+
   return (
     <div className="w-[min(92vw,360px)] rounded-3xl overflow-hidden ring-1 ring-white/15 bg-gradient-to-br from-violet-600 via-fuchsia-600 to-cyan-500 p-6 text-white shadow-2xl">
       <div className="aspect-square rounded-2xl bg-white/15 backdrop-blur grid place-items-center mb-5">
@@ -263,23 +343,34 @@ function MediaStage({ item }: { item: MediaItem }) {
       </div>
       <p className="text-lg font-semibold truncate">{item.title ?? "Track"}</p>
       {item.meta && <p className="text-sm text-white/70 truncate">{item.meta}</p>}
-      <div className="mt-4 h-1.5 rounded-full bg-white/25 overflow-hidden">
-        <motion.div
-          className="h-full bg-white"
-          initial={{ width: "0%" }}
-          animate={{ width: playing ? "100%" : "32%" }}
-          transition={{ duration: playing ? 12 : 0.3, ease: "linear" }}
+      <div
+        onClick={seek}
+        className="mt-4 h-1.5 rounded-full bg-white/25 overflow-hidden cursor-pointer"
+        role="slider"
+        aria-label="Seek"
+        aria-valuemin={0}
+        aria-valuemax={Math.round(duration)}
+        aria-valuenow={Math.round(current)}
+      >
+        <div
+          className="h-full bg-white transition-[width] duration-150 ease-linear"
+          style={{ width: `${pct}%` }}
         />
       </div>
-      <div className="mt-4 flex justify-center">
+      <div className="mt-1 flex justify-between text-[11px] text-white/70 tabular-nums">
+        <span>{fmt(current)}</span>
+        <span>{fmt(duration)}</span>
+      </div>
+      <div className="mt-3 flex justify-center">
         <button
-          onClick={() => setPlaying((p) => !p)}
+          onClick={toggle}
           className="size-14 rounded-full bg-white text-violet-700 grid place-items-center hover:scale-105 transition"
           aria-label={playing ? "Pause" : "Play"}
         >
           {playing ? <Pause className="size-6" /> : <Play className="size-6 ml-0.5" />}
         </button>
       </div>
+      <audio ref={audioRef} src={item.src} preload="metadata" />
     </div>
   );
 }

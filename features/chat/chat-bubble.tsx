@@ -24,7 +24,8 @@ import {
   Music as MusicIcon,
   Phone,
   Video as VideoIcon,
-  Forward as ForwardIcon
+  Forward as ForwardIcon,
+  CheckCircle2
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -151,7 +152,7 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
       // Anchor for reply-context "scroll to source" jumps.
       data-message-id={message.id}
       className={cn(
-        "group relative flex gap-2 rounded-2xl transition-colors",
+        "group relative flex gap-2 rounded-2xl transition-colors w-full",
         me && "flex-row-reverse",
         selectionActive && "cursor-pointer pl-9 py-1",
         isSelected && "bg-cyan-400/20 ring-1 ring-cyan-400/60 shadow-[0_0_0_2px_rgba(34,211,238,0.08)]"
@@ -180,7 +181,19 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
           <AvatarFallback>{initials(author?.name)}</AvatarFallback>
         </Avatar>
       )}
-      <div className={cn("max-w-[78%] md:max-w-[68%] min-w-0 flex flex-col", me && "items-end")}>
+      <div
+        className={cn(
+          "min-w-0 flex flex-col",
+          // Profile-card bubbles need a wider column than text bubbles. Use
+          // an explicit `flex-1 w-full` (not just max-w) so the column
+          // actually CLAIMS the full row width — max-w alone collapses to
+          // intrinsic content size in a flex parent and the card looks tiny.
+          message.kind === "contact" && (message.contacts?.length ?? 0) === 1
+            ? "flex-1 w-full max-w-[16rem] md:max-w-[22rem]"
+            : "max-w-[78%] md:max-w-[68%]",
+          me && "items-end"
+        )}
+      >
         {!me && (
           <div className="text-[11px] font-medium text-muted-foreground mb-1 ml-1">
             {author?.name ?? "User"}
@@ -198,7 +211,19 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
           </div>
         )}
 
-        <div className={cn("relative w-fit", me && "ml-auto self-end")}>
+        <div
+          className={cn(
+            "relative",
+            // Profile-card bubbles need to fill the column so the landscape
+            // hero layout has room to grow. All other bubbles keep `w-fit`
+            // so they hug their content (the bubble shape is what you'd
+            // expect for a text / image / voice message).
+            message.kind === "contact" && (message.contacts?.length ?? 0) === 1
+              ? "w-full"
+              : "w-fit",
+            me && "ml-auto self-end"
+          )}
+        >
           <BubbleBody
             me={me}
             message={message}
@@ -1353,6 +1378,92 @@ function PollBubble({ me, bubbleMe, meStyle, message }: SubProps) {
   );
 }
 
+/** Vertical hero-style profile card sent by the Share-profile sheet. Wider
+ *  than a normal bubble so the banner has room to breathe; tapping "View
+ *  profile" opens a DM with that user when the payload carries an `id`,
+ *  and falls back to the public profile URL otherwise. */
+function ProfileCardBubble({
+  me,
+  contact,
+  bannerStyle
+}: {
+  me: boolean;
+  contact: {
+    id?: string;
+    name: string;
+    username?: string;
+    avatar?: string;
+    banner?: string;
+    url?: string;
+  };
+  bannerStyle: React.CSSProperties;
+}) {
+  const router = useRouter();
+  const startDM = useChatStore((s) => s.startDM);
+
+  const startChat = async () => {
+    if (!contact.id) return;
+    const result = await startDM(contact.id);
+    const chatId = result.data?.id;
+    if (chatId) router.push(`/chats/${chatId}`);
+  };
+
+  const openProfile = () => {
+    if (contact.url) {
+      window.open(contact.url, "_blank", "noopener,noreferrer");
+    } else if (contact.username) {
+      window.open(`/profile/${contact.username}`, "_blank", "noopener,noreferrer");
+    }
+  };
+
+  return (
+    <div
+      className={cn(
+        // Take the full bubble column (the parent already opens it up for
+        // profile-card kind). Flat vertical proportions so the card reads
+        // as a landscape rectangle, not a tall column.
+        "rounded-2xl overflow-hidden w-full",
+        "glass glass-specular border border-border/60",
+        me ? "rounded-br-none" : "rounded-bl-none"
+      )}
+    >
+      {/* Whole hero area (banner + avatar + name + handle) is a single
+          tappable target that starts a DM with the shared user. */}
+      <button
+        type="button"
+        onClick={() => void startChat()}
+        className="block w-full text-left hover:bg-foreground/[0.03] transition"
+      >
+        <div className="relative h-32 w-full" style={bannerStyle}>
+          <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/0 to-black/30" />
+        </div>
+        <div className="px-5 pt-0 pb-2 -mt-12 flex flex-col items-center text-center">
+          <Avatar className="size-24 ring-4 ring-background shadow-floating">
+            <AvatarImage src={contact.avatar} />
+            <AvatarFallback className="text-xl">{initials(contact.name)}</AvatarFallback>
+          </Avatar>
+          <p className="mt-1 text-base font-semibold truncate max-w-full text-foreground inline-flex items-center justify-center gap-1.5">
+            {contact.name}
+            <CheckCircle2 className="size-4 text-cyan-400 shrink-0" aria-label="Verified" />
+          </p>
+          {contact.username && (
+            <p className="text-xs text-muted-foreground truncate max-w-full">
+              @{contact.username}
+            </p>
+          )}
+        </div>
+      </button>
+      <button
+        type="button"
+        onClick={openProfile}
+        className="block w-full text-center text-xs font-medium py-1.5 border-t border-border/40 text-cyan-400 hover:bg-foreground/[0.04] transition"
+      >
+        View profile →
+      </button>
+    </div>
+  );
+}
+
 /** Shared contact / profile card. Single-entry cards with a `url` render
  *  as a vertical profile card (avatar + name + handle + "View profile"
  *  link) — that's what the Share-profile sheet sends. Multi-entry phonebook
@@ -1373,40 +1484,7 @@ function ContactsBubble({ me, bubbleMe, meStyle, message }: SubProps) {
           background: "linear-gradient(135deg,#8B5CF6,#EC4899)"
         };
     return (
-      <div
-        className={cn(
-          // Wider than a normal bubble so the banner has room to breathe.
-          "rounded-2xl overflow-hidden w-[min(26rem,100%)]",
-          "glass glass-specular border border-border/60",
-          me ? "rounded-br-none" : "rounded-bl-none"
-        )}
-      >
-        <div className="relative h-24 w-full" style={bannerStyle}>
-          <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/0 to-black/35" />
-        </div>
-        <div className="px-5 pt-0 pb-4 -mt-10 flex flex-col items-center text-center">
-          <Avatar className="size-20 ring-4 ring-background shadow-floating">
-            <AvatarImage src={single.avatar} />
-            <AvatarFallback className="text-lg">{initials(single.name)}</AvatarFallback>
-          </Avatar>
-          <p className="mt-2 text-base font-semibold truncate max-w-full text-foreground">
-            {single.name}
-          </p>
-          {single.username && (
-            <p className="text-xs text-muted-foreground truncate max-w-full">
-              @{single.username}
-            </p>
-          )}
-        </div>
-        <a
-          href={single.url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block text-center text-sm font-medium py-2.5 border-t border-border/40 text-cyan-400 hover:bg-foreground/[0.04] transition"
-        >
-          View profile →
-        </a>
-      </div>
+      <ProfileCardBubble me={me} contact={single} bannerStyle={bannerStyle} />
     );
   }
 
