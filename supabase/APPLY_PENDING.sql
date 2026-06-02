@@ -698,4 +698,18 @@ ALTER TABLE community_posts     REPLICA IDENTITY FULL;
 ALTER TABLE community_reactions REPLICA IDENTITY FULL;
 ALTER TABLE community_members   REPLICA IDENTITY FULL;
 
+-- Extend the messages.kind CHECK constraint so the new shared-community
+-- card (kind: "community") survives INSERT. The original migration
+-- (20260530162755_create_chat_tables) listed only the 15 original kinds
+-- and used Postgres' auto-named `messages_kind_check`; drop + recreate
+-- with the same name so the schema stays clean.
+ALTER TABLE messages DROP CONSTRAINT IF EXISTS messages_kind_check;
+ALTER TABLE messages
+  ADD CONSTRAINT messages_kind_check
+  CHECK (kind IN (
+    'text', 'image', 'video', 'audio', 'voice', 'file', 'link', 'system',
+    'call', 'sticker', 'gif', 'poll', 'contact', 'community', 'location',
+    'schedule'
+  ));
+
 -- Done. Reload the app — the new columns/RPC/policies/jobs are now live.

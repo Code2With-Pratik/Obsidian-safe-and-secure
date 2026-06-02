@@ -279,21 +279,29 @@ export const useCommunityStore = create<State>()((set, get) => ({
     const meId = useAuthStore.getState().user?.id;
     if (!meId) return null;
 
+    const insertRow = {
+      name: input.name.trim() || "Untitled community",
+      description: input.description || null,
+      cover: input.cover || null,
+      category: input.category || "General",
+      host_id: meId,
+      interests: input.interests,
+      theme: input.theme ?? null
+    };
     const { data, error } = await supabase
       .from("communities")
-      .insert({
-        name: input.name.trim() || "Untitled community",
-        description: input.description || null,
-        cover: input.cover || null,
-        category: input.category || "General",
-        host_id: meId,
-        interests: input.interests,
-        theme: input.theme ?? null
-      })
+      .insert(insertRow)
       .select()
       .single<CommunityRow>();
     if (error || !data) {
-      console.error("[community] create failed", error);
+      console.error("[community] create failed", {
+        message: error?.message,
+        details: error?.details,
+        hint: error?.hint,
+        code: error?.code,
+        rawError: error,
+        insertRow
+      });
       return null;
     }
 
@@ -405,29 +413,57 @@ export const useCommunityStore = create<State>()((set, get) => ({
     if (!meId) return null;
     if (!get().isHost(communityId)) return null;
 
+    // mentions is uuid[] in Postgres — drop anything that isn't a real
+    // UUID (e.g. leftover mock-data ids like "u1") so the insert doesn't
+    // explode with `22P02 invalid input syntax for type uuid`.
+    const UUID_RE =
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const cleanMentions =
+      post.mentions?.filter((m) => typeof m === "string" && UUID_RE.test(m)) ??
+      [];
+
+    const insertRow = {
+      community_id: communityId,
+      author_id: meId,
+      kind: post.kind,
+      content: post.content ?? null,
+      media: post.media ?? null,
+      song: post.song ?? null,
+      // Strip the per-option votes count when persisting — votes are
+      // tracked in community_poll_votes and computed on read.
+      poll: post.poll
+        ? {
+            question: post.poll.question,
+            options: post.poll.options.map((o) => ({ id: o.id, label: o.label }))
+          }
+        : null,
+      mentions: cleanMentions.length > 0 ? cleanMentions : null
+    };
     const { data, error } = await supabase
       .from("community_posts")
-      .insert({
-        community_id: communityId,
-        author_id: meId,
-        kind: post.kind,
-        content: post.content ?? null,
-        media: post.media ?? null,
-        song: post.song ?? null,
-        // Strip the per-option votes count when persisting — votes are
-        // tracked in community_poll_votes and computed on read.
-        poll: post.poll
-          ? {
-              question: post.poll.question,
-              options: post.poll.options.map((o) => ({ id: o.id, label: o.label }))
-            }
-          : null,
-        mentions: post.mentions ?? null
-      })
+      .insert(insertRow)
       .select()
       .single<PostRow>();
     if (error || !data) {
-      console.error("[community] createPost failed", error);
+      // Next.js dev overlay flattens objects with undefined values to `{}`,
+      // so log a JSON-stringified version + the raw error as a separate
+      // argument so it's expandable in the real browser DevTools console.
+      const errAny = error as unknown as Record<string, unknown> | null;
+      console.error(
+        "[community] createPost failed:",
+        JSON.stringify(
+          errAny,
+          Object.getOwnPropertyNames(errAny ?? {})
+        ) || "(no error object — likely RLS silently filtered the returned row)",
+        "\nraw error object:",
+        error,
+        "\ninsertRow:",
+        insertRow,
+        "\nmeId:",
+        meId,
+        "\nisHost result:",
+        get().isHost(communityId)
+      );
       return null;
     }
 

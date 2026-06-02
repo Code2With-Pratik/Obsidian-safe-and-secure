@@ -34,7 +34,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useCommunityStore } from "@/store/use-community-store";
 import { useT } from "@/lib/i18n";
-import { users } from "@/lib/mock-data";
+import { createClient } from "@/lib/supabase/client";
 import type { CommunityPostKind, CommunitySong } from "@/types";
 
 type Tab = "text" | "image" | "video" | "song" | "poll";
@@ -427,6 +427,15 @@ function TypeTab({
   );
 }
 
+/** Real Supabase profile shape used by the mention picker. Stays local to
+ *  this file — the picker doesn't need anything beyond what's shown. */
+interface MentionableProfile {
+  id: string;
+  name: string;
+  username: string;
+  avatar: string | null;
+}
+
 function MentionPicker({
   mentions,
   setMentions
@@ -437,33 +446,61 @@ function MentionPicker({
   const t = useT();
   const [open, setOpen] = React.useState(false);
   const [q, setQ] = React.useState("");
-  const choices = users
-    .filter((u) => u.id !== "me")
-    .filter(
-      (u) =>
-        u.name.toLowerCase().includes(q.toLowerCase()) ||
-        u.username.toLowerCase().includes(q.toLowerCase())
-    );
+  const [choices, setChoices] = React.useState<MentionableProfile[]>([]);
+  // Cache of picked profiles so the chip row keeps its label even after
+  // the search query changes and they fall out of `choices`.
+  const [pickedProfiles, setPickedProfiles] = React.useState<
+    Record<string, MentionableProfile>
+  >({});
+
+  // Debounced Supabase profile search. Empty query lists the most-recently
+  // active people so the picker isn't empty on first open.
+  React.useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    const supabase = createClient();
+    const timer = setTimeout(async () => {
+      let query = supabase
+        .from("profiles")
+        .select("id, name, username, avatar")
+        .limit(15);
+      const search = q.trim();
+      if (search) {
+        query = query.or(`name.ilike.%${search}%,username.ilike.%${search}%`);
+      } else {
+        query = query.order("last_seen_at", { ascending: false, nullsFirst: false });
+      }
+      const { data } = await query;
+      if (cancelled) return;
+      setChoices((data ?? []) as MentionableProfile[]);
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [q, open]);
+
+  const pickedList = mentions
+    .map((id) => pickedProfiles[id])
+    .filter((u): u is MentionableProfile => !!u);
+
   return (
     <div className="flex flex-wrap gap-1.5">
-      {mentions
-        .map((id) => users.find((u) => u.id === id))
-        .filter(Boolean)
-        .map((u) => (
-          <span
-            key={u!.id}
-            className="inline-flex items-center gap-1 h-7 px-2 rounded-full bg-violet-500/15 border border-violet-400/40 text-xs text-violet-200"
+      {pickedList.map((u) => (
+        <span
+          key={u.id}
+          className="inline-flex items-center gap-1 h-7 px-2 rounded-full bg-violet-500/15 border border-violet-400/40 text-xs text-violet-200"
+        >
+          @{u.username}
+          <button
+            type="button"
+            onClick={() => setMentions(mentions.filter((id) => id !== u.id))}
+            className="ml-0.5 size-4 grid place-items-center rounded-full hover:bg-foreground/10"
           >
-            @{u!.username}
-            <button
-              type="button"
-              onClick={() => setMentions(mentions.filter((id) => id !== u!.id))}
-              className="ml-0.5 size-4 grid place-items-center rounded-full hover:bg-foreground/10"
-            >
-              <X className="size-3" />
-            </button>
-          </span>
-        ))}
+            <X className="size-3" />
+          </button>
+        </span>
+      ))}
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
           <button
@@ -484,30 +521,40 @@ function MentionPicker({
             />
           </div>
           <div className="max-h-60 overflow-y-auto py-1">
-            {choices.slice(0, 12).map((u) => {
-              const picked = mentions.includes(u.id);
-              return (
-                <button
-                  key={u.id}
-                  onClick={() => {
-                    if (picked) setMentions(mentions.filter((id) => id !== u.id));
-                    else setMentions([...mentions, u.id]);
-                  }}
-                  className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-foreground/5 text-left"
-                >
-                  <Avatar className="size-7">
-                    <AvatarImage src={u.avatar} />
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{u.name}</p>
-                    <p className="text-[10px] text-muted-foreground truncate">
-                      @{u.username}
-                    </p>
-                  </div>
-                  {picked && <Check className="size-4 text-cyan-400" />}
-                </button>
-              );
-            })}
+            {choices.length === 0 ? (
+              <p className="px-3 py-3 text-center text-[11px] text-muted-foreground">
+                {t("No matches")}
+              </p>
+            ) : (
+              choices.map((u) => {
+                const picked = mentions.includes(u.id);
+                return (
+                  <button
+                    key={u.id}
+                    onClick={() => {
+                      if (picked) {
+                        setMentions(mentions.filter((id) => id !== u.id));
+                      } else {
+                        setMentions([...mentions, u.id]);
+                        setPickedProfiles((prev) => ({ ...prev, [u.id]: u }));
+                      }
+                    }}
+                    className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-foreground/5 text-left"
+                  >
+                    <Avatar className="size-7">
+                      <AvatarImage src={u.avatar ?? undefined} />
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{u.name}</p>
+                      <p className="text-[10px] text-muted-foreground truncate">
+                        @{u.username}
+                      </p>
+                    </div>
+                    {picked && <Check className="size-4 text-cyan-400" />}
+                  </button>
+                );
+              })
+            )}
           </div>
         </PopoverContent>
       </Popover>
