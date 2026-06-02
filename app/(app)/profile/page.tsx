@@ -170,13 +170,6 @@ export default function ProfilePage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mt-7">
-            <Stat k="248" v={t("Conversations")} />
-            <Stat k="3.4k" v={t("Connections")} />
-            <Stat k="86" v={t("Ghost rooms")} />
-            <Stat k="2.1k" v={t("Story views")} />
-          </div>
-
           <Tabs defaultValue="about" className="mt-8">
             <TabsList>
               <TabsTrigger value="about">{t("About")}</TabsTrigger>
@@ -192,11 +185,6 @@ export default function ProfilePage() {
                     {user?.bio ??
                       t("Senior product designer, ex-Linear, ex-Arc. I care deeply about the texture of digital experiences. Currently architecting Obsidian — a futuristic OS for communication.")}
                   </p>
-                  <div className="mt-4 flex flex-wrap gap-2">
-                    {["#design", "#motion", "#typography", "#systems", "#synthwave"].map((tag) => (
-                      <Badge key={tag} variant="glass">{tag}</Badge>
-                    ))}
-                  </div>
                 </div>
 
                 <div className="glass rounded-2xl p-5">
