@@ -325,4 +325,25 @@ SELECT cron.schedule(
   $job$
 );
 
+-- ---------------------------------------------------------------------
+-- 11. story_views RLS policies. The original schema enabled RLS on
+--     story_views but never defined any policies, so every INSERT was
+--     silently denied (RLS = deny-by-default). Without this, the
+--     "Viewers" list always shows 0 even after people open the story.
+-- ---------------------------------------------------------------------
+DROP POLICY IF EXISTS "story_views_select_all" ON story_views;
+CREATE POLICY "story_views_select_all" ON story_views
+  FOR SELECT TO authenticated
+  USING (true);
+
+DROP POLICY IF EXISTS "story_views_insert_own" ON story_views;
+CREATE POLICY "story_views_insert_own" ON story_views
+  FOR INSERT TO authenticated
+  WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS "story_views_delete_own" ON story_views;
+CREATE POLICY "story_views_delete_own" ON story_views
+  FOR DELETE TO authenticated
+  USING (user_id = auth.uid());
+
 -- Done. Reload the app — the new columns/RPC/policies/jobs are now live.

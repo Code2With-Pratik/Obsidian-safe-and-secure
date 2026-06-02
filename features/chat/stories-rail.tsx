@@ -117,6 +117,29 @@ function StoryTile({
         />
       )}
 
+      {/* Live image-layer overlays — same metadata the viewer uses. Image
+          layers aren't baked into the PNG (avoids CORS taint), so we render
+          them on top of the thumbnail too so the rail tile previews the
+          actual composed look. */}
+      {first.overlays?.map((o) => (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          key={o.id}
+          src={o.src}
+          alt=""
+          className="absolute select-none pointer-events-none object-cover"
+          style={{
+            left: `${o.x}%`,
+            top: `${o.y}%`,
+            width: `${o.wPct}%`,
+            height: `${o.hPct}%`,
+            borderRadius: 4,
+            filter: o.filter,
+            transform: `translate(-50%, -50%) rotate(${o.rotate}deg) scale(${o.scale})`
+          }}
+        />
+      ))}
+
       <div className="absolute inset-0 bg-gradient-to-b from-black/10 via-transparent to-black/60" />
 
       {!reel.viewed && (

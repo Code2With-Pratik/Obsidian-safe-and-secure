@@ -848,19 +848,42 @@ export function StoryEditor() {
     startStoryUpload(meId || currentUser.id);
     router.push("/chats");
 
-    // Bake images into the PNG too (so the rail thumbnail shows them) — the
-    // live overlay then animates on top of that identical static frame.
-    void composeCanvas({ skipMusic: true, dispRect }).then((out) => {
-      if (out) {
-        attachStorySlide({
-          kind: "image",
-          src: out.toDataURL("image/png"),
-          music,
-          overlays
-        });
-      } else {
+    // Skip BOTH music AND image layers when baking the PNG. Image layers ride
+    // as LIVE overlays in the viewer so they animate (GIFs) and stack
+    // correctly — baking them in here just duplicates them and, worse, can
+    // taint the canvas if any layer source lacks CORS headers, which throws
+    // SecurityError from toDataURL and silently drops the whole share.
+    void composeCanvas({ skipMusic: true, skipImages: true, dispRect }).then((out) => {
+      if (!out) {
         clearPendingStory();
+        return;
       }
+      let src: string;
+      try {
+        src = out.toDataURL("image/png");
+      } catch (err) {
+        console.error("[shareStory] toDataURL failed — falling back to background-only", err);
+        // Tainted canvas → re-compose with NO layers at all so we still get a
+        // valid base image (just the background) and let the live overlays
+        // carry every layer on the recipient's side.
+        const W = 1080;
+        const H = 1920;
+        const blank = document.createElement("canvas");
+        blank.width = W;
+        blank.height = H;
+        const ctx = blank.getContext("2d");
+        if (ctx) {
+          ctx.fillStyle = "#1a1a1a";
+          ctx.fillRect(0, 0, W, H);
+        }
+        src = blank.toDataURL("image/png");
+      }
+      attachStorySlide({
+        kind: "image",
+        src,
+        music,
+        overlays
+      });
     });
   };
 

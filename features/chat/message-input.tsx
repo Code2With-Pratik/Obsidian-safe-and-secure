@@ -23,7 +23,7 @@ import type { Message, PollOption } from "@/types";
 interface Props {
   chatId: string;
   onSend: (text: string) => void;
-  onSendVoice?: (durationSec: number, waveform: number[]) => void;
+  onSendVoice?: (durationSec: number, waveform: number[], audioBlob?: Blob) => void;
   onSendAttachment?: (
     payload: Partial<Message> & { kind: Message["kind"]; content?: string }
   ) => void;
@@ -226,6 +226,7 @@ export function MessageInput({
   const [savedWave, setSavedWave] = React.useState<number[]>([]);
   const [savedDuration, setSavedDuration] = React.useState(0); // seconds
   const [audioUrl, setAudioUrl] = React.useState<string | null>(null);
+  const [audioBlob, setAudioBlob] = React.useState<Blob | null>(null);
   const [previewPlaying, setPreviewPlaying] = React.useState(false);
   const [previewProgress, setPreviewProgress] = React.useState(0);
 
@@ -268,6 +269,7 @@ export function MessageInput({
     }
     if (audioUrl) URL.revokeObjectURL(audioUrl);
     setAudioUrl(null);
+    setAudioBlob(null);
     setSavedWave([]);
     setSavedDuration(0);
     setPreviewPlaying(false);
@@ -313,6 +315,7 @@ export function MessageInput({
           type: r.mimeType || "audio/webm"
         });
         const url = URL.createObjectURL(blob);
+        setAudioBlob(blob);
         setAudioUrl(url);
       };
       r.stop();
@@ -336,9 +339,9 @@ export function MessageInput({
 
   const sendVoice = React.useCallback(() => {
     if (rec !== "preview") return;
-    onSendVoice?.(savedDuration, savedWave);
+    onSendVoice?.(savedDuration, savedWave, audioBlob ?? undefined);
     resetAll();
-  }, [onSendVoice, rec, resetAll, savedDuration, savedWave]);
+  }, [onSendVoice, rec, resetAll, savedDuration, savedWave, audioBlob]);
 
   const startRecording = React.useCallback(() => {
     if (rec !== "idle") return;

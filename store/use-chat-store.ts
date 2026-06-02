@@ -104,7 +104,12 @@ interface ChatState {
 
   /* ----- send ----- */
   sendMessage: (chatId: string, content: string) => Promise<void>;
-  sendVoice: (chatId: string, durationSec: number, waveform: number[]) => Promise<void>;
+  sendVoice: (
+    chatId: string,
+    durationSec: number,
+    waveform: number[],
+    audioBlob?: Blob
+  ) => Promise<void>;
   sendAttachment: (
     chatId: string,
     payload: Partial<Message> & { kind: Message["kind"]; content?: string }
@@ -766,11 +771,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     }));
   },
 
-  sendVoice: async (chatId, durationSec, waveform) => {
+  sendVoice: async (chatId, durationSec, waveform, audioBlob) => {
     const me = useAuthStore.getState().user;
     if (!me) return;
     const cid = newId();
     const now = new Date().toISOString();
+    // Optimistic — show the bubble immediately with the local blob URL so the
+    // author can play their own note while the upload finishes.
+    const localUrl =
+      audioBlob && typeof URL !== "undefined" ? URL.createObjectURL(audioBlob) : undefined;
     set((s) => ({
       messages: {
         ...s.messages,
@@ -784,11 +793,43 @@ export const useChatStore = create<ChatState>((set, get) => ({
             content: "",
             createdAt: now,
             status: "sending",
-            voice: { durationSec, waveform }
+            voice: { durationSec, waveform, url: localUrl }
           }
         ]
       }
     }));
+    // Upload the recording to the chat-attachments bucket so the recipient
+    // can actually play it. Without this the receiver only sees a static
+    // waveform with no audio source.
+    let publicUrl: string | undefined;
+    if (audioBlob) {
+      const ext = audioBlob.type.includes("webm")
+        ? "webm"
+        : audioBlob.type.includes("mp4") || audioBlob.type.includes("aac")
+        ? "m4a"
+        : "ogg";
+      const path = `${me.id}/voice-${Date.now()}-${Math.random().toString(36).slice(2, 9)}.${ext}`;
+      const { data: up, error: upErr } = await supabase.storage
+        .from("chat-attachments")
+        .upload(path, audioBlob, {
+          cacheControl: "3600",
+          upsert: false,
+          contentType: audioBlob.type || "audio/webm"
+        });
+      if (upErr || !up) {
+        console.error("[sendVoice] upload failed", {
+          message: (upErr as unknown as { message?: string })?.message,
+          path
+        });
+      } else {
+        publicUrl = supabase.storage.from("chat-attachments").getPublicUrl(up.path).data.publicUrl;
+      }
+    }
+    const voicePayload: { durationSec: number; waveform: number[]; url?: string } = {
+      durationSec,
+      waveform
+    };
+    if (publicUrl) voicePayload.url = publicUrl;
     const { data, error } = await supabase
       .from("messages")
       .insert({
@@ -797,12 +838,13 @@ export const useChatStore = create<ChatState>((set, get) => ({
         kind: "voice",
         content: "",
         status: "sent",
-        payload: { voice: { durationSec, waveform } },
+        payload: { voice: voicePayload },
         client_id: cid
       })
       .select()
       .single();
     if (error || !data) {
+      console.error("[sendVoice] insert failed", error);
       set((s) => ({
         messages: { ...s.messages, [chatId]: (s.messages[chatId] ?? []).filter((m) => m.id !== cid) }
       }));
@@ -812,7 +854,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
       messages: {
         ...s.messages,
         [chatId]: (s.messages[chatId] ?? []).map((m) =>
-          m.id === cid ? { ...m, id: data.id, status: "sent" } : m
+          m.id === cid
+            ? {
+                ...m,
+                id: data.id,
+                status: "sent",
+                // Swap to the public URL so reloads keep working after the
+                // local blob URL is revoked.
+                voice: { ...m.voice!, url: publicUrl || m.voice?.url }
+              }
+            : m
         )
       }
     }));

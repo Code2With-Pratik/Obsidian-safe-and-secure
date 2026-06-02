@@ -43,6 +43,10 @@ export interface StorySlide {
   postedAt: number;
   music?: StoryMusic;
   overlays?: StoryOverlay[];
+  /** Whether the current user has liked THIS specific slide. Like state is
+   *  per-slide, not per-reel — clicking the heart on slide 2 must not light
+   *  up the heart on slide 1. */
+  likedByMe?: boolean;
 }
 
 export interface UserStories {
@@ -50,8 +54,6 @@ export interface UserStories {
   slides: StorySlide[];
   /** Whether the current viewer has already watched this reel (dims the ring). */
   viewed: boolean;
-  /** Whether the current user has liked any slide in this reel. */
-  likedByMe?: boolean;
 }
 
 export const STORY_TTL_MS = 24 * 60 * 60 * 1000;
@@ -250,20 +252,18 @@ export const useStoriesStore = create<StoriesState>((set, get) => ({
     }
     const next: Record<string, UserStories> = {};
     rows.forEach((r) => {
-      const slide = rowToSlide(r);
-      const existing = next[r.author_id];
       const isViewedSlide = myViews.has(r.id);
       const isLikedSlide = myLikes.has(r.id);
+      const slide: StorySlide = { ...rowToSlide(r), likedByMe: isLikedSlide };
+      const existing = next[r.author_id];
       if (existing) {
         existing.slides.push(slide);
         if (!isViewedSlide) existing.viewed = false;
-        if (isLikedSlide) existing.likedByMe = true;
       } else {
         next[r.author_id] = {
           userId: r.author_id,
           slides: [slide],
-          viewed: isViewedSlide,
-          likedByMe: isLikedSlide
+          viewed: isViewedSlide
         };
       }
     });
@@ -421,7 +421,7 @@ export const useStoriesStore = create<StoriesState>((set, get) => ({
     if (!me) return;
     const reel = get().byUser[userId];
     if (!reel) return;
-    // Optimistic local update.
+    // Optimistic local update (dims the ring everywhere immediately).
     set((st) => {
       const e = st.byUser[userId];
       if (!e || e.viewed) return {};
@@ -431,12 +431,29 @@ export const useStoriesStore = create<StoriesState>((set, get) => ({
       .map((s) => (s.id.startsWith("slide-") ? s.id.slice("slide-".length) : null))
       .filter((x): x is string => !!x);
     if (storyIds.length === 0) return;
-    await supabase
+    // Always attempt the DB upsert — even when the local `viewed` flag is
+    // already true. Prior attempts may have silently failed (e.g. when the
+    // RLS policy on story_views hadn't been applied yet) and we want this
+    // call to repair the gap on the next view.
+    const { error } = await supabase
       .from("story_views")
       .upsert(
         storyIds.map((sid) => ({ story_id: sid, user_id: me.id })),
         { onConflict: "story_id,user_id", ignoreDuplicates: true }
       );
+    if (error) {
+      const errAny = error as unknown as Record<string, unknown>;
+      const msg = (errAny.message as string | undefined) || "";
+      const hint =
+        errAny.code === "42501" || /policy|denied|unauthorized/i.test(msg)
+          ? "RLS rejected the insert. Re-run supabase/APPLY_PENDING.sql section 11 to add the story_views policies."
+          : null;
+      console.error("[markViewed] upsert failed", {
+        message: msg || "(empty)",
+        code: errAny.code,
+        hint
+      });
+    }
   },
 
   toggleLike: async (userId, slideId) => {
@@ -448,13 +465,21 @@ export const useStoriesStore = create<StoriesState>((set, get) => ({
     if (!slide) return;
     const storyId = slide.id.startsWith("slide-") ? slide.id.slice("slide-".length) : null;
     if (!storyId) return;
-    const willLike = !reel.likedByMe;
-    // Optimistic.
+    const willLike = !slide.likedByMe;
+    // Optimistic — flip the like on THIS slide only, not the whole reel.
     set((st) => {
       const e = st.byUser[userId];
       if (!e) return {};
       return {
-        byUser: { ...st.byUser, [userId]: { ...e, likedByMe: willLike } }
+        byUser: {
+          ...st.byUser,
+          [userId]: {
+            ...e,
+            slides: e.slides.map((s) =>
+              s.id === slideId ? { ...s, likedByMe: willLike } : s
+            )
+          }
+        }
       };
     });
     if (willLike) {
