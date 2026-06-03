@@ -36,6 +36,29 @@ export function IncomingCallModal() {
     watchSession(incoming.sessionId);
   }, [incoming, watchSession]);
 
+  // 30-second ringer timeout — mirrors WhatsApp / Telegram. If the user
+  // doesn't answer we auto-decline; the caller hears `call:declined` and
+  // shows a "user is busy / offline" toast on their side.
+  const RING_LIMIT_S = 30;
+  const [remaining, setRemaining] = React.useState(RING_LIMIT_S);
+  React.useEffect(() => {
+    if (!incoming) return;
+    setRemaining(RING_LIMIT_S);
+    const startedAt = Date.now();
+    const tick = window.setInterval(() => {
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+      const left = RING_LIMIT_S - elapsed;
+      setRemaining(left);
+      if (left <= 0) {
+        window.clearInterval(tick);
+        // Same path as the user tapping decline — the caller will see
+        // `call:declined` broadcast and clear their outgoing state.
+        void decline(incoming.sessionId);
+      }
+    }, 1000);
+    return () => window.clearInterval(tick);
+  }, [incoming, decline]);
+
   // Ringtone — looped while the modal is open. Browsers gate autoplay on
   // user interaction; if `.play()` is rejected we swallow it silently so the
   // modal still works (just without sound until the user has interacted with
@@ -142,7 +165,14 @@ export function IncomingCallModal() {
             {incoming.isGroup && <span>· {t("Group")}</span>}
           </p>
 
-          <div className="relative mt-7 flex items-center justify-center gap-10">
+          {/* Countdown — auto-decline at 0. */}
+          <p className="relative mt-4 text-[11px] text-muted-foreground tabular-nums">
+            {remaining > 0
+              ? `${t("Auto-declines in")} ${remaining}s`
+              : t("No answer")}
+          </p>
+
+          <div className="relative mt-5 flex items-center justify-center gap-10">
             <button
               onClick={onDecline}
               aria-label={t("Decline")}

@@ -63,7 +63,15 @@ export function CallControls({
   camOff: camOffProp,
   onCamOffChange,
   share: shareProp,
-  onShareChange
+  onShareChange,
+  handRaised,
+  onHandToggle,
+  chatOpen,
+  onChatToggle,
+  unreadChat,
+  participantsOpen,
+  onParticipantsToggle,
+  onMore
 }: {
   onEnd?: () => void;
   filterId?: string;
@@ -77,6 +85,19 @@ export function CallControls({
   onCamOffChange?: (v: boolean) => void;
   share?: boolean;
   onShareChange?: (v: boolean) => void;
+  /** Raise-hand controlled state. The parent owns the publish over the
+   *  LiveKit data channel; this toggle is purely visual otherwise. */
+  handRaised?: boolean;
+  onHandToggle?: () => void;
+  /** In-call chat panel open/close. The parent owns the panel mount. */
+  chatOpen?: boolean;
+  onChatToggle?: () => void;
+  unreadChat?: number;
+  /** Participants panel open/close. */
+  participantsOpen?: boolean;
+  onParticipantsToggle?: () => void;
+  /** "More" → open the invite-to-call popup. */
+  onMore?: () => void;
 }) {
   const t = useT();
   const [mutedLocal, setMutedLocal] = React.useState(false);
@@ -220,16 +241,29 @@ export function CallControls({
           <Wand2 />
         </ControlButton>
         <span className="hidden md:contents">
-          <ControlButton tooltip={t("Raise hand")}>
+          <ControlButton
+            tooltip={handRaised ? t("Lower hand") : t("Raise hand")}
+            toggled={handRaised}
+            onClick={onHandToggle}
+          >
             <Hand />
           </ControlButton>
-          <ControlButton tooltip={t("Participants")}>
+          <ControlButton
+            tooltip={t("Participants")}
+            toggled={participantsOpen}
+            onClick={onParticipantsToggle}
+          >
             <Users />
           </ControlButton>
-          <ControlButton tooltip={t("Chat")}>
+          <ControlButton
+            tooltip={t("Chat")}
+            toggled={chatOpen}
+            onClick={onChatToggle}
+            badge={unreadChat}
+          >
             <MessageSquare />
           </ControlButton>
-          <ControlButton tooltip={t("More")}>
+          <ControlButton tooltip={t("More")} onClick={onMore}>
             <MoreHorizontal />
           </ControlButton>
         </span>
@@ -251,7 +285,8 @@ function ControlButton({
   active = true,
   toggled,
   danger,
-  tooltip
+  tooltip,
+  badge
 }: {
   children: React.ReactNode;
   onClick?: () => void;
@@ -259,6 +294,9 @@ function ControlButton({
   toggled?: boolean;
   danger?: boolean;
   tooltip?: string;
+  /** Small numeric overlay on the icon (e.g. unread chat count). Hidden
+   *  when undefined or 0. */
+  badge?: number;
 }) {
   const btn = (
     <button
@@ -266,16 +304,21 @@ function ControlButton({
       className={cn(
         // Mobile: solid black glass pill per button (no parent capsule).
         // Desktop: just a hover state since the parent capsule provides chrome.
-        "size-11 md:size-10 rounded-full grid place-items-center transition shrink-0",
+        "relative size-11 md:size-10 rounded-full grid place-items-center transition shrink-0",
         "bg-black/45 backdrop-blur-md text-white md:bg-transparent md:text-foreground/80 md:backdrop-blur-0",
         danger
           ? "!bg-rose-500 !text-white"
           : toggled
-          ? "!bg-rose-500/90 !text-white md:!bg-foreground/10 md:!text-foreground"
+          ? "!bg-cyan-500/90 !text-white md:!bg-foreground/10 md:!text-foreground"
           : "hover:bg-black/65 md:hover:bg-foreground/10"
       )}
     >
       {children}
+      {!!badge && badge > 0 && (
+        <span className="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-rose-500 text-white text-[10px] font-bold grid place-items-center leading-none">
+          {badge > 9 ? "9+" : badge}
+        </span>
+      )}
     </button>
   );
   return tooltip ? (

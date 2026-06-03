@@ -3,21 +3,17 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { Ghost, Lock, Radio, Sparkles, ChevronLeft } from "lucide-react";
-import { LiveKitRoom } from "@livekit/components-react";
-import "@livekit/components-styles";
-import { VideoGrid } from "@/features/calls/video-grid";
-import { LiveKitStage } from "@/features/calls/livekit-stage";
-import { CallControls, CALL_FILTERS } from "@/features/calls/call-controls";
+import { Ghost, Lock, Radio, Sparkles, ChevronLeft, Loader2 } from "lucide-react";
+import { PinnedSpeakerStage } from "@/features/calls/pinned-speaker-stage";
+import { CALL_FILTERS } from "@/features/calls/call-controls";
 import { LiveCallControls } from "@/features/calls/live-call-controls";
+import { RoomEvent } from "livekit-client";
+import { useMaybeRoomContext } from "@livekit/components-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { callParticipants } from "@/lib/mock-data";
 import { useUIStore } from "@/store/use-ui-store";
 import { useCallStore } from "@/store/use-call-store";
 import { useT } from "@/lib/i18n";
-
-const LIVEKIT_URL = process.env.NEXT_PUBLIC_LIVEKIT_URL;
 
 function Timer01() {
   const [s, setS] = React.useState(0);
@@ -91,46 +87,6 @@ export default function ActiveCall() {
     }
   }, [activeCall, router]);
 
-  // Prefer the real call_session's room name (caller from /api/calls/start,
-  // recipient from accept). Fall back to a deterministic per-chat name for
-  // the demo path so unconfigured deployments still see SOMETHING.
-  //
-  // Lock the room name at first sight so a remote-hangup event clearing
-  // `outgoing` mid-call doesn't switch us to a different room (which would
-  // force a LiveKit reconnect).
-  const roomNameRef = React.useRef<string | undefined>(undefined);
-  const candidate = outgoing?.roomName
-    ?? (activeCall?.chatId ? `call-${activeCall.chatId}` : undefined);
-  if (!roomNameRef.current && candidate) {
-    roomNameRef.current = candidate;
-  }
-  const roomName = roomNameRef.current;
-
-  const [lkToken, setLkToken] = React.useState<string | null>(null);
-  React.useEffect(() => {
-    if (!LIVEKIT_URL || !roomName) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const res = await fetch("/api/livekit/token", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ roomName })
-        });
-        if (!res.ok) throw new Error(await res.text());
-        const { token } = (await res.json()) as { token: string };
-        if (!cancelled) setLkToken(token);
-      } catch (err) {
-        console.warn("[LiveKit] token fetch failed — falling back to mock:", err);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [roomName]);
-
-  const useLivekit = !!(LIVEKIT_URL && lkToken);
-
   // Always-current refs so the hang-up handler doesn't capture stale state
   // (the handler is defined once but `outgoing` updates after navigation).
   const outgoingRef = React.useRef(outgoing);
@@ -138,17 +94,46 @@ export default function ActiveCall() {
     outgoingRef.current = outgoing;
   }, [outgoing]);
 
+  // Toast shown when the recipient never picks up. Cleared automatically.
+  const [noAnswerToast, setNoAnswerToast] = React.useState<string | null>(null);
+
+  // Raise-hand map { participantIdentity → isRaised } shared between the
+  // control bar (publisher / toggler) and the pinned stage (UI badges).
+  const [raisedHands, setRaisedHands] = React.useState<Record<string, boolean>>(
+    {}
+  );
+
   const onHangup = React.useCallback(() => {
     const back = activeCall?.returnTo ?? "/calls";
-    // Best-effort persist + broadcast — fire-and-forget so the UI doesn't
-    // block on the round trip when ending.
     const sid = outgoingRef.current?.sessionId;
-    if (sid) void endSession(sid);
+    // Group calls: leaving = me only. Skip the server `/end` POST so the
+    // remaining participants stay connected to the room.
+    // 1:1 calls: leaving = ending for both. POST `/end` so the peer
+    // hears `call:ended` on the session channel and routes back too.
+    const isGroup = !!activeCall?.group;
+    if (sid && !isGroup) void endSession(sid);
     unwatchSession();
     setOutgoing(null);
     endCall();
     router.push(back);
   }, [activeCall, endCall, endSession, router, setOutgoing, unwatchSession]);
+
+  // Outgoing-call no-answer timer — if the LiveKit room never gets a remote
+  // participant within 30 seconds of mount, show a "User is busy / offline"
+  // toast and auto-end the call. Mirrors WhatsApp.
+  const [hasRemote, setHasRemote] = React.useState(false);
+  React.useEffect(() => {
+    if (!outgoing || hasRemote) return;
+    const t = window.setTimeout(() => {
+      if (hasRemote) return;
+      setNoAnswerToast("User is busy or offline");
+      window.setTimeout(() => {
+        setNoAnswerToast(null);
+        onHangup();
+      }, 2200);
+    }, 30_000);
+    return () => window.clearTimeout(t);
+  }, [outgoing, hasRemote, onHangup]);
 
   return (
     // Fullscreen overlay. The video stage fills the entire viewport from
@@ -162,39 +147,31 @@ export default function ActiveCall() {
         className="absolute inset-0 transition-[filter] duration-200"
         style={{ filter: filterCss }}
       >
-        {useLivekit ? (
-          <LiveKitRoom
-            token={lkToken!}
-            serverUrl={LIVEKIT_URL}
-            connect
-            audio
-            video={activeCall?.video !== false}
-            className="h-full w-full"
-            data-lk-theme="default"
-          >
-            <LiveKitStage />
-            {/* Controls live INSIDE the room so `useLocalParticipant` is in
-                scope; they're absolutely positioned via the same wrapper
-                used in the mock path below so layout stays identical. */}
-            <div className="absolute bottom-0 inset-x-0 z-10 pb-[max(1rem,env(safe-area-inset-bottom))] grid place-items-center pointer-events-none">
-              <div className="pointer-events-auto">
-                <LiveCallControls
-                  filterId={filterId}
-                  onFilterChange={setFilterId}
-                  onEnd={onHangup}
-                />
-              </div>
-            </div>
-          </LiveKitRoom>
-        ) : (
-          <VideoGrid
-            participants={
-              activeCall?.group
-                ? callParticipants.slice(0, Math.min(callParticipants.length, activeCall.participants ?? 4))
-                : callParticipants.slice(0, 2)
-            }
+        {/* The LiveKit room is provided by AppShell's CallSessionProvider so
+            navigating away (Minimize) doesn't tear down the connection. Here
+            we just render the visual stage + controls — they consume the
+            existing room via `useRoomContext` / `useLocalParticipant`. While
+            the token is still being minted we show a clean Connecting
+            placeholder instead of flashing the old mock grid. */}
+        <RoomReady>
+          <RoomBridge
+            onHasRemoteChange={setHasRemote}
+            isGroup={!!activeCall?.group}
+            onAllRemotesLeft={onHangup}
           />
-        )}
+          <PinnedSpeakerStage raisedHands={raisedHands} />
+          <div className="absolute bottom-0 inset-x-0 z-10 pb-[max(1rem,env(safe-area-inset-bottom))] grid place-items-center pointer-events-none">
+            <div className="pointer-events-auto">
+              <LiveCallControls
+                filterId={filterId}
+                onFilterChange={setFilterId}
+                onEnd={onHangup}
+                sessionId={outgoing?.sessionId ?? null}
+                onRaisedHandsChange={setRaisedHands}
+              />
+            </div>
+          </div>
+        </RoomReady>
       </div>
 
       {/* 2. Soft gradients top & bottom so floating UI stays readable
@@ -256,19 +233,90 @@ export default function ActiveCall() {
         </div>
       </div>
 
-      {/* 4. Mock-path controls. The LiveKit path renders LiveCallControls
-              INSIDE LiveKitRoom (above) instead of this block. */}
-      {!useLivekit && (
-        <div className="absolute bottom-0 inset-x-0 z-10 pb-[max(1rem,env(safe-area-inset-bottom))] grid place-items-center pointer-events-none">
-          <div className="pointer-events-auto">
-            <CallControls
-              filterId={filterId}
-              onFilterChange={setFilterId}
-              onEnd={onHangup}
-            />
-          </div>
+      {/* "User is busy / offline" toast — shown when no remote joins within
+          30s of the call starting. The hangup follows ~2s later. */}
+      {noAnswerToast && (
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-30 pointer-events-none">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="px-5 py-3 rounded-2xl bg-rose-500/95 text-white text-sm font-medium shadow-floating"
+          >
+            {noAnswerToast}
+          </motion.div>
         </div>
       )}
+
     </div>
   );
+}
+
+/** Renders its children only when the parent CallSessionProvider has us
+ *  inside a connected `<LiveKitRoom>` (i.e. token minted, socket open).
+ *  Falls back to a clean "Connecting…" spinner — replaces the old mock
+ *  gradient grid that used to flash before the real call layout. */
+function RoomReady({ children }: { children: React.ReactNode }) {
+  // useRoomContext() returns undefined when there's no surrounding LiveKitRoom.
+  const room = useMaybeRoomContext();
+  if (!room) {
+    return (
+      <div className="h-full w-full grid place-items-center bg-gradient-to-br from-zinc-900 via-zinc-950 to-black text-white/70">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="size-7 animate-spin text-cyan-400" />
+          <p className="text-sm font-medium">Connecting…</p>
+        </div>
+      </div>
+    );
+  }
+  return <>{children}</>;
+}
+
+/**
+ * Internal bridge — observes RoomEvent.ParticipantConnected / Disconnected
+ * to:
+ *   1) flip `hasRemote` true the moment any remote joins, clearing the
+ *      caller-side "no answer" timer.
+ *   2) auto-end this side of the call when every remote disconnects (e.g.
+ *      WhatsApp-style: in a 1:1, peer leaving hangs up here too; in a
+ *      group, the last person leaving cleans up an empty room).
+ *
+ * Must be rendered INSIDE `<LiveKitRoom>`.
+ */
+function RoomBridge({
+  onHasRemoteChange,
+  isGroup,
+  onAllRemotesLeft
+}: {
+  onHasRemoteChange: (v: boolean) => void;
+  isGroup: boolean;
+  onAllRemotesLeft: () => void;
+}) {
+  const room = useMaybeRoomContext();
+  // Track whether at least one remote ever joined. Without this we'd treat
+  // "no remote yet" the same as "everyone left" and immediately hang up the
+  // caller before the recipient picks. The "no answer" timer handles the
+  // never-picked case separately.
+  const sawRemoteRef = React.useRef(false);
+
+  React.useEffect(() => {
+    if (!room) return;
+    const sync = () => {
+      const count = room.remoteParticipants.size;
+      const hadRemote = sawRemoteRef.current;
+      if (count > 0) sawRemoteRef.current = true;
+      onHasRemoteChange(count > 0);
+      // 1:1 only: if the single remote just left, end our side too.
+      // Groups stay alive even when alone.
+      if (hadRemote && count === 0 && !isGroup) onAllRemotesLeft();
+    };
+    sync();
+    room.on(RoomEvent.ParticipantConnected, sync);
+    room.on(RoomEvent.ParticipantDisconnected, sync);
+    return () => {
+      room.off(RoomEvent.ParticipantConnected, sync);
+      room.off(RoomEvent.ParticipantDisconnected, sync);
+    };
+  }, [room, onHasRemoteChange, isGroup, onAllRemotesLeft]);
+
+  return null;
 }
