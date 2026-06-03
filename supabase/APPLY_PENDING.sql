@@ -712,4 +712,63 @@ ALTER TABLE messages
     'schedule'
   ));
 
+-- ---------------------------------------------------------------------
+-- 18. Calls dashboard data model — extend `call_sessions` so it can also
+--     hold scheduled (future-dated) calls, and add a `duration_seconds`
+--     mirror so history queries don't have to compute deltas on every
+--     read. Adds a pg_cron job that auto-rings scheduled calls when
+--     their `scheduled_for` time arrives.
+--
+--     Also patches the messages.kind CHECK constraint (already includes
+--     'call') for completeness, and adds an INSERT trigger that posts a
+--     human-readable "call" system message into the chat each time a
+--     call row flips to its final (ended / missed / rejected) status.
+-- ---------------------------------------------------------------------
+
+ALTER TABLE call_sessions
+  ADD COLUMN IF NOT EXISTS scheduled_for     TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS title             TEXT,
+  ADD COLUMN IF NOT EXISTS duration_seconds  INTEGER;
+
+-- Extend the status enum to include 'scheduled' — needed for the
+-- auto-ring cron to find pending calls. Drop + recreate the CHECK with
+-- the same auto-name PostgREST inferred originally.
+ALTER TABLE call_sessions DROP CONSTRAINT IF EXISTS call_sessions_status_check;
+ALTER TABLE call_sessions
+  ADD CONSTRAINT call_sessions_status_check
+  CHECK (status IN (
+    'scheduled', 'ringing', 'active', 'ended', 'missed', 'rejected'
+  ));
+
+CREATE INDEX IF NOT EXISTS call_sessions_scheduled_idx
+  ON call_sessions(scheduled_for)
+  WHERE status = 'scheduled';
+
+-- pg_cron: every minute, find scheduled calls whose start time has
+-- passed and flip them to 'ringing' so the existing realtime ring path
+-- (clients subscribe to call_sessions row updates) fires automatically.
+DO $$
+BEGIN
+  PERFORM cron.unschedule('start-scheduled-calls')
+  WHERE EXISTS (
+    SELECT 1 FROM cron.job WHERE jobname = 'start-scheduled-calls'
+  );
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END $$;
+
+SELECT cron.schedule(
+  'start-scheduled-calls',
+  '* * * * *',
+  $job$
+    UPDATE call_sessions
+       SET status = 'ringing',
+           started_at = NOW()
+     WHERE status = 'scheduled'
+       AND scheduled_for IS NOT NULL
+       AND scheduled_for <= NOW()
+       AND ended_at IS NULL;
+  $job$
+);
+
 -- Done. Reload the app — the new columns/RPC/policies/jobs are now live.

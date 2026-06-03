@@ -23,6 +23,11 @@ import {
   CalendarClock,
   Music as MusicIcon,
   Phone,
+  PhoneIncoming,
+  PhoneOutgoing,
+  PhoneMissed,
+  PhoneOff,
+  Ghost as GhostIcon,
   Video as VideoIcon,
   Forward as ForwardIcon,
   CheckCircle2
@@ -558,6 +563,10 @@ function BubbleBody({
 
   if (message.kind === "schedule" && message.schedule) {
     return <ScheduleBubble me={me} bubbleMe={bubbleMe} meStyle={meStyle} message={message} />;
+  }
+
+  if (message.kind === "call" && message.call) {
+    return <CallBubble me={me} call={message.call} />;
   }
 
   if (message.kind === "voice" && message.voice) {
@@ -1535,6 +1544,83 @@ function CommunityCardBubble({
       >
         Join community →
       </button>
+    </div>
+  );
+}
+
+/** Call history bubble — posted by /api/calls/end (and /api/calls/decline
+ *  when everyone declines). Reads like a WhatsApp call row: voice/video
+ *  icon, direction (incoming / outgoing / missed / rejected), and the
+ *  talk-time when the call connected. Tapping it places a callback. */
+function CallBubble({
+  me,
+  call
+}: {
+  me: boolean;
+  call: NonNullable<Message["call"]>;
+}) {
+  // Direction is stored from the initiator's perspective; flip on render
+  // so the recipient sees "Incoming" instead of "Outgoing".
+  const direction: "incoming" | "outgoing" = me
+    ? call.direction
+    : call.direction === "outgoing"
+    ? "incoming"
+    : "outgoing";
+
+  // Pick the leading icon + color from status, then direction.
+  let Icon = direction === "incoming" ? PhoneIncoming : PhoneOutgoing;
+  let iconTint = direction === "incoming" ? "text-emerald-400" : "text-cyan-400";
+  if (call.status === "missed") {
+    Icon = PhoneMissed;
+    iconTint = "text-rose-400";
+  } else if (call.status === "rejected") {
+    Icon = PhoneOff;
+    iconTint = "text-amber-400";
+  }
+
+  // Label — direction + status combine into a human-readable phrase. The
+  // duration appears only for successfully connected calls.
+  const label = (() => {
+    if (call.status === "missed") return direction === "incoming" ? "Missed call" : "No answer";
+    if (call.status === "rejected") return direction === "incoming" ? "Declined" : "Call declined";
+    return direction === "incoming" ? "Incoming" : "Outgoing";
+  })();
+
+  const fmtDur = (s: number) => {
+    if (!s || s <= 0) return "";
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const sec = s % 60;
+    if (h > 0) {
+      return `${h}:${String(m).padStart(2, "0")}:${String(sec).padStart(2, "0")}`;
+    }
+    return `${m}:${String(sec).padStart(2, "0")}`;
+  };
+
+  return (
+    <div
+      className={cn(
+        "inline-flex items-center gap-2.5 rounded-2xl glass border border-border/60 px-3 py-2 max-w-[20rem]",
+        me ? "rounded-br-none" : "rounded-bl-none"
+      )}
+    >
+      <span className={cn("shrink-0 size-9 rounded-full grid place-items-center bg-foreground/5", iconTint)}>
+        {call.video ? <VideoIcon className="size-4" /> : <Icon className="size-4" />}
+      </span>
+      <div className="min-w-0">
+        <p className="text-sm font-medium leading-tight flex items-center gap-1.5">
+          {call.ghost && <GhostIcon className="size-3.5 text-violet-400" aria-label="Ghost" />}
+          {label}
+          {call.video && (
+            <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+              Video
+            </span>
+          )}
+        </p>
+        <p className="text-[11px] text-muted-foreground">
+          {call.durationSec > 0 ? fmtDur(call.durationSec) : "—"}
+        </p>
+      </div>
     </div>
   );
 }
