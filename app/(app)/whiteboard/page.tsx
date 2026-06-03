@@ -81,29 +81,46 @@ export default function WhiteboardPage() {
   // Listen for pointer moves over the viewport and push our cursor
   // position into the presence channel. Coordinates are converted into
   // board-space so peers' renders track pan + zoom on their end.
+  //
+  // Effect deps are deliberately MINIMAL — re-attaching the listener
+  // every time camera.x/y/zoom flips (i.e. on every pan tick) thrashes
+  // the DOM. Instead we read the live camera from the store inside the
+  // handler. Capture-phase listener so an in-canvas overlay can't
+  // swallow the event before our publish fires.
   const viewportRef = React.useRef<HTMLDivElement | null>(null);
   React.useEffect(() => {
     const el = viewportRef.current;
-    if (!el || !board) return;
+    if (!el) return;
     const onMove = (e: PointerEvent) => {
+      const active = useWhiteboardStore.getState().activeBoard();
+      if (!active) return;
       const rect = el.getBoundingClientRect();
       const screenX = e.clientX - rect.left;
       const screenY = e.clientY - rect.top;
-      // Inverse camera transform — turn screen px into board coords.
-      const x = (screenX - board.camera.x) / board.camera.zoom;
-      const y = (screenY - board.camera.y) / board.camera.zoom;
+      const x = (screenX - active.camera.x) / active.camera.zoom;
+      const y = (screenY - active.camera.y) / active.camera.zoom;
       publish(x, y);
     };
-    el.addEventListener("pointermove", onMove);
-    return () => el.removeEventListener("pointermove", onMove);
-  }, [board?.id, board?.camera.x, board?.camera.y, board?.camera.zoom, publish, board]);
+    el.addEventListener("pointermove", onMove, { capture: true });
+    return () =>
+      el.removeEventListener("pointermove", onMove, { capture: true });
+  }, [publish]);
 
   // Auto-save: every time the elements array reference changes, debounce
   // a write to the server. The store's saveActiveBoard handles the
-  // throttling itself (~600ms coalesce).
+  // throttling itself (~600ms coalesce). Skip the FIRST fire after
+  // `loaded` flips true — at that point the elementsRef is the
+  // freshly-fetched server array, and POSTing it back would race the
+  // legitimate server state with a no-op write (or worse, clobber it
+  // with stale local edits made before the fetch resolved).
   const elementsRef = board?.elements;
+  const firstSaveSkipRef = React.useRef(false);
   React.useEffect(() => {
     if (!loaded) return;
+    if (!firstSaveSkipRef.current) {
+      firstSaveSkipRef.current = true;
+      return;
+    }
     saveActiveBoard();
   }, [elementsRef, saveActiveBoard, loaded]);
 

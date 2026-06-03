@@ -24,74 +24,11 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { cn, formatRelative } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
-
-type NotifKind = "message" | "mention" | "call" | "ghost" | "reaction" | "system";
-
-interface Notification {
-  id: string;
-  kind: NotifKind;
-  title: string;
-  body: string;
-  time: string;
-  avatar?: string;
-  read?: boolean;
-}
-
-const seed: Notification[] = [
-  {
-    id: "n1",
-    kind: "message",
-    title: "Kai Nakamura",
-    body:
-      "Yo! Drop everything — the new track is bonkers. I spent the whole night layering that pad and I think the bass finally sits exactly where it should. Listen with headphones, you'll catch the little detuned arp at 1:42 that I want your opinion on.",
-    time: new Date(Date.now() - 1000 * 60 * 4).toISOString(),
-    avatar: "https://api.dicebear.com/9.x/notionists/svg?backgroundType=gradientLinear&backgroundColor=8b5cf6,ec4899,22d3ee,a3e635,fbbf24,fb923c,60a5fa,f472b6&radius=18&seed=kai"
-  },
-  {
-    id: "n2",
-    kind: "mention",
-    title: "@aria in Aurora Design Lab",
-    body:
-      "Iris mentioned you in a thread about the new motion specs — can you sanity check the easing curves and confirm we're switching to the spring(stiffness:220) preset for hero transitions on web?",
-    time: new Date(Date.now() - 1000 * 60 * 22).toISOString(),
-    avatar: "https://api.dicebear.com/9.x/notionists/svg?backgroundType=gradientLinear&backgroundColor=8b5cf6,ec4899,22d3ee,a3e635,fbbf24,fb923c,60a5fa,f472b6&radius=18&seed=iris"
-  },
-  {
-    id: "n3",
-    kind: "call",
-    title: "Missed call from Obsidian Patel",
-    body: "She called twice. Probably about the AI dataset review you scheduled for tomorrow.",
-    time: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
-    avatar: "https://api.dicebear.com/9.x/notionists/svg?backgroundType=gradientLinear&backgroundColor=8b5cf6,ec4899,22d3ee,a3e635,fbbf24,fb923c,60a5fa,f472b6&radius=18&seed=nova"
-  },
-  {
-    id: "n4",
-    kind: "ghost",
-    title: "Ghost Room · Midnight Lounge",
-    body:
-      "There are 42 ghosts active right now and a heated thread about glassmorphism vs neumorphism. Slip in anonymously — your identity is hidden by default and the room auto-closes at 3 AM local time.",
-    time: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
-    read: true
-  },
-  {
-    id: "n5",
-    kind: "reaction",
-    title: "Lyra reacted to your message",
-    body: "💜 on \"This is unreal. The pad sits perfectly under the bass.\"",
-    time: new Date(Date.now() - 1000 * 60 * 60 * 3).toISOString(),
-    avatar: "https://api.dicebear.com/9.x/notionists/svg?backgroundType=gradientLinear&backgroundColor=8b5cf6,ec4899,22d3ee,a3e635,fbbf24,fb923c,60a5fa,f472b6&radius=18&seed=lyra",
-    read: true
-  },
-  {
-    id: "n6",
-    kind: "system",
-    title: "Obsidian AI · weekly digest",
-    body:
-      "You spent 4h 12m in conversations this week, joined 3 ghost rooms, and finished 12 thread replies. Your most-mentioned topic was 'motion design'. Want me to summarize the week into a story you can post?",
-    time: new Date(Date.now() - 1000 * 60 * 60 * 18).toISOString(),
-    read: true
-  }
-];
+import {
+  useNotificationsStore,
+  type Notification,
+  type NotifKind
+} from "@/store/use-notifications-store";
 
 const kindStyle: Record<NotifKind, { icon: React.ReactNode; color: string }> = {
   message: { icon: <MessageCircle className="size-3.5" />, color: "from-violet-500 to-fuchsia-500" },
@@ -106,7 +43,14 @@ export function NotificationCenter({ children }: { children: React.ReactNode }) 
   const t = useT();
   const router = useRouter();
   const [open, setOpen] = React.useState(false);
-  const [items, setItems] = React.useState<Notification[]>(seed);
+  // The live feed + persisted read/unread state live in the store. We
+  // subscribe to the items array directly; mutations go through store
+  // actions so they persist across reloads and the topbar bell badge
+  // sees the same count.
+  const items = useNotificationsStore((s) => s.items);
+  const storeMarkAllRead = useNotificationsStore((s) => s.markAllRead);
+  const storeClearAll = useNotificationsStore((s) => s.clearAll);
+  const storeMarkOne = useNotificationsStore((s) => s.markOne);
   const [tab, setTab] = React.useState<"all" | "unread" | "mentions">("all");
   const panelRef = React.useRef<HTMLDivElement>(null);
   const triggerRef = React.useRef<HTMLElement>(null);
@@ -118,14 +62,13 @@ export function NotificationCenter({ children }: { children: React.ReactNode }) 
 
   const unread = items.filter((i) => !i.read).length;
 
-  const markAllRead = () => setItems((cur) => cur.map((c) => ({ ...c, read: true })));
-  const clearAll = () => setItems([]);
+  const markAllRead = () => storeMarkAllRead();
+  const clearAll = () => storeClearAll();
   const openNotificationSettings = () => {
     setOpen(false);
     router.push("/settings?section=notifications");
   };
-  const markOne = (id: string) =>
-    setItems((cur) => cur.map((c) => (c.id === id ? { ...c, read: true } : c)));
+  const markOne = (id: string) => storeMarkOne(id);
 
   const filtered =
     tab === "all"
@@ -260,6 +203,14 @@ export function NotificationCenter({ children }: { children: React.ReactNode }) 
                         index={i}
                         total={filtered.length}
                         onRead={markOne}
+                        // Clicking a card navigates to its bound route
+                        // (chat thread / call list / community / etc.)
+                        // and closes the popover so the destination is
+                        // visible.
+                        onActivate={(href) => {
+                          setOpen(false);
+                          if (href) router.push(href);
+                        }}
                       />
                     ))}
                   </AnimatePresence>
@@ -305,12 +256,17 @@ function NotifCard({
   n,
   index,
   total,
-  onRead
+  onRead,
+  onActivate
 }: {
   n: Notification;
   index: number;
   total: number;
   onRead: (id: string) => void;
+  /** Called when the user clicks the card body (not the expand chevron).
+   *  Receives the bound route — undefined for notifications that don't
+   *  point anywhere (e.g. a generic system chip). */
+  onActivate: (href: string | undefined) => void;
 }) {
   const t = useT();
   const [expanded, setExpanded] = React.useState(false);
@@ -359,7 +315,13 @@ function NotifCard({
       initial="initial"
       animate="animate"
       exit="exit"
-      onClick={() => !n.read && onRead(n.id)}
+      onClick={() => {
+        // Always mark read first so the unread badge shrinks immediately.
+        if (!n.read) onRead(n.id);
+        // Then hand off to the parent so the panel closes + router
+        // navigates to the bound route.
+        onActivate(n.targetHref);
+      }}
       className={cn(
         "relative flex gap-3 p-3.5 rounded-2xl cursor-pointer transition-colors",
         "glass-subtle border border-white/10 hover:bg-foreground/[0.04]",
