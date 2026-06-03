@@ -2,10 +2,40 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { createClient } from "@/lib/supabase/client";
 
 /* -------------------------------------------------------- */
 /* Types                                                    */
 /* -------------------------------------------------------- */
+
+/** Postgres row shape for the `whiteboards` table — used by fetchBoards
+ *  / createBoardOnServer to coerce server rows into the Board UI shape. */
+interface WhiteboardRow {
+  id: string;
+  name: string;
+  owner_id: string;
+  elements: unknown;
+  camera: { x: number; y: number; zoom: number } | null;
+  visibility: "private" | "team" | "link";
+  created_at: string;
+  updated_at: string;
+}
+
+/** Lightweight per-key debounce. Used to coalesce rapid-fire autosaves
+ *  into a single network round-trip. Kept inside this module so the
+ *  store doesn't need a side-channel state for it. */
+const _debounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+function debounce(key: string, ms: number, fn: () => void) {
+  const t = _debounceTimers.get(key);
+  if (t) clearTimeout(t);
+  _debounceTimers.set(
+    key,
+    setTimeout(() => {
+      _debounceTimers.delete(key);
+      fn();
+    }, ms)
+  );
+}
 
 export type Tool =
   | "select"
@@ -188,6 +218,26 @@ interface State {
   /** Switch the active board's link visibility tier. */
   setBoardVisibility: (v: "private" | "team" | "link") => void;
 
+  /* ---- Supabase sync ---- */
+  /** True once fetchBoards has resolved at least once this session. */
+  loaded: boolean;
+  /** Roles I have on each board, by board id. Owner > editor > viewer. */
+  myRoles: Record<string, "owner" | "editor" | "viewer">;
+  /** Load every board I own or have been added to. Replaces the local
+   *  cache so refresh + cross-device sync work. */
+  fetchBoards: () => Promise<void>;
+  /** Create a new board on the server (returns the persisted row). */
+  createBoardOnServer: (name: string) => Promise<Board | null>;
+  /** Debounced save of the active board's elements + camera. Safe to
+   *  spam — it coalesces back-to-back calls within ~600ms. */
+  saveActiveBoard: () => void;
+  /** My role on the active board ('owner', 'editor', 'viewer'). Falls
+   *  back to 'owner' for boards that haven't synced yet (so brand-new
+   *  client-only boards stay editable). */
+  myRole: () => "owner" | "editor" | "viewer";
+  /** True when my role is owner OR editor — i.e. I can draw. */
+  canEdit: () => boolean;
+
   /* ---- tool / paint settings ---- */
   setTool: (t: Tool) => void;
   setColor: (c: string) => void;
@@ -360,8 +410,131 @@ export const useWhiteboardStore = create<State>()(
       clipboard: [],
       clipboardPasteCount: 0,
       history: {},
+      loaded: false,
+      myRoles: {},
 
       activeBoard: () => get().boards.find((b) => b.id === get().activeBoardId),
+
+      myRole: () => {
+        const id = get().activeBoardId;
+        // Default to owner for boards that haven't synced yet — keeps
+        // brand-new local boards editable before their server row exists.
+        return get().myRoles[id] ?? "owner";
+      },
+
+      canEdit: () => {
+        const r = get().myRole();
+        return r === "owner" || r === "editor";
+      },
+
+      fetchBoards: async () => {
+        const supabase = createClient();
+        const { data: rows, error } = await supabase
+          .from("whiteboards")
+          .select("*")
+          .order("updated_at", { ascending: false });
+        if (error || !rows) {
+          set({ loaded: true });
+          return;
+        }
+        const { data: { user } } = await supabase.auth.getUser();
+        const meId = user?.id ?? null;
+
+        // Resolve my role on each board via the membership table.
+        const { data: memberRows } = await supabase
+          .from("whiteboard_members")
+          .select("board_id, user_id, role")
+          .eq("user_id", meId ?? "");
+        const myRoles: Record<string, "owner" | "editor" | "viewer"> = {};
+        for (const m of memberRows ?? []) {
+          myRoles[m.board_id] = m.role;
+        }
+
+        const boards: Board[] = rows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          elements: Array.isArray(r.elements) ? r.elements : [],
+          camera: r.camera ?? { x: 0, y: 0, zoom: 1 },
+          createdAt: r.created_at,
+          updatedAt: r.updated_at,
+          visibility: r.visibility ?? "private"
+        }));
+
+        set((s) => ({
+          boards: boards.length > 0 ? boards : s.boards,
+          activeBoardId:
+            boards.find((b) => b.id === s.activeBoardId)?.id ??
+            boards[0]?.id ??
+            s.activeBoardId,
+          myRoles,
+          loaded: true
+        }));
+      },
+
+      createBoardOnServer: async (name) => {
+        try {
+          const res = await fetch("/api/whiteboards/create", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name })
+          });
+          if (!res.ok) {
+            console.warn("[whiteboards/create] failed:", await res.text());
+            return null;
+          }
+          const { board: row } = (await res.json()) as { board: WhiteboardRow };
+          const board: Board = {
+            id: row.id,
+            name: row.name,
+            elements: [],
+            camera: row.camera ?? { x: 0, y: 0, zoom: 1 },
+            createdAt: row.created_at,
+            updatedAt: row.updated_at,
+            visibility: row.visibility ?? "private"
+          };
+          set((s) => ({
+            boards: [board, ...s.boards],
+            activeBoardId: board.id,
+            myRoles: { ...s.myRoles, [board.id]: "owner" }
+          }));
+          return board;
+        } catch (err) {
+          console.warn("[whiteboards/create] error:", err);
+          return null;
+        }
+      },
+
+      saveActiveBoard: () => {
+        // Coalesce calls within ~600ms — drawing fires many element
+        // updates per second; we don't want to POST on every keystroke.
+        const id = get().activeBoardId;
+        const b = get().boards.find((x) => x.id === id);
+        if (!b) return;
+        // Only sync persisted (server-id, UUID-style) boards. The local
+        // welcome board uses a prefixed id ("bd-…") and stays local-only.
+        const isServerId =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+            b.id
+          );
+        if (!isServerId) return;
+        if (!get().canEdit()) return;
+        debounce(`save-${b.id}`, 600, async () => {
+          try {
+            await fetch("/api/whiteboards/save", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                boardId: b.id,
+                elements: b.elements,
+                camera: b.camera,
+                name: b.name
+              })
+            });
+          } catch (err) {
+            console.warn("[whiteboards/save] failed:", err);
+          }
+        });
+      },
 
       /* ---- boards ---- */
       createBoard: (name) => {
@@ -393,12 +566,14 @@ export const useWhiteboardStore = create<State>()(
         }),
       setActiveBoard: (id) =>
         set((s) => (s.boards.some((b) => b.id === id) ? { activeBoardId: id } : s)),
-      setBoardAccess: (userId, level) =>
+      setBoardAccess: (userId, level) => {
+        const boardId = get().activeBoardId;
+        // Optimistic local update — the popover reflects the change
+        // immediately. The server call lands shortly after.
         set((s) => ({
           boards: s.boards.map((b) => {
-            if (b.id !== s.activeBoardId) return b;
+            if (b.id !== boardId) return b;
             const next = { ...(b.access ?? {}) };
-            // Treat "none" as a removal so the access map stays compact.
             if (level === "none") {
               delete next[userId];
             } else {
@@ -406,7 +581,23 @@ export const useWhiteboardStore = create<State>()(
             }
             return { ...b, access: next, updatedAt: new Date().toISOString() };
           })
-        })),
+        }));
+        // Only sync server-side for persisted boards.
+        const isServerId =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+            boardId
+          );
+        if (!isServerId) return;
+        void fetch("/api/whiteboards/share", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            boardId,
+            userId,
+            role: level === "viewer" ? "viewer" : level === "editor" ? "editor" : "none"
+          })
+        }).catch((err) => console.warn("[whiteboards/share] failed:", err));
+      },
       setBoardVisibility: (v) =>
         set((s) => ({
           boards: s.boards.map((b) =>
@@ -519,15 +710,21 @@ export const useWhiteboardStore = create<State>()(
         })),
 
       /* ---- elements ---- */
-      addElement: (el) =>
+      addElement: (el) => {
+        // Viewers can't mutate the board — server RLS would reject the
+        // save anyway, but no-op'ing locally avoids ghost shapes that
+        // disappear on next fetch.
+        if (!get().canEdit()) return;
         set((s) => ({
           boards: s.boards.map((b) =>
             b.id === s.activeBoardId
               ? { ...b, elements: [...b.elements, el], updatedAt: new Date().toISOString() }
               : b
           )
-        })),
-      updateElement: (id, patch) =>
+        }));
+      },
+      updateElement: (id, patch) => {
+        if (!get().canEdit()) return;
         set((s) => ({
           boards: s.boards.map((b) =>
             b.id === s.activeBoardId
@@ -540,8 +737,10 @@ export const useWhiteboardStore = create<State>()(
                 }
               : b
           )
-        })),
-      removeElement: (id) =>
+        }));
+      },
+      removeElement: (id) => {
+        if (!get().canEdit()) return;
         set((s) => ({
           boards: s.boards.map((b) =>
             b.id === s.activeBoardId
@@ -552,8 +751,10 @@ export const useWhiteboardStore = create<State>()(
                 }
               : b
           )
-        })),
+        }));
+      },
       translateElements: (ids, dx, dy) => {
+        if (!get().canEdit()) return;
         if (ids.length === 0 || (dx === 0 && dy === 0)) return;
         const idSet = new Set(ids);
         set((s) => ({
@@ -589,7 +790,8 @@ export const useWhiteboardStore = create<State>()(
           )
         }));
       },
-      clearBoard: () =>
+      clearBoard: () => {
+        if (!get().canEdit()) return;
         set((s) => ({
           boards: s.boards.map((b) =>
             b.id === s.activeBoardId
@@ -597,7 +799,8 @@ export const useWhiteboardStore = create<State>()(
               : b
           ),
           selection: []
-        })),
+        }));
+      },
 
       /* ---- selection ---- */
       setSelection: (ids) => set({ selection: ids }),

@@ -31,16 +31,10 @@ import { AccessPopover } from "@/features/whiteboard/access-popover";
 import { SelectionToolbar } from "@/features/whiteboard/selection-toolbar";
 import { IconPanel } from "@/features/whiteboard/icon-panel";
 import { downloadBoardAsPng } from "@/features/whiteboard/export-png";
+import { useWhiteboardPresence } from "@/features/whiteboard/use-whiteboard-presence";
+import { RemoteCursorsLayer } from "@/features/whiteboard/remote-cursors-layer";
 import { useWhiteboardStore } from "@/store/use-whiteboard-store";
-import { users } from "@/lib/mock-data";
 import { useT } from "@/lib/i18n";
-
-const COLLAB_USERS = [
-  { ...users[1], color: "#22D3EE" },
-  { ...users[2], color: "#EC4899" },
-  { ...users[3], color: "#A3E635" },
-  { ...users[4], color: "#FBBF24" }
-];
 
 export default function WhiteboardPage() {
   const t = useT();
@@ -57,6 +51,47 @@ export default function WhiteboardPage() {
 
   const board = useWhiteboardStore((s) => s.activeBoard());
   const setCamera = useWhiteboardStore((s) => s.setCamera);
+  const fetchBoards = useWhiteboardStore((s) => s.fetchBoards);
+  const loaded = useWhiteboardStore((s) => s.loaded);
+  const saveActiveBoard = useWhiteboardStore((s) => s.saveActiveBoard);
+  const myRole = useWhiteboardStore((s) => s.myRole());
+
+  // First-mount: pull every board I own or have been added to from the DB.
+  React.useEffect(() => {
+    if (!loaded) void fetchBoards();
+  }, [loaded, fetchBoards]);
+
+  // Real-time presence — every collaborator's cursor on this board.
+  const { cursors, publish } = useWhiteboardPresence(board?.id ?? null);
+
+  // Listen for pointer moves over the viewport and push our cursor
+  // position into the presence channel. Coordinates are converted into
+  // board-space so peers' renders track pan + zoom on their end.
+  const viewportRef = React.useRef<HTMLDivElement | null>(null);
+  React.useEffect(() => {
+    const el = viewportRef.current;
+    if (!el || !board) return;
+    const onMove = (e: PointerEvent) => {
+      const rect = el.getBoundingClientRect();
+      const screenX = e.clientX - rect.left;
+      const screenY = e.clientY - rect.top;
+      // Inverse camera transform — turn screen px into board coords.
+      const x = (screenX - board.camera.x) / board.camera.zoom;
+      const y = (screenY - board.camera.y) / board.camera.zoom;
+      publish(x, y);
+    };
+    el.addEventListener("pointermove", onMove);
+    return () => el.removeEventListener("pointermove", onMove);
+  }, [board?.id, board?.camera.x, board?.camera.y, board?.camera.zoom, publish, board]);
+
+  // Auto-save: every time the elements array reference changes, debounce
+  // a write to the server. The store's saveActiveBoard handles the
+  // throttling itself (~600ms coalesce).
+  const elementsRef = board?.elements;
+  React.useEffect(() => {
+    if (!loaded) return;
+    saveActiveBoard();
+  }, [elementsRef, saveActiveBoard, loaded]);
 
   const [collapsed, setCollapsed] = React.useState(false);
   const [shareOpen, setShareOpen] = React.useState(false);
@@ -79,14 +114,6 @@ export default function WhiteboardPage() {
     }
   }, []);
 
-  // Roving "ghost cursors" — pure visual effect so the board feels live.
-  const [tick, setTick] = React.useState(0);
-  React.useEffect(() => {
-    if (!mounted) return;
-    const id = window.setInterval(() => setTick((t) => t + 1), 60);
-    return () => window.clearInterval(id);
-  }, [mounted]);
-
   if (!mounted) {
     return (
       <div className="h-[calc(100dvh-4rem)] grid place-items-center text-muted-foreground text-sm">
@@ -107,6 +134,7 @@ export default function WhiteboardPage() {
       />
 
       <div
+        ref={viewportRef}
         data-board-viewport
         className="relative flex-1 min-w-0 overflow-hidden"
       >
@@ -143,18 +171,23 @@ export default function WhiteboardPage() {
               >
                 <Users className="size-3.5 text-muted-foreground" />
                 <div className="flex -space-x-2">
-                  {COLLAB_USERS.map((u) => (
+                  {cursors.slice(0, 4).map((c) => (
                     <Avatar
-                      key={u.id}
+                      key={c.userId}
                       className="size-6 ring-2 ring-background"
-                      style={{ boxShadow: `0 0 0 1px ${u.color}` }}
+                      style={{ boxShadow: `0 0 0 1px ${c.color}` }}
                     >
-                      <AvatarImage src={u.avatar} />
+                      <AvatarImage src={c.avatar ?? undefined} />
                     </Avatar>
                   ))}
+                  {cursors.length === 0 && (
+                    <span className="size-6 rounded-full bg-foreground/10 ring-2 ring-background" />
+                  )}
                 </div>
                 <span className="text-xs text-muted-foreground">
-                  {COLLAB_USERS.length} {t("editing")}
+                  {cursors.length === 0
+                    ? t("only you")
+                    : `${cursors.length} ${t("editing")}`}
                 </span>
                 <ChevronDown className="size-3 text-muted-foreground" />
               </button>
@@ -197,8 +230,9 @@ export default function WhiteboardPage() {
           </motion.div>
         </div>
 
-        {/* Live "ghost cursors" — pure decoration, draw in screen space. */}
-        <GhostCursors tick={tick} />
+        {/* Real-time peer cursors — colored Figma-style pointers with name
+            pills, positioned in board space so they track pan/zoom. */}
+        <RemoteCursorsLayer cursors={cursors} />
 
         {/* Bottom-center: selection bar only (shown when 2+ items selected). */}
         <div className="pointer-events-none absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-2">
@@ -257,41 +291,3 @@ function BoardTitle() {
   );
 }
 
-/** Decorative animated cursors of other people. */
-function GhostCursors({ tick }: { tick: number }) {
-  const cursors = React.useMemo(
-    () => [
-      { name: "Kai", color: "#22D3EE", phase: 0 },
-      { name: "Iris", color: "#EC4899", phase: 1.5 },
-      { name: "Obsidian", color: "#A3E635", phase: 3.2 }
-    ],
-    []
-  );
-  return (
-    <div className="pointer-events-none absolute inset-0 z-10">
-      {cursors.map((c) => {
-        // Smooth lissajous-style path so they float around indefinitely.
-        const t = tick * 0.05 + c.phase;
-        const x = 50 + Math.cos(t * 0.7) * 30;
-        const y = 50 + Math.sin(t * 0.9) * 30;
-        return (
-          <div
-            key={c.name}
-            style={{ left: `${x}%`, top: `${y}%` }}
-            className="absolute -translate-x-1/2 -translate-y-1/2 flex items-center gap-1"
-          >
-            <svg width="20" height="20" viewBox="0 0 20 20" fill={c.color}>
-              <path d="M4 1l13 8-6 1-3 6-4-15z" />
-            </svg>
-            <span
-              className="text-[10px] px-1.5 py-0.5 rounded text-white shadow"
-              style={{ backgroundColor: c.color }}
-            >
-              {c.name}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
