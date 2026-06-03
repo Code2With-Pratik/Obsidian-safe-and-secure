@@ -11,6 +11,7 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { useUIStore } from "@/store/use-ui-store";
 import { NotificationCenter } from "@/components/notifications/notification-center";
 import { NovaMascot } from "@/components/nova-mascot";
+import { useNotificationsStore } from "@/store/use-notifications-store";
 import { useT } from "@/lib/i18n";
 
 export function Topbar() {
@@ -18,6 +19,12 @@ export function Topbar() {
   const { theme, setTheme } = useTheme();
   const setCommand = useUIStore((s) => s.setCommandOpen);
   const toggleAi = useUIStore((s) => s.toggleAiAssistant);
+  // Live unread count powers the bell badge — same value the notification
+  // panel renders. Hidden when zero; capped at "9+" so the badge stays
+  // narrow inside its existing Tailwind layout.
+  const unreadCount = useNotificationsStore((s) =>
+    s.items.reduce((n, it) => n + (it.read ? 0 : 1), 0)
+  );
 
   return (
     <header className="relative z-30 flex h-16 items-center gap-3 px-4 md:px-6 border-b border-border/40 backdrop-blur-2xl backdrop-saturate-150 bg-background/50 glass-specular">
@@ -65,12 +72,14 @@ export function Topbar() {
         <NotificationCenter>
           <Button variant="ghost" size="icon" className="relative">
             <Bell />
-            <Badge
-              variant="danger"
-              className="absolute -top-0.5 -right-0.5 !px-1.5 !py-0 !text-[9px]"
-            >
-              4
-            </Badge>
+            {unreadCount > 0 && (
+              <Badge
+                variant="danger"
+                className="absolute -top-0.5 -right-0.5 !px-1.5 !py-0 !text-[9px]"
+              >
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </Badge>
+            )}
           </Button>
         </NotificationCenter>
 

@@ -37,6 +37,234 @@ function debounce(key: string, ms: number, fn: () => void) {
   );
 }
 
+/** Realtime channel that listens for share/unshare events on the current
+ *  user. Lives at module scope so subscribeMembership is idempotent and
+ *  teardownMembership can null it on sign-out. */
+type RealtimeChannelLike = ReturnType<
+  ReturnType<typeof createClient>["channel"]
+>;
+let _membershipChannel: RealtimeChannelLike | null = null;
+
+/** Reentrancy guard for fetchBoards — a burst of share grants would
+ *  otherwise multiply round-trips. */
+let _fetchInFlight = false;
+
+/** One-time-per-board-id warning set for the local-only no-op path in
+ *  saveActiveBoard. Prevents the warning from spamming on every edit. */
+const _warnedLocalOnly = new Set<string>();
+
+/** UUID match — used in three places (saveActiveBoard, renameBoard,
+ *  deleteBoard, and the fetchBoards stale-id reset) to identify
+ *  server-persisted rows vs. the local welcome seed. */
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Module-level flag set by `applyRemoteOp` so the corresponding
+ *  ref-changing `set()` doesn't trigger a redundant /api/save POST.
+ *  Only the originator should persist; peers just mirror the state.
+ *  Cleared after the next saveActiveBoard call short-circuits on it. */
+let _suppressNextSave = false;
+
+// ─── Internal element-mutation helpers ──────────────────────────────
+//
+// Both the public store actions (addElement / updateElement / …) and the
+// applyRemoteOp dispatcher route through these so the local-state shape
+// stays identical regardless of whether the op originated locally or
+// arrived over a broadcast channel. Keep them OUT of the store closure
+// so we don't have to thread `get/set` through the channel handler too.
+//
+// Type-wise we accept the loose `(updater) => void` shape — Zustand's
+// official type is `(partial) => void` and we always hand it a function.
+
+type WBSetter = (updater: (s: State) => Partial<State>) => void;
+
+function _applyAddLocal(set: WBSetter, el: Element) {
+  set((s) => ({
+    boards: s.boards.map((b) =>
+      b.id === s.activeBoardId
+        ? {
+            ...b,
+            elements: [...b.elements, el],
+            updatedAt: new Date().toISOString()
+          }
+        : b
+    )
+  }));
+}
+
+function _applyUpdateLocal(
+  set: WBSetter,
+  id: string,
+  patch: Partial<Element>
+) {
+  set((s) => ({
+    boards: s.boards.map((b) =>
+      b.id === s.activeBoardId
+        ? {
+            ...b,
+            elements: b.elements.map((e) =>
+              e.id === id ? ({ ...e, ...patch } as Element) : e
+            ),
+            updatedAt: new Date().toISOString()
+          }
+        : b
+    )
+  }));
+}
+
+function _applyRemoveLocal(set: WBSetter, id: string) {
+  set((s) => ({
+    boards: s.boards.map((b) =>
+      b.id === s.activeBoardId
+        ? {
+            ...b,
+            elements: b.elements.filter((e) => e.id !== id),
+            updatedAt: new Date().toISOString()
+          }
+        : b
+    )
+  }));
+}
+
+function _applyTranslateLocal(
+  set: WBSetter,
+  ids: string[],
+  dx: number,
+  dy: number
+) {
+  const idSet = new Set(ids);
+  set((s) => ({
+    boards: s.boards.map((b) =>
+      b.id === s.activeBoardId
+        ? {
+            ...b,
+            elements: b.elements.map((e) => {
+              if (!idSet.has(e.id)) return e;
+              if (e.kind === "connection") return e;
+              if (e.kind === "path") {
+                const next = [...e.points];
+                for (let i = 0; i < next.length; i += 2) {
+                  next[i] += dx;
+                  next[i + 1] += dy;
+                }
+                return { ...e, x: e.x + dx, y: e.y + dy, points: next };
+              }
+              if (e.kind === "line") {
+                return {
+                  ...e,
+                  x: e.x + dx,
+                  y: e.y + dy,
+                  x2: e.x2 + dx,
+                  y2: e.y2 + dy
+                };
+              }
+              return { ...e, x: e.x + dx, y: e.y + dy } as Element;
+            }),
+            updatedAt: new Date().toISOString()
+          }
+        : b
+    )
+  }));
+}
+
+function _applyClearLocal(set: WBSetter) {
+  set((s) => ({
+    boards: s.boards.map((b) =>
+      b.id === s.activeBoardId
+        ? { ...b, elements: [], updatedAt: new Date().toISOString() }
+        : b
+    ),
+    selection: []
+  }));
+}
+
+/** Whether the auth-state-change listener has been attached. Guards
+ *  against multiple attachments under Fast Refresh / HMR. */
+let _authListenerAttached = false;
+
+/** Attach a single module-scope listener that tears down the membership
+ *  channel + resets the in-memory caches when the user signs out.
+ *
+ *  Without this, the module-level `_membershipChannel` survives the
+ *  sign-out and the `subscribeMembership` idempotency guard skips the
+ *  next user's resubscription — they'd miss every live share event
+ *  until a full page reload.
+ *
+ *  We deliberately handle ONLY `SIGNED_OUT`, not `USER_UPDATED` or
+ *  `TOKEN_REFRESHED`. Those events fire for routine session refreshes
+ *  (profile edits, expiring access tokens) where the underlying user
+ *  hasn't changed — and the empty-deps useEffect on the whiteboard
+ *  page won't re-run on its own, so clearing `loaded` / `myRoles` on
+ *  those events would silently break:
+ *    • auto-save (gated on `loaded`)
+ *    • realtime share notifications (channel never recreated)
+ *    • permission display (`myRole()` falls back to 'owner' for
+ *      unknown boards, briefly exposing edit affordances to viewers).
+ *
+ *  Account switching is handled implicitly: any flow that promotes a
+ *  different user to the active session in this app already goes
+ *  through SIGNED_OUT first (logout in `lib/supabase/actions.ts`
+ *  redirects to '/'), so a fresh `/whiteboard` mount runs the empty-
+ *  deps effect again and re-subscribes the channel scoped to the new
+ *  `auth.uid()`.
+ *
+ *  Browser-only — guarded for SSR. */
+function attachAuthListener() {
+  if (_authListenerAttached) return;
+  if (typeof window === "undefined") return;
+  _authListenerAttached = true;
+  const supabase = createClient();
+  supabase.auth.onAuthStateChange((event) => {
+    if (event === "SIGNED_OUT") {
+      // Drop the realtime subscription so the next user gets a fresh
+      // channel scoped to their own user_id.
+      if (_membershipChannel) {
+        supabase.removeChannel(_membershipChannel);
+        _membershipChannel = null;
+      }
+      _fetchInFlight = false;
+      // Reset the in-memory caches that depend on `auth.uid()` so the
+      // next user doesn't transiently see the previous user's `myRoles`
+      // while their own fetchBoards is in flight. (`partialize` already
+      // excludes `myRoles` + `loaded`, but the live in-memory copy
+      // outlives sign-out within the same SPA session.)
+      try {
+        useWhiteboardStore.setState({
+          myRoles: {},
+          loaded: false
+        });
+      } catch {
+        /* store may not be hydrated yet — harmless */
+      }
+      return;
+    }
+    // On SIGNED_IN (incl. the INITIAL_SESSION event on cold-tab visits
+    // where the cookie hydrates after mount), retrigger the fetch +
+    // membership subscribe. Without this, a recipient who lands on the
+    // whiteboard page before the session is ready ends up with rows=[]
+    // latched into loaded=true and never sees a shared board until a
+    // hard refresh.
+    if (event === "SIGNED_IN" || event === "INITIAL_SESSION") {
+      // Reset loaded so a force-less consumer can rerun.
+      try {
+        useWhiteboardStore.setState({ loaded: false });
+        // Stale in-flight flag from a pre-auth invocation that errored
+        // silently would block the new one.
+        _fetchInFlight = false;
+        const store = useWhiteboardStore.getState();
+        void store.fetchBoards(true);
+        store.subscribeMembership();
+      } catch {
+        /* harmless during hydration */
+      }
+    }
+  });
+}
+
+if (typeof window !== "undefined") {
+  attachAuthListener();
+}
+
 export type Tool =
   | "select"
   | "hand"
@@ -163,6 +391,17 @@ export type Element =
 /** Per-user access level for a shared board. */
 export type AccessLevel = "viewer" | "editor" | "none";
 
+/** Discriminated union for real-time shape ops broadcast over the
+ *  per-board presence channel. Peers apply these directly via
+ *  `applyRemoteOp` without persisting (only the originator persists). */
+export type WhiteboardOp =
+  | { kind: "add"; el: Element }
+  | { kind: "update"; id: string; patch: Partial<Element> }
+  | { kind: "remove"; id: string }
+  | { kind: "translate"; ids: string[]; dx: number; dy: number }
+  | { kind: "clear" }
+  | { kind: "replace"; elements: Element[] };
+
 export interface Board {
   id: string;
   name: string;
@@ -224,8 +463,17 @@ interface State {
   /** Roles I have on each board, by board id. Owner > editor > viewer. */
   myRoles: Record<string, "owner" | "editor" | "viewer">;
   /** Load every board I own or have been added to. Replaces the local
-   *  cache so refresh + cross-device sync work. */
-  fetchBoards: () => Promise<void>;
+   *  cache so refresh + cross-device sync work. Pass `force` to skip
+   *  the `loaded` short-circuit (used by the realtime subscription when
+   *  a new membership row lands). */
+  fetchBoards: (force?: boolean) => Promise<void>;
+  /** Subscribe to postgres_changes on `whiteboard_members` filtered to
+   *  the current user — re-fetches when anyone shares a board to / from
+   *  me. Idempotent; safe to call after fetchBoards. */
+  subscribeMembership: () => void;
+  /** Tear down the membership channel — call on sign-out or full
+   *  unmount of the whiteboard surface. */
+  teardownMembership: () => void;
   /** Create a new board on the server (returns the persisted row). */
   createBoardOnServer: (name: string) => Promise<Board | null>;
   /** Debounced save of the active board's elements + camera. Safe to
@@ -237,6 +485,21 @@ interface State {
   myRole: () => "owner" | "editor" | "viewer";
   /** True when my role is owner OR editor — i.e. I can draw. */
   canEdit: () => boolean;
+
+  /* ---- Real-time shape sync (Figma-style) ---- */
+  /** Optional broadcaster hook installed by the presence channel
+   *  (features/whiteboard/use-whiteboard-presence). When set, every
+   *  shape mutation calls this with the op so peers see the change
+   *  instantly — no save round-trip. Cleared on channel teardown. */
+  broadcastOp?: (op: WhiteboardOp) => void;
+  /** Wire / unwire the broadcaster. Called by the presence hook on
+   *  SUBSCRIBED / cleanup respectively. */
+  setBroadcastOp: (fn: ((op: WhiteboardOp) => void) | undefined) => void;
+  /** Apply an op received from a peer over the broadcast channel.
+   *  Bypasses the canEdit() guard (the originator was authorized;
+   *  viewers still need to SEE remote ops) and DOES NOT re-broadcast
+   *  or re-save (originator is the sole writer). */
+  applyRemoteOp: (op: WhiteboardOp) => void;
 
   /* ---- tool / paint settings ---- */
   setTool: (t: Tool) => void;
@@ -427,48 +690,237 @@ export const useWhiteboardStore = create<State>()(
         return r === "owner" || r === "editor";
       },
 
-      fetchBoards: async () => {
+      fetchBoards: async (force?: boolean) => {
+        // Reentrancy guard — the realtime listener can trigger many
+        // back-to-back fetches; we only need one. Without this, a burst
+        // of share grants would N-fold the round-trip.
+        if (_fetchInFlight) return;
+        if (!force && get().loaded) return;
+        _fetchInFlight = true;
+        try {
+          const supabase = createClient();
+          // Resolve the signed-in user FIRST. If we run before the
+          // Supabase client cookie has hydrated (cold-tab race), `user`
+          // is null — bailing without latching `loaded` lets the
+          // attachAuthListener SIGNED_IN / INITIAL_SESSION re-trigger
+          // pick it up cleanly once the session is ready. The previous
+          // code unconditionally set `loaded: true` here, which then
+          // permanently short-circuited every non-force call.
+          const { data: { user } } = await supabase.auth.getUser();
+          const meId = user?.id ?? null;
+          if (!meId) {
+            // Do NOT set loaded — we want a retry. A console.warn would
+            // be noisy on every cold mount, so stay silent and rely on
+            // the auth listener to retrigger.
+            return;
+          }
+
+          const { data: rows, error } = await supabase
+            .from("whiteboards")
+            .select("*")
+            .order("updated_at", { ascending: false });
+          if (error || !rows) {
+            // Network / RLS error — also don't latch. A retry on the
+            // next user-initiated action or auth event is cheap.
+            return;
+          }
+
+          // Resolve my role on each board via the membership table.
+          const { data: memberRows } = await supabase
+            .from("whiteboard_members")
+            .select("board_id, user_id, role")
+            .eq("user_id", meId ?? "");
+          const myRoles: Record<string, "owner" | "editor" | "viewer"> = {};
+          for (const m of memberRows ?? []) {
+            myRoles[m.board_id] = m.role;
+          }
+
+          // Also rehydrate Board.access for boards I OWN so the share
+          // popover keeps showing existing memberships after a refresh.
+          // Only owners can SELECT the full membership roster (per RLS),
+          // so we run this second query scoped to their boards.
+          const ownedIds = rows
+            .filter((r) => r.owner_id === meId)
+            .map((r) => r.id as string);
+          const accessByBoard: Record<string, Record<string, "viewer" | "editor">> = {};
+          if (ownedIds.length > 0) {
+            const { data: rosterRows } = await supabase
+              .from("whiteboard_members")
+              .select("board_id, user_id, role")
+              .in("board_id", ownedIds);
+            for (const m of rosterRows ?? []) {
+              if (m.role === "owner") continue; // owner is implicit on Board.owner_id
+              const map = accessByBoard[m.board_id] ?? {};
+              map[m.user_id] = m.role as "viewer" | "editor";
+              accessByBoard[m.board_id] = map;
+            }
+          }
+
+          const boards: Board[] = rows.map((r) => ({
+            id: r.id,
+            name: r.name,
+            elements: Array.isArray(r.elements) ? r.elements : [],
+            camera: r.camera ?? { x: 0, y: 0, zoom: 1 },
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+            visibility: r.visibility ?? "private",
+            access: accessByBoard[r.id]
+          }));
+
+          // Empty-rows bootstrap — create a server welcome board so
+          // the user's first edits land on a real UUID row (otherwise
+          // saveActiveBoard would skip every save because the local
+          // seed has a `bd-…` id, and the user would silently lose
+          // every stroke). Re-runs only when the server truly has zero
+          // boards for this user; once a board exists the standard
+          // path is taken.
+          if (boards.length === 0) {
+            try {
+              const res = await fetch("/api/whiteboards/create", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ name: "Welcome" })
+              });
+              if (res.ok) {
+                const { board: row } = (await res.json()) as {
+                  board: WhiteboardRow;
+                };
+                const bootstrapBoard: Board = {
+                  id: row.id,
+                  name: row.name,
+                  elements: [],
+                  camera: row.camera ?? { x: 0, y: 0, zoom: 1 },
+                  createdAt: row.created_at,
+                  updatedAt: row.updated_at,
+                  visibility: row.visibility ?? "private"
+                };
+                boards.push(bootstrapBoard);
+                myRoles[bootstrapBoard.id] = "owner";
+              } else {
+                console.warn(
+                  "[whiteboard] empty-rows bootstrap failed:",
+                  await res.text()
+                );
+              }
+            } catch (err) {
+              console.warn("[whiteboard] empty-rows bootstrap error:", err);
+            }
+          }
+
+          set((s) => {
+            const prevActive = s.activeBoardId;
+            // If the persisted activeBoardId is a stale local-only `bd-…`
+            // id (from before we dropped boards from partialize), force
+            // it onto the first server board so we never end up pointing
+            // at a board that doesn't exist in `boards`.
+            const prevIsLocal = !UUID_RE.test(prevActive);
+            const nextActive =
+              !prevIsLocal && boards.find((b) => b.id === prevActive)?.id
+                ? prevActive
+                : boards[0]?.id ?? prevActive;
+            // If the user's active board just got revoked (no longer in
+            // the result set), warn them so the canvas swap isn't silent.
+            if (
+              prevActive !== nextActive &&
+              boards.length > 0 &&
+              !prevIsLocal &&
+              !boards.some((b) => b.id === prevActive) &&
+              typeof window !== "undefined"
+            ) {
+              console.warn(
+                "[whiteboard] Active board access was revoked — switching to:",
+                nextActive
+              );
+            }
+            return {
+              boards: boards.length > 0 ? boards : s.boards,
+              activeBoardId: nextActive,
+              myRoles,
+              loaded: true
+            };
+          });
+        } finally {
+          _fetchInFlight = false;
+        }
+      },
+
+      subscribeMembership: () => {
+        // Already subscribed? No-op (idempotent).
+        if (_membershipChannel) return;
         const supabase = createClient();
-        const { data: rows, error } = await supabase
-          .from("whiteboards")
-          .select("*")
-          .order("updated_at", { ascending: false });
-        if (error || !rows) {
-          set({ loaded: true });
-          return;
-        }
-        const { data: { user } } = await supabase.auth.getUser();
-        const meId = user?.id ?? null;
+        // Use a fresh closure read of meId at subscribe-time so a stale
+        // sign-in transition can't pin the channel to the previous user.
+        void (async () => {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
+          const meId = user.id;
+          // Belt-and-braces — re-check before creating the channel.
+          if (_membershipChannel) return;
+          _membershipChannel = supabase
+            .channel(`nova_whiteboard_members_${meId}`)
+            .on(
+              "postgres_changes",
+              {
+                event: "*",
+                schema: "public",
+                table: "whiteboard_members",
+                filter: `user_id=eq.${meId}`
+              },
+              async (payload) => {
+                // INSERT / UPDATE / DELETE — re-fetch unconditionally.
+                // UPDATE in particular has to refresh because
+                // `myRoles[boardId]` may have flipped (viewer→editor).
+                void get().fetchBoards(true);
+                // Also surface the share event in the notification
+                // center so the recipient sees a chip in the bell
+                // popover, not just a silent sidebar update.
+                try {
+                  const row = (payload.new ?? payload.old) as {
+                    board_id?: string;
+                    role?: "viewer" | "editor" | "owner";
+                  } | null;
+                  if (!row?.board_id) return;
+                  if (payload.eventType === "DELETE") return; // no notif on revoke
+                  // Look up the board name. RLS lets me read it
+                  // because the membership row exists.
+                  const { data: board } = await supabase
+                    .from("whiteboards")
+                    .select("name")
+                    .eq("id", row.board_id)
+                    .maybeSingle();
+                  const boardName = board?.name ?? "a whiteboard";
+                  const { useNotificationsStore } = await import(
+                    "./use-notifications-store"
+                  );
+                  if (payload.eventType === "INSERT") {
+                    useNotificationsStore.getState().add({
+                      kind: "system",
+                      title: "Added to whiteboard",
+                      body: `${boardName} · role: ${row.role ?? "viewer"}`,
+                      targetHref: "/whiteboard"
+                    });
+                  } else if (payload.eventType === "UPDATE") {
+                    useNotificationsStore.getState().add({
+                      kind: "system",
+                      title: "Whiteboard role updated",
+                      body: `${boardName} · your role is now ${row.role ?? "viewer"}`,
+                      targetHref: "/whiteboard"
+                    });
+                  }
+                } catch {
+                  /* never block the fetchBoards path on notification failures */
+                }
+              }
+            )
+            .subscribe();
+        })();
+      },
 
-        // Resolve my role on each board via the membership table.
-        const { data: memberRows } = await supabase
-          .from("whiteboard_members")
-          .select("board_id, user_id, role")
-          .eq("user_id", meId ?? "");
-        const myRoles: Record<string, "owner" | "editor" | "viewer"> = {};
-        for (const m of memberRows ?? []) {
-          myRoles[m.board_id] = m.role;
-        }
-
-        const boards: Board[] = rows.map((r) => ({
-          id: r.id,
-          name: r.name,
-          elements: Array.isArray(r.elements) ? r.elements : [],
-          camera: r.camera ?? { x: 0, y: 0, zoom: 1 },
-          createdAt: r.created_at,
-          updatedAt: r.updated_at,
-          visibility: r.visibility ?? "private"
-        }));
-
-        set((s) => ({
-          boards: boards.length > 0 ? boards : s.boards,
-          activeBoardId:
-            boards.find((b) => b.id === s.activeBoardId)?.id ??
-            boards[0]?.id ??
-            s.activeBoardId,
-          myRoles,
-          loaded: true
-        }));
+      teardownMembership: () => {
+        if (!_membershipChannel) return;
+        const supabase = createClient();
+        supabase.removeChannel(_membershipChannel);
+        _membershipChannel = null;
       },
 
       createBoardOnServer: async (name) => {
@@ -505,6 +957,13 @@ export const useWhiteboardStore = create<State>()(
       },
 
       saveActiveBoard: () => {
+        // If the most recent mutation came from a peer (applyRemoteOp),
+        // the originator has already persisted — we'd just be racing
+        // their write with our own. Clear the flag and bail.
+        if (_suppressNextSave) {
+          _suppressNextSave = false;
+          return;
+        }
         // Coalesce calls within ~600ms — drawing fires many element
         // updates per second; we don't want to POST on every keystroke.
         const id = get().activeBoardId;
@@ -512,11 +971,21 @@ export const useWhiteboardStore = create<State>()(
         if (!b) return;
         // Only sync persisted (server-id, UUID-style) boards. The local
         // welcome board uses a prefixed id ("bd-…") and stays local-only.
-        const isServerId =
-          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-            b.id
-          );
-        if (!isServerId) return;
+        const isServerId = UUID_RE.test(b.id);
+        if (!isServerId) {
+          // One-time warn per board id so the user understands why their
+          // work isn't appearing on other devices. Spamming on every
+          // edit would be noise — the throttle below makes it visible
+          // exactly once per board per session.
+          if (!_warnedLocalOnly.has(b.id)) {
+            _warnedLocalOnly.add(b.id);
+            console.warn(
+              `[whiteboards] Board "${b.name}" is local-only (no server row). ` +
+                `Sharing won't work. Create a new board via the sidebar to get a syncable one.`
+            );
+          }
+          return;
+        }
         if (!get().canEdit()) return;
         debounce(`save-${b.id}`, 600, async () => {
           try {
@@ -542,15 +1011,45 @@ export const useWhiteboardStore = create<State>()(
         set((s) => ({ boards: [...s.boards, b], activeBoardId: b.id }));
         return b;
       },
-      renameBoard: (id, name) =>
+      renameBoard: (id, name) => {
+        const trimmed = name.trim();
+        const existing = get().boards.find((b) => b.id === id);
+        // Empty input → snap back to the existing name; no-op rename →
+        // skip the network call entirely.
+        if (!existing) return;
+        if (!trimmed || trimmed === existing.name) {
+          return;
+        }
         set((s) => ({
           boards: s.boards.map((b) =>
             b.id === id
-              ? { ...b, name: name.trim() || b.name, updatedAt: new Date().toISOString() }
+              ? { ...b, name: trimmed, updatedAt: new Date().toISOString() }
               : b
           )
-        })),
-      deleteBoard: (id) =>
+        }));
+        // Server sync for persisted boards. Debounced ~400ms keyed per
+        // board id so a user typing a long rename in the inline input
+        // doesn't hammer the API. Uses the same /save endpoint — the
+        // route already accepts an optional `name` field.
+        if (!UUID_RE.test(id)) return;
+        if (!get().canEdit()) return;
+        debounce(`rename-${id}`, 400, async () => {
+          try {
+            const res = await fetch("/api/whiteboards/save", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ boardId: id, name: trimmed })
+            });
+            if (!res.ok) {
+              console.warn("[whiteboards/rename] failed:", await res.text());
+            }
+          } catch (err) {
+            console.warn("[whiteboards/rename] error:", err);
+          }
+        });
+      },
+      deleteBoard: (id) => {
+        // Optimistic local removal first.
         set((s) => {
           const remaining = s.boards.filter((b) => b.id !== id);
           // Never leave the user with zero boards.
@@ -558,12 +1057,50 @@ export const useWhiteboardStore = create<State>()(
           const nextActive =
             s.activeBoardId === id ? next[0].id : s.activeBoardId;
           const { [id]: _removed, ...history } = s.history;
+          const nextMyRoles = { ...s.myRoles };
+          delete nextMyRoles[id];
           return {
             boards: next,
             activeBoardId: nextActive,
-            history
+            history,
+            myRoles: nextMyRoles
           };
-        }),
+        });
+        // Cancel any in-flight save / rename debounces — without this,
+        // a stale save from before the delete could re-UPSERT the row
+        // server-side a few hundred ms after the DELETE returns.
+        const pendingSave = _debounceTimers.get(`save-${id}`);
+        if (pendingSave) {
+          clearTimeout(pendingSave);
+          _debounceTimers.delete(`save-${id}`);
+        }
+        const pendingRename = _debounceTimers.get(`rename-${id}`);
+        if (pendingRename) {
+          clearTimeout(pendingRename);
+          _debounceTimers.delete(`rename-${id}`);
+        }
+        // Server delete for persisted boards. If it fails, re-fetch so
+        // the local optimistic removal is reverted from the server's
+        // perspective.
+        if (!UUID_RE.test(id)) return;
+        void (async () => {
+          try {
+            const res = await fetch("/api/whiteboards/delete", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ boardId: id })
+            });
+            if (!res.ok) {
+              console.warn("[whiteboards/delete] failed:", await res.text());
+              // Revert by re-fetching the authoritative list.
+              void get().fetchBoards(true);
+            }
+          } catch (err) {
+            console.warn("[whiteboards/delete] error:", err);
+            void get().fetchBoards(true);
+          }
+        })();
+      },
       setActiveBoard: (id) =>
         set((s) => (s.boards.some((b) => b.id === id) ? { activeBoardId: id } : s)),
       setBoardAccess: (userId, level) => {
@@ -583,11 +1120,7 @@ export const useWhiteboardStore = create<State>()(
           })
         }));
         // Only sync server-side for persisted boards.
-        const isServerId =
-          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-            boardId
-          );
-        if (!isServerId) return;
+        if (!UUID_RE.test(boardId)) return;
         void fetch("/api/whiteboards/share", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -715,91 +1248,65 @@ export const useWhiteboardStore = create<State>()(
         // save anyway, but no-op'ing locally avoids ghost shapes that
         // disappear on next fetch.
         if (!get().canEdit()) return;
-        set((s) => ({
-          boards: s.boards.map((b) =>
-            b.id === s.activeBoardId
-              ? { ...b, elements: [...b.elements, el], updatedAt: new Date().toISOString() }
-              : b
-          )
-        }));
+        _applyAddLocal(set, el);
+        get().broadcastOp?.({ kind: "add", el });
       },
       updateElement: (id, patch) => {
         if (!get().canEdit()) return;
-        set((s) => ({
-          boards: s.boards.map((b) =>
-            b.id === s.activeBoardId
-              ? {
-                  ...b,
-                  elements: b.elements.map((e) =>
-                    e.id === id ? ({ ...e, ...patch } as Element) : e
-                  ),
-                  updatedAt: new Date().toISOString()
-                }
-              : b
-          )
-        }));
+        _applyUpdateLocal(set, id, patch);
+        get().broadcastOp?.({ kind: "update", id, patch });
       },
       removeElement: (id) => {
         if (!get().canEdit()) return;
-        set((s) => ({
-          boards: s.boards.map((b) =>
-            b.id === s.activeBoardId
-              ? {
-                  ...b,
-                  elements: b.elements.filter((e) => e.id !== id),
-                  updatedAt: new Date().toISOString()
-                }
-              : b
-          )
-        }));
+        _applyRemoveLocal(set, id);
+        get().broadcastOp?.({ kind: "remove", id });
       },
       translateElements: (ids, dx, dy) => {
         if (!get().canEdit()) return;
         if (ids.length === 0 || (dx === 0 && dy === 0)) return;
-        const idSet = new Set(ids);
-        set((s) => ({
-          boards: s.boards.map((b) =>
-            b.id === s.activeBoardId
-              ? {
-                  ...b,
-                  elements: b.elements.map((e) => {
-                    if (!idSet.has(e.id)) return e;
-                    if (e.kind === "connection") return e;
-                    if (e.kind === "path") {
-                      const next = [...e.points];
-                      for (let i = 0; i < next.length; i += 2) {
-                        next[i] += dx;
-                        next[i + 1] += dy;
-                      }
-                      return { ...e, x: e.x + dx, y: e.y + dy, points: next };
-                    }
-                    if (e.kind === "line") {
-                      return {
-                        ...e,
-                        x: e.x + dx,
-                        y: e.y + dy,
-                        x2: e.x2 + dx,
-                        y2: e.y2 + dy
-                      };
-                    }
-                    return { ...e, x: e.x + dx, y: e.y + dy } as Element;
-                  }),
-                  updatedAt: new Date().toISOString()
-                }
-              : b
-          )
-        }));
+        _applyTranslateLocal(set, ids, dx, dy);
+        get().broadcastOp?.({ kind: "translate", ids, dx, dy });
       },
       clearBoard: () => {
         if (!get().canEdit()) return;
-        set((s) => ({
-          boards: s.boards.map((b) =>
-            b.id === s.activeBoardId
-              ? { ...b, elements: [], updatedAt: new Date().toISOString() }
-              : b
-          ),
-          selection: []
-        }));
+        _applyClearLocal(set);
+        get().broadcastOp?.({ kind: "clear" });
+      },
+
+      /* ---- Real-time op broadcasting + receiving ---- */
+      setBroadcastOp: (fn) => set({ broadcastOp: fn }),
+      applyRemoteOp: (op) => {
+        // Peers receive ops over the broadcast channel and call this.
+        // We mutate state via the SAME internal helpers the public
+        // actions use — but DON'T re-broadcast (anti ping-pong) and
+        // DON'T persist (originator is the sole writer to Postgres).
+        _suppressNextSave = true;
+        switch (op.kind) {
+          case "add":
+            _applyAddLocal(set, op.el);
+            return;
+          case "update":
+            _applyUpdateLocal(set, op.id, op.patch);
+            return;
+          case "remove":
+            _applyRemoveLocal(set, op.id);
+            return;
+          case "translate":
+            _applyTranslateLocal(set, op.ids, op.dx, op.dy);
+            return;
+          case "clear":
+            _applyClearLocal(set);
+            return;
+          case "replace":
+            set((s) => ({
+              boards: s.boards.map((b) =>
+                b.id === s.activeBoardId
+                  ? { ...b, elements: op.elements, updatedAt: new Date().toISOString() }
+                  : b
+              )
+            }));
+            return;
+        }
       },
 
       /* ---- selection ---- */
@@ -1093,8 +1600,11 @@ export const useWhiteboardStore = create<State>()(
     }),
     {
       name: "nova-whiteboard",
+      // Deliberately exclude `boards` so the stale local "Welcome" seed
+      // (id `bd-…`) never re-hydrates from localStorage and shadows the
+      // freshly-fetched server rows on reload. Without this, the silent
+      // saveActiveBoard skip (non-UUID id) keeps biting forever.
       partialize: (s) => ({
-        boards: s.boards,
         activeBoardId: s.activeBoardId,
         tool: s.tool,
         color: s.color,

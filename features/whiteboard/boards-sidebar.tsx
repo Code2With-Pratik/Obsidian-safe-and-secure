@@ -31,12 +31,13 @@ export function BoardsSidebar({
   const t = useT();
   const boards = useWhiteboardStore((s) => s.boards);
   const activeBoardId = useWhiteboardStore((s) => s.activeBoardId);
-  const createBoard = useWhiteboardStore((s) => s.createBoard);
+  const createBoardOnServer = useWhiteboardStore((s) => s.createBoardOnServer);
   const renameBoard = useWhiteboardStore((s) => s.renameBoard);
   const deleteBoard = useWhiteboardStore((s) => s.deleteBoard);
   const setActiveBoard = useWhiteboardStore((s) => s.setActiveBoard);
 
   const [editingId, setEditingId] = React.useState<string | null>(null);
+  const [creating, setCreating] = React.useState(false);
 
   return (
     <motion.aside
@@ -64,15 +65,25 @@ export function BoardsSidebar({
 
       <div className="flex-1 overflow-y-auto no-scrollbar px-2 py-2 space-y-0.5">
         <button
-          onClick={() => {
-            const b = createBoard(
-              `Board ${useWhiteboardStore.getState().boards.length + 1}`
-            );
-            setEditingId(b.id);
+          disabled={creating}
+          onClick={async () => {
+            // Persist the new board server-side so it's actually shareable.
+            // The local-only createBoard produced ids like "bd-…" which
+            // failed the UUID gate in saveActiveBoard and the share API,
+            // making "share" silently no-op for boards created here.
+            if (creating) return;
+            setCreating(true);
+            try {
+              const name = `Board ${useWhiteboardStore.getState().boards.length + 1}`;
+              const b = await createBoardOnServer(name);
+              if (b) setEditingId(b.id);
+            } finally {
+              setCreating(false);
+            }
           }}
           className={cn(
             "w-full inline-flex items-center justify-center gap-2 mb-1.5 rounded-xl text-xs font-medium transition",
-            "bg-gradient-to-br from-violet-500 to-cyan-400 text-white shadow-glow hover:brightness-110",
+            "bg-gradient-to-br from-violet-500 to-cyan-400 text-white shadow-glow hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed",
             collapsed ? "h-10" : "h-9"
           )}
           aria-label={t("New board")}

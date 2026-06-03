@@ -6,6 +6,8 @@ import { createClient } from "@/lib/supabase/client";
 import type { RealtimeChannel } from "@supabase/supabase-js";
 import { useAuthStore } from "./use-auth-store";
 import { useChatThemeStore } from "./use-chat-theme-store";
+import { useNotificationsStore } from "./use-notifications-store";
+import { useSettingsStore } from "./use-settings-store";
 
 const supabase = createClient();
 
@@ -414,8 +416,60 @@ export const useChatStore = create<ChatState>((set, get) => ({
               if (incoming.authorId !== me.id && get().activeChatId === chatId) {
                 void get().markRead(chatId);
               }
+              // Push a notification when the message came from someone
+              // else AND the user isn't currently looking at this chat
+              // (sitting in the chat already serves as an implicit read).
+              if (
+                incoming.authorId !== me.id &&
+                get().activeChatId !== chatId &&
+                incoming.kind !== "system" &&
+                incoming.kind !== "call"
+              ) {
+                try {
+                  const chat = get().chats.find((c) => c.id === chatId);
+                  const isGroup = chat?.type !== "dm";
+                  const prefs = useSettingsStore.getState().notifications;
+                  // Respect category prefs that already exist in settings.
+                  if (isGroup ? !prefs.groupChats : !prefs.directMessages) {
+                    /* user opted out of this category — skip */
+                  } else {
+                    const me2 = useAuthStore.getState().user;
+                    const myHandle = me2?.username
+                      ? `@${me2.username.toLowerCase()}`
+                      : null;
+                    const text = (incoming.content ?? "").trim();
+                    const isMention =
+                      !!myHandle && text.toLowerCase().includes(myHandle);
+                    // Look up the sender's display name via profile cache,
+                    // falling back to the chat name for group context.
+                    const senderName =
+                      get().profiles?.[incoming.authorId]?.name ??
+                      get().profiles?.[incoming.authorId]?.username ??
+                      "Someone";
+                    useNotificationsStore.getState().add({
+                      kind: isMention ? "mention" : "message",
+                      title: isGroup
+                        ? `${senderName} in ${chat?.name ?? "Group"}`
+                        : senderName,
+                      body: text.length > 140 ? text.slice(0, 140) + "…" : text || "(attachment)",
+                      avatar: get().profiles?.[incoming.authorId]?.avatar,
+                      // Click the chip → open the exact chat thread.
+                      targetHref: `/chats/${chatId}`
+                    });
+                  }
+                } catch {
+                  /* never let notification failure break the chat flow */
+                }
+              }
             } else if (payload.eventType === "UPDATE") {
               const next = rowToMessage(row);
+              // Capture whether the row was new-to-us BEFORE we mutate.
+              // pg_cron flipping a scheduled message to 'sent' is the
+              // only path that produces a brand-new id via UPDATE —
+              // detect it here so we can mirror the INSERT notification.
+              const isResurrect = !(get().messages[chatId] || []).some(
+                (m) => m.id === next.id
+              );
               set((s) => {
                 const cur = s.messages[chatId] || [];
                 const has = cur.some((m) => m.id === next.id);
@@ -451,6 +505,46 @@ export const useChatStore = create<ChatState>((set, get) => ({
                 get().activeChatId === chatId
               ) {
                 void get().markRead(chatId);
+              }
+              // Mirror the INSERT-side notification for the resurrect
+              // case (scheduled message from another user just became
+              // 'sent'). Without this the bell silently misses these.
+              if (
+                isResurrect &&
+                next.authorId !== me.id &&
+                get().activeChatId !== chatId &&
+                next.kind !== "system" &&
+                next.kind !== "call"
+              ) {
+                try {
+                  const chat = get().chats.find((c) => c.id === chatId);
+                  const isGroup = chat?.type !== "dm";
+                  const prefs = useSettingsStore.getState().notifications;
+                  if (isGroup ? prefs.groupChats : prefs.directMessages) {
+                    const me2 = useAuthStore.getState().user;
+                    const myHandle = me2?.username
+                      ? `@${me2.username.toLowerCase()}`
+                      : null;
+                    const text = (next.content ?? "").trim();
+                    const isMention =
+                      !!myHandle && text.toLowerCase().includes(myHandle);
+                    const senderName =
+                      get().profiles?.[next.authorId]?.name ??
+                      get().profiles?.[next.authorId]?.username ??
+                      "Someone";
+                    useNotificationsStore.getState().add({
+                      kind: isMention ? "mention" : "message",
+                      title: isGroup
+                        ? `${senderName} in ${chat?.name ?? "Group"}`
+                        : senderName,
+                      body: text.length > 140 ? text.slice(0, 140) + "…" : text || "(attachment)",
+                      avatar: get().profiles?.[next.authorId]?.avatar,
+                      targetHref: `/chats/${chatId}`
+                    });
+                  }
+                } catch {
+                  /* never let notification failure break the chat flow */
+                }
               }
             }
             // DELETE is handled above the early-return — payload.old.chat_id

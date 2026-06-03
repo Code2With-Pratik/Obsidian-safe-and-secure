@@ -1032,4 +1032,118 @@ CREATE POLICY whiteboard_members_delete_owner
 ALTER TABLE whiteboards        REPLICA IDENTITY FULL;
 ALTER TABLE whiteboard_members REPLICA IDENTITY FULL;
 
+-- ---------------------------------------------------------------------
+-- 20a. Whiteboards — share-visibility hotfix (idempotent patch).
+--
+--     Three issues surfaced after section 20 shipped:
+--
+--     1) The original `whiteboard_members_select_member` policy was
+--        recursive (it EXISTS-back into whiteboard_members). Postgres
+--        throws "infinite recursion detected in policy" — which means
+--        viewers / editors silently got zero membership rows back, and
+--        the EXISTS clause in `whiteboards_select_member` collapsed, so
+--        shared boards never appeared for the recipient.
+--
+--     2) `whiteboards` + `whiteboard_members` were never added to the
+--        `supabase_realtime` publication. REPLICA IDENTITY FULL was set,
+--        but without a publication entry the client's postgres_changes
+--        channel subscribes successfully and receives nothing.
+--
+--     3) The membership UPDATE policy was missing — so flipping a user
+--        from viewer to editor would silently RLS-fail under the upsert
+--        path. INSERT worked, UPDATE didn't.
+--
+--     This block is re-runnable — every DROP IF EXISTS / publication
+--     check is idempotent.
+-- ---------------------------------------------------------------------
+
+-- (1) Roster helper — SECURITY DEFINER bypasses RLS so the SELECT
+-- policy can recurse into whiteboard_members WITHOUT triggering an
+-- infinite policy loop. Restricted to authenticated callers; locked
+-- search_path so the function is safe against schema-shadowing.
+CREATE OR REPLACE FUNCTION is_whiteboard_member(_board UUID, _user UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = public, pg_temp
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM whiteboard_members
+     WHERE board_id = _board AND user_id = _user
+  );
+$$;
+
+REVOKE ALL ON FUNCTION is_whiteboard_member(UUID, UUID) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION is_whiteboard_member(UUID, UUID) TO authenticated;
+
+-- Replace the recursive SELECT policy. The owner branch is direct;
+-- the "any member sees the roster" branch goes through the SECURITY
+-- DEFINER helper so it doesn't reapply RLS to itself.
+DROP POLICY IF EXISTS whiteboard_members_select_member ON whiteboard_members;
+CREATE POLICY whiteboard_members_select_member
+  ON whiteboard_members FOR SELECT
+  USING (
+    user_id = auth.uid()
+    OR EXISTS (
+      SELECT 1 FROM whiteboards b
+       WHERE b.id = whiteboard_members.board_id
+         AND (
+           b.owner_id = auth.uid()
+           OR is_whiteboard_member(b.id, auth.uid())
+         )
+    )
+  );
+
+-- (1b) The whiteboards SELECT policy EXISTS-into whiteboard_members; that
+-- path is fine after the recursion fix, but also rewrite it to use the
+-- helper for symmetry — same evaluation, future-proofed against further
+-- policy edits.
+DROP POLICY IF EXISTS whiteboards_select_member ON whiteboards;
+CREATE POLICY whiteboards_select_member
+  ON whiteboards FOR SELECT
+  USING (
+    visibility = 'link'
+    OR owner_id = auth.uid()
+    OR is_whiteboard_member(whiteboards.id, auth.uid())
+  );
+
+-- (2) Add to realtime publication so postgres_changes subscriptions on
+-- the client actually receive INSERT/UPDATE/DELETE events. Skips
+-- gracefully if already present.
+DO $$
+DECLARE t TEXT;
+BEGIN
+  FOREACH t IN ARRAY ARRAY['whiteboards', 'whiteboard_members']
+  LOOP
+    IF NOT EXISTS (
+      SELECT 1 FROM pg_publication_tables
+      WHERE pubname = 'supabase_realtime'
+        AND schemaname = 'public'
+        AND tablename = t
+    ) THEN
+      EXECUTE format('ALTER PUBLICATION supabase_realtime ADD TABLE public.%I', t);
+    END IF;
+  END LOOP;
+END $$;
+
+-- (3) Add the missing UPDATE policy so role-bumps (viewer→editor) via
+-- upsert actually land. Mirrors the INSERT policy: only the board owner
+-- can update membership rows.
+DROP POLICY IF EXISTS whiteboard_members_update_owner ON whiteboard_members;
+CREATE POLICY whiteboard_members_update_owner
+  ON whiteboard_members FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1 FROM whiteboards b
+       WHERE b.id = whiteboard_members.board_id AND b.owner_id = auth.uid()
+    )
+  )
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM whiteboards b
+       WHERE b.id = whiteboard_members.board_id AND b.owner_id = auth.uid()
+    )
+  );
+
 -- Done. Reload the app — the new columns/RPC/policies/jobs are now live.

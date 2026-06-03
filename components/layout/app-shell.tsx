@@ -7,6 +7,7 @@ import { Topbar } from "@/components/layout/topbar";
 import { MobileNav } from "@/components/layout/mobile-nav";
 import { FloatingMiniCall } from "@/components/layout/floating-dock";
 import { CallSessionProvider } from "@/components/layout/call-session-provider";
+import { NotificationToasts } from "@/components/notifications/notification-toasts";
 import { cn } from "@/lib/utils";
 
 const FOCUSED_PATTERNS = [
@@ -39,6 +40,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </div>
         {!focused && <MobileNav />}
         <FloatingMiniCall />
+        {/* Global iOS-style toast stack — listens to the notifications
+            store's per-add queue and renders top-right banners. Portaled
+            so it survives any transformed/filtered ancestor. */}
+        <NotificationToasts />
       </div>
     </CallSessionProvider>
   );
