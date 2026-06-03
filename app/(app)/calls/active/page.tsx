@@ -9,10 +9,12 @@ import "@livekit/components-styles";
 import { VideoGrid } from "@/features/calls/video-grid";
 import { LiveKitStage } from "@/features/calls/livekit-stage";
 import { CallControls, CALL_FILTERS } from "@/features/calls/call-controls";
+import { LiveCallControls } from "@/features/calls/live-call-controls";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { callParticipants } from "@/lib/mock-data";
 import { useUIStore } from "@/store/use-ui-store";
+import { useCallStore } from "@/store/use-call-store";
 import { useT } from "@/lib/i18n";
 
 const LIVEKIT_URL = process.env.NEXT_PUBLIC_LIVEKIT_URL;
@@ -39,6 +41,12 @@ export default function ActiveCall() {
   const startCall = useUIStore((s) => s.startCall);
   const endCall = useUIStore((s) => s.endCall);
   const setMiniCallOpen = useUIStore((s) => s.setMiniCallOpen);
+  // Live session (set by the caller via /api/calls/start or by the recipient
+  // via /api/calls/accept). Drives the LiveKit room name + the /end POST.
+  const outgoing = useCallStore((s) => s.outgoing);
+  const setOutgoing = useCallStore((s) => s.setOutgoing);
+  const endSession = useCallStore((s) => s.end);
+  const unwatchSession = useCallStore((s) => s.unwatchSession);
   const [filterId, setFilterId] = React.useState("none");
   const filterCss =
     CALL_FILTERS.find((f) => f.id === filterId)?.css ?? "none";
@@ -83,13 +91,22 @@ export default function ActiveCall() {
     }
   }, [activeCall, router]);
 
-  // LiveKit token — fetched once the call exists and `NEXT_PUBLIC_LIVEKIT_URL`
-  // is set. When the env var is missing we silently fall back to the mock UI
-  // (so the page never crashes for unconfigured deployments).
+  // Prefer the real call_session's room name (caller from /api/calls/start,
+  // recipient from accept). Fall back to a deterministic per-chat name for
+  // the demo path so unconfigured deployments still see SOMETHING.
+  //
+  // Lock the room name at first sight so a remote-hangup event clearing
+  // `outgoing` mid-call doesn't switch us to a different room (which would
+  // force a LiveKit reconnect).
+  const roomNameRef = React.useRef<string | undefined>(undefined);
+  const candidate = outgoing?.roomName
+    ?? (activeCall?.chatId ? `call-${activeCall.chatId}` : undefined);
+  if (!roomNameRef.current && candidate) {
+    roomNameRef.current = candidate;
+  }
+  const roomName = roomNameRef.current;
+
   const [lkToken, setLkToken] = React.useState<string | null>(null);
-  const roomName = activeCall?.chatId
-    ? `call-${activeCall.chatId}`
-    : undefined;
   React.useEffect(() => {
     if (!LIVEKIT_URL || !roomName) return;
     let cancelled = false;
@@ -114,6 +131,25 @@ export default function ActiveCall() {
 
   const useLivekit = !!(LIVEKIT_URL && lkToken);
 
+  // Always-current refs so the hang-up handler doesn't capture stale state
+  // (the handler is defined once but `outgoing` updates after navigation).
+  const outgoingRef = React.useRef(outgoing);
+  React.useEffect(() => {
+    outgoingRef.current = outgoing;
+  }, [outgoing]);
+
+  const onHangup = React.useCallback(() => {
+    const back = activeCall?.returnTo ?? "/calls";
+    // Best-effort persist + broadcast — fire-and-forget so the UI doesn't
+    // block on the round trip when ending.
+    const sid = outgoingRef.current?.sessionId;
+    if (sid) void endSession(sid);
+    unwatchSession();
+    setOutgoing(null);
+    endCall();
+    router.push(back);
+  }, [activeCall, endCall, endSession, router, setOutgoing, unwatchSession]);
+
   return (
     // Fullscreen overlay. The video stage fills the entire viewport from
     // edge to edge; the top status row and the bottom controls float ON
@@ -137,6 +173,18 @@ export default function ActiveCall() {
             data-lk-theme="default"
           >
             <LiveKitStage />
+            {/* Controls live INSIDE the room so `useLocalParticipant` is in
+                scope; they're absolutely positioned via the same wrapper
+                used in the mock path below so layout stays identical. */}
+            <div className="absolute bottom-0 inset-x-0 z-10 pb-[max(1rem,env(safe-area-inset-bottom))] grid place-items-center pointer-events-none">
+              <div className="pointer-events-auto">
+                <LiveCallControls
+                  filterId={filterId}
+                  onFilterChange={setFilterId}
+                  onEnd={onHangup}
+                />
+              </div>
+            </div>
           </LiveKitRoom>
         ) : (
           <VideoGrid
@@ -208,22 +256,19 @@ export default function ActiveCall() {
         </div>
       </div>
 
-      {/* 4. Bottom floating controls */}
-      <div className="absolute bottom-0 inset-x-0 z-10 pb-[max(1rem,env(safe-area-inset-bottom))] grid place-items-center pointer-events-none">
-        <div className="pointer-events-auto">
-          <CallControls
-            filterId={filterId}
-            onFilterChange={setFilterId}
-            onEnd={() => {
-              // Capture `returnTo` BEFORE clearing `activeCall` so the
-              // navigation target survives. Default to the Calls tab.
-              const back = activeCall?.returnTo ?? "/calls";
-              endCall();
-              router.push(back);
-            }}
-          />
+      {/* 4. Mock-path controls. The LiveKit path renders LiveCallControls
+              INSIDE LiveKitRoom (above) instead of this block. */}
+      {!useLivekit && (
+        <div className="absolute bottom-0 inset-x-0 z-10 pb-[max(1rem,env(safe-area-inset-bottom))] grid place-items-center pointer-events-none">
+          <div className="pointer-events-auto">
+            <CallControls
+              filterId={filterId}
+              onFilterChange={setFilterId}
+              onEnd={onHangup}
+            />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

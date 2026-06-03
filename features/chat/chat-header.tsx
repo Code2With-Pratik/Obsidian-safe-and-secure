@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useUIStore } from "@/store/use-ui-store";
 import { useChatStore } from "@/store/use-chat-store";
+import { useCallStore } from "@/store/use-call-store";
 import { useStoriesStore } from "@/store/use-stories-store";
 import { StoryAvatar } from "@/components/stories/story-avatar";
 import { users as allUsers } from "@/lib/mock-data";
@@ -89,6 +90,7 @@ export function ChatHeader({
     : !!chat.online;
 
   const startCallStore = useUIStore((s) => s.startCall);
+  const startCallSession = useCallStore((s) => s.start);
   const removeChat = useChatStore((s) => s.removeChat);
   const pinChat = useChatStore((s) => s.pinChat);
   const muteChat = useChatStore((s) => s.muteChat);
@@ -125,9 +127,18 @@ export function ChatHeader({
     storyUserId ? !!s.byUser[storyUserId]?.slides.length : false
   );
 
-  const startCall = (video: boolean) => {
+  const startCall = async (video: boolean) => {
     // Group / channel / ghost-room chats start a multi-party call; a DM is 1-on-1.
     const isGroup = chat.type !== "dm" && chat.type !== "secret";
+    // Persist the call_session + ring the invitees BEFORE navigating so the
+    // recipient's IncomingCallModal can appear at the same moment the
+    // caller's active-call screen does. Failures fall back to the legacy
+    // local-only flow so unconfigured deployments still work.
+    void startCallSession({
+      chatId: chat.id,
+      video,
+      isGroup
+    });
     startCallStore({
       chatId: chat.id,
       name: chat.name,

@@ -6,6 +6,7 @@ import { useEffect } from 'react'
 import { useAuthStore } from '@/store/use-auth-store'
 import { useChatStore } from '@/store/use-chat-store'
 import { useStoriesStore } from '@/store/use-stories-store'
+import { useCallStore } from '@/store/use-call-store'
 
 export default function AuthListener() {
   const supabase = createClient()
@@ -20,6 +21,8 @@ export default function AuthListener() {
   const fetchStories = useStoriesStore((s) => s.fetchStories)
   const initStoryRealtime = useStoriesStore((s) => s.initializeRealtime)
   const disconnectStoryRealtime = useStoriesStore((s) => s.disconnectRealtime)
+  const initCallRealtime = useCallStore((s) => s.initializeRealtime)
+  const disconnectCallRealtime = useCallStore((s) => s.disconnectRealtime)
 
   useEffect(() => {
     const fetchProfile = async (userId: string) => {
@@ -56,6 +59,7 @@ export default function AuthListener() {
         initializeRealtime()
         fetchStories()
         initStoryRealtime()
+        initCallRealtime()
         router.refresh()
       }
       if (event === 'SIGNED_OUT') {
@@ -63,6 +67,7 @@ export default function AuthListener() {
         // leak presence/message subscriptions across user sessions.
         disconnectRealtime()
         disconnectStoryRealtime()
+        disconnectCallRealtime()
         clearAll()
         logout()
         router.refresh()
@@ -79,13 +84,14 @@ export default function AuthListener() {
         initializeRealtime()
         fetchStories()
         initStoryRealtime()
+        initCallRealtime()
       }
     })
 
     return () => {
       subscription.unsubscribe()
     }
-  }, [supabase, router, fetchChats, fetchBlocked, initializeRealtime, disconnectRealtime, clearAll, setUser, logout, fetchStories, initStoryRealtime, disconnectStoryRealtime])
+  }, [supabase, router, fetchChats, fetchBlocked, initializeRealtime, disconnectRealtime, clearAll, setUser, logout, fetchStories, initStoryRealtime, disconnectStoryRealtime, initCallRealtime, disconnectCallRealtime])
 
   return null
 }

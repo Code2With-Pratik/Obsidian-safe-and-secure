@@ -57,17 +57,49 @@ export const CALL_FILTERS: CallFilter[] = [
 export function CallControls({
   onEnd,
   filterId = "none",
-  onFilterChange
+  onFilterChange,
+  muted: mutedProp,
+  onMutedChange,
+  camOff: camOffProp,
+  onCamOffChange,
+  share: shareProp,
+  onShareChange
 }: {
   onEnd?: () => void;
   filterId?: string;
   onFilterChange?: (id: string) => void;
+  /** Optional controlled mode — when these props are provided the toggles
+   *  bypass local state and call back to the parent (which owns the LiveKit
+   *  publish/unpublish side-effects). */
+  muted?: boolean;
+  onMutedChange?: (v: boolean) => void;
+  camOff?: boolean;
+  onCamOffChange?: (v: boolean) => void;
+  share?: boolean;
+  onShareChange?: (v: boolean) => void;
 }) {
   const t = useT();
-  const [muted, setMuted] = React.useState(false);
-  const [camOff, setCamOff] = React.useState(false);
-  const [share, setShare] = React.useState(false);
+  const [mutedLocal, setMutedLocal] = React.useState(false);
+  const [camOffLocal, setCamOffLocal] = React.useState(false);
+  const [shareLocal, setShareLocal] = React.useState(false);
   const [filtersOpen, setFiltersOpen] = React.useState(false);
+
+  // Controlled if the parent passes a value+setter pair, else local.
+  const muted = mutedProp ?? mutedLocal;
+  const camOff = camOffProp ?? camOffLocal;
+  const share = shareProp ?? shareLocal;
+  const setMuted = (v: boolean) => {
+    if (onMutedChange) onMutedChange(v);
+    else setMutedLocal(v);
+  };
+  const setCamOff = (v: boolean) => {
+    if (onCamOffChange) onCamOffChange(v);
+    else setCamOffLocal(v);
+  };
+  const setShare = (v: boolean) => {
+    if (onShareChange) onShareChange(v);
+    else setShareLocal(v);
+  };
 
   // Close the filter popover when clicking outside.
   const rootRef = React.useRef<HTMLDivElement>(null);
@@ -153,7 +185,7 @@ export function CallControls({
         <ControlButton
           active={!muted}
           toggled={muted}
-          onClick={() => setMuted((m) => !m)}
+          onClick={() => setMuted(!muted)}
           tooltip={muted ? t("Unmute") : t("Mute")}
           danger={muted}
         >
@@ -162,7 +194,7 @@ export function CallControls({
         <ControlButton
           active={!camOff}
           toggled={camOff}
-          onClick={() => setCamOff((c) => !c)}
+          onClick={() => setCamOff(!camOff)}
           tooltip={camOff ? t("Camera on") : t("Camera off")}
           danger={camOff}
         >
@@ -174,7 +206,7 @@ export function CallControls({
           <ControlButton
             active={share}
             toggled={share}
-            onClick={() => setShare((s) => !s)}
+            onClick={() => setShare(!share)}
             tooltip={t("Share screen")}
           >
             <ScreenShare />
