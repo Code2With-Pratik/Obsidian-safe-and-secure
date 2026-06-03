@@ -87,8 +87,8 @@ export function CreateGhostDialog({ children, open, onOpenChange, onCreated }: P
     }
   };
 
-  const handleSubmit = () => {
-    const room = createRoom({
+  const handleSubmit = async () => {
+    const room = await createRoom({
       name,
       topic,
       pin,
@@ -96,6 +96,7 @@ export function CreateGhostDialog({ children, open, onOpenChange, onCreated }: P
       capacity: capacity[0],
       autoCloseHours: autoClose ? autoCloseHours : 0
     });
+    if (!room) return;
     onCreated?.(room);
     setOpen(false);
     router.push(`/ghost-rooms/${room.id}`);
@@ -274,7 +275,7 @@ export function CreateGhostDialog({ children, open, onOpenChange, onCreated }: P
           <Button variant="ghost" onClick={() => setOpen(false)}>
             {t("Cancel")}
           </Button>
-          <Button variant="gradient" onClick={handleSubmit}>
+          <Button variant="gradient" onClick={() => void handleSubmit()}>
             <Sparkles /> {t("Open room")}
           </Button>
         </DialogFooter>

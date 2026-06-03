@@ -28,6 +28,51 @@ export interface OutgoingCall {
   kind: "voice" | "video";
 }
 
+/** A flattened call_sessions row with the counterparty profile resolved —
+ *  shape consumed by the Calls dashboard's Recent calls list. */
+export interface CallHistoryEntry {
+  id: string;
+  sessionId: string;
+  chatId: string;
+  /** "incoming" / "outgoing" — relative to the local user. "missed" and
+   *  "rejected" are derived from `status` and shown as their own row
+   *  kinds in the UI but stored here as the underlying direction. */
+  direction: "incoming" | "outgoing";
+  status: "ringing" | "active" | "ended" | "missed" | "rejected";
+  video: boolean;
+  ghost: boolean;
+  isGroup: boolean;
+  durationSec: number;
+  startedAt: string;
+  endedAt: string | null;
+  /** The single counterparty (1:1) — null for group calls. */
+  counterparty: {
+    id: string;
+    name: string;
+    username: string | null;
+    avatar: string | null;
+  } | null;
+}
+
+/** A scheduled call surfaced by fetchUpcoming(). */
+export interface ScheduledCallEntry {
+  id: string;
+  sessionId: string;
+  chatId: string;
+  title: string;
+  scheduledForIso: string;
+  video: boolean;
+  isGroup: boolean;
+  participantsCount: number;
+  initiatorId: string;
+}
+
+export interface CallStats {
+  incomingSec: number;
+  outgoingSec: number;
+  totalSec: number;
+}
+
 interface CallState {
   incoming: IncomingCall | null;
   outgoing: OutgoingCall | null;
@@ -37,8 +82,17 @@ interface CallState {
    *  accept/decline/end events from the other party. */
   sessionChannel: RealtimeChannel | null;
 
+  // ─── Dashboard caches (populated by the Calls page) ──────────────────
+  history: CallHistoryEntry[];
+  upcoming: ScheduledCallEntry[];
+  stats: CallStats;
+  historyLoaded: boolean;
+
   setIncoming: (c: IncomingCall | null) => void;
   setOutgoing: (c: OutgoingCall | null) => void;
+
+  fetchHistory: () => Promise<void>;
+  fetchUpcoming: () => Promise<void>;
 
   /** Wire up the per-user `call:ring` listener. Called after sign-in. */
   initializeRealtime: () => void;
@@ -71,8 +125,150 @@ export const useCallStore = create<CallState>((set, get) => ({
   userChannel: null,
   sessionChannel: null,
 
+  history: [],
+  upcoming: [],
+  stats: { incomingSec: 0, outgoingSec: 0, totalSec: 0 },
+  historyLoaded: false,
+
   setIncoming: (c) => set({ incoming: c }),
   setOutgoing: (c) => set({ outgoing: c }),
+
+  fetchHistory: async () => {
+    const me = useAuthStore.getState().user;
+    if (!me) return;
+
+    // All call_sessions in chats I'm a member of (RLS already enforces this).
+    // Sorted newest first; we cap to 200 so the dashboard never lags on
+    // power-users.
+    const { data: rows, error } = await supabase
+      .from("call_sessions")
+      .select(
+        "id, chat_id, initiator_id, kind, status, is_group, is_ghost, participants, joined, duration_seconds, started_at, connected_at, ended_at"
+      )
+      .in("status", ["ended", "missed", "rejected"])
+      .order("started_at", { ascending: false })
+      .limit(200);
+    if (error || !rows) {
+      console.warn("[calls] fetchHistory failed:", error);
+      return;
+    }
+
+    // Resolve the counterparty profile for each call. In a 1:1 the
+    // counterparty is the other member of the chat; in a group we leave
+    // it null and the UI shows the chat name instead.
+    const counterIds = new Set<string>();
+    for (const r of rows) {
+      if (r.is_group) continue;
+      const others = ([r.initiator_id, ...(r.participants ?? [])] as string[])
+        .filter((id) => id && id !== me.id);
+      others.forEach((id) => counterIds.add(id));
+    }
+    let profiles: Record<string, { name: string; username: string | null; avatar: string | null }> = {};
+    if (counterIds.size > 0) {
+      const { data: profs } = await supabase
+        .from("profiles")
+        .select("id, name, username, avatar")
+        .in("id", Array.from(counterIds));
+      profiles = Object.fromEntries(
+        (profs ?? []).map((p) => [
+          p.id as string,
+          {
+            name: (p.name as string) ?? "User",
+            username: (p.username as string | null) ?? null,
+            avatar: (p.avatar as string | null) ?? null
+          }
+        ])
+      );
+    }
+
+    const history: CallHistoryEntry[] = rows.map((r) => {
+      const direction: "incoming" | "outgoing" =
+        r.initiator_id === me.id ? "outgoing" : "incoming";
+      const otherId = r.is_group
+        ? null
+        : (([r.initiator_id, ...(r.participants ?? [])] as string[]).find(
+            (id) => id && id !== me.id
+          ) ?? null);
+      const counterparty = otherId
+        ? {
+            id: otherId,
+            name: profiles[otherId]?.name ?? "User",
+            username: profiles[otherId]?.username ?? null,
+            avatar: profiles[otherId]?.avatar ?? null
+          }
+        : null;
+      // Prefer the stored duration_seconds; fall back to connected_at →
+      // ended_at delta for older rows that pre-date the column.
+      const dur =
+        typeof r.duration_seconds === "number"
+          ? r.duration_seconds
+          : r.connected_at && r.ended_at
+          ? Math.max(
+              0,
+              Math.round(
+                (new Date(r.ended_at).getTime() -
+                  new Date(r.connected_at).getTime()) /
+                  1000
+              )
+            )
+          : 0;
+      return {
+        id: r.id,
+        sessionId: r.id,
+        chatId: r.chat_id,
+        direction,
+        status: r.status,
+        video: r.kind === "video",
+        ghost: !!r.is_ghost,
+        isGroup: !!r.is_group,
+        durationSec: dur,
+        startedAt: r.started_at,
+        endedAt: r.ended_at,
+        counterparty
+      };
+    });
+
+    // Stats — sum talk-time across direction.
+    const stats = history.reduce<CallStats>(
+      (acc, h) => {
+        if (h.status !== "ended") return acc;
+        if (h.direction === "incoming") acc.incomingSec += h.durationSec;
+        else acc.outgoingSec += h.durationSec;
+        acc.totalSec += h.durationSec;
+        return acc;
+      },
+      { incomingSec: 0, outgoingSec: 0, totalSec: 0 }
+    );
+
+    set({ history, stats, historyLoaded: true });
+  },
+
+  fetchUpcoming: async () => {
+    const me = useAuthStore.getState().user;
+    if (!me) return;
+    const { data: rows, error } = await supabase
+      .from("call_sessions")
+      .select(
+        "id, chat_id, initiator_id, kind, is_group, participants, scheduled_for, title"
+      )
+      .eq("status", "scheduled")
+      .order("scheduled_for", { ascending: true });
+    if (error || !rows) return;
+    const upcoming: ScheduledCallEntry[] = rows
+      .filter((r) => r.scheduled_for)
+      .map((r) => ({
+        id: r.id,
+        sessionId: r.id,
+        chatId: r.chat_id,
+        title: (r.title as string) ?? "Scheduled call",
+        scheduledForIso: r.scheduled_for!,
+        video: r.kind === "video",
+        isGroup: !!r.is_group,
+        participantsCount: ((r.participants ?? []).length as number) + 1,
+        initiatorId: r.initiator_id
+      }));
+    set({ upcoming });
+  },
 
   initializeRealtime: () => {
     const me = useAuthStore.getState().user;

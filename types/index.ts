@@ -130,6 +130,23 @@ export interface Message {
     members?: number;
     url?: string;
   };
+  /** Posted by the call-end API once a call wraps. Drives the in-chat
+   *  bubble that reads "Outgoing voice call · 4:32" etc. */
+  call?: {
+    sessionId: string;
+    /** Who initiated relative to the viewer. Resolved at render time. */
+    direction: "incoming" | "outgoing";
+    /** Final status. Drives the icon color (missed = rose, rejected =
+     *  amber, ended = neutral). */
+    status: "ended" | "missed" | "rejected";
+    /** Talk time in seconds (connected_at → ended_at). 0 for missed /
+     *  rejected calls. */
+    durationSec: number;
+    /** Voice or video — drives the icon. */
+    video: boolean;
+    /** True if the original call was a ghost call. */
+    ghost?: boolean;
+  };
   location?: { lat: number; lng: number; live?: boolean };
   /** Story-reply context — when a user replies to someone's story from the
    *  viewer, the resulting DM carries a small thumbnail + caption of the

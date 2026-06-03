@@ -44,27 +44,33 @@ export function JoinPinDialog({ open, onOpenChange, room, onJoined }: Props) {
     }
   }, [open]);
 
-  const tryJoin = (candidate: string) => {
+  const tryJoin = async (candidate: string) => {
     setError(null);
     if (candidate.length !== 6) return;
+    // Resolve the target room — either the one we were opened for, or the
+    // first cached room with that PIN. Final PIN verification happens
+    // server-side in /api/ghost-rooms/join so we don't trust local cache.
     let target: GhostRoom | undefined;
     if (room) {
-      target = candidate === room.pin ? room : undefined;
+      target = room;
     } else {
       target = findByPin(candidate);
     }
     if (!target) {
+      setError(t("No ghost room matches that PIN."));
+      return;
+    }
+    const result = await joinRoom(target.id, candidate);
+    if (!result.ok) {
       setError(
-        room
+        result.error === "Wrong PIN"
           ? t("That PIN doesn't match this room.")
-          : t("No ghost room matches that PIN.")
+          : t(result.error)
       );
       return;
     }
-    joinRoom(target.id);
     setJoinedRoom(target);
     onJoined?.(target);
-    // Walk the user into the room once they've unlocked it.
     onOpenChange(false);
     router.push(`/ghost-rooms/${target.id}`);
   };
@@ -102,7 +108,7 @@ export function JoinPinDialog({ open, onOpenChange, room, onJoined }: Props) {
                 setPin(v);
                 if (error) setError(null);
               }}
-              onComplete={tryJoin}
+              onComplete={(v) => void tryJoin(v)}
               autoFocus
               error={!!error}
             />
@@ -127,7 +133,7 @@ export function JoinPinDialog({ open, onOpenChange, room, onJoined }: Props) {
             <Button
               variant="gradient"
               disabled={pin.length !== 6}
-              onClick={() => tryJoin(pin)}
+              onClick={() => void tryJoin(pin)}
             >
               <Sparkles /> {t("Join room")}
             </Button>

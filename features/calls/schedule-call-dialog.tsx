@@ -78,14 +78,54 @@ export function ScheduleCallDialog({ open, onOpenChange }: Props) {
   const endDate = new Date(end);
   const isValidWindow = endDate.getTime() > startDate.getTime();
 
-  const handleSchedule = () => {
+  const handleSchedule = async () => {
     if (picked.length === 0 || !isValidWindow) return;
+    // 1) Keep the existing in-chat schedule message so each invitee sees
+    //    a "Join" pill in their thread (this is what drives the Upcoming
+    //    card today).
     scheduleCallWith(picked, {
       title: title.trim() || "Scheduled call",
       whenIso: startDate.toISOString(),
       endsAtIso: endDate.toISOString(),
       video
     });
+    // 2) Persist a scheduled call_sessions row so the pg_cron
+    //    'start-scheduled-calls' job auto-rings everyone at the picked
+    //    time. Fire-and-forget — we don't block the dialog close on it.
+    //    Picks the first DM as the "chat" container for the scheduled
+    //    row; group flag set when more than one invitee.
+    try {
+      // scheduleCallWith just inserted a schedule message into each
+      // invitee's DM. We need a chat_id for the call_sessions row — grab
+      // the FIRST DM that exists between me and any invitee. (Reading
+      // back fresh state from useChatStore so we see the just-created
+      // DMs.)
+      const chats = useChatStore.getState().chats;
+      const firstDmChat = chats.find(
+        (c) =>
+          c.type === "dm" &&
+          c.memberIds?.some((id) => picked.includes(id))
+      );
+      const fallbackChatId = firstDmChat?.id;
+      if (!fallbackChatId) return;
+      const res = await fetch("/api/calls/schedule", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          chatId: fallbackChatId,
+          video,
+          scheduledForIso: startDate.toISOString(),
+          title: title.trim() || "Scheduled call",
+          isGroup: picked.length > 1,
+          participantIds: picked
+        })
+      });
+      if (!res.ok) {
+        console.warn("[calls/schedule] persist failed:", await res.text());
+      }
+    } catch (err) {
+      console.warn("[calls/schedule] persist error:", err);
+    }
     onOpenChange(false);
   };
 
@@ -261,7 +301,7 @@ export function ScheduleCallDialog({ open, onOpenChange }: Props) {
             <motion.div whileTap={{ scale: 0.97 }}>
               <Button
                 variant="gradient"
-                onClick={handleSchedule}
+                onClick={() => void handleSchedule()}
                 disabled={picked.length === 0 || !isValidWindow || !title.trim()}
               >
                 <Sparkles /> {t("Schedule")}

@@ -64,6 +64,32 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: updErr.message }, { status: 500 });
   }
 
+  // If the call truly closed out as rejected, post a chat message for it
+  // so the caller's history shows "Outgoing call · rejected".
+  if (everyoneDeclined) {
+    try {
+      await supabase.from("messages").insert({
+        chat_id: session.chat_id,
+        author_id: session.initiator_id,
+        kind: "call",
+        content: "",
+        status: "sent",
+        payload: {
+          call: {
+            sessionId: session.id,
+            direction: "outgoing",
+            status: "rejected",
+            durationSec: 0,
+            video: session.kind === "video",
+            ghost: !!session.is_ghost
+          }
+        }
+      });
+    } catch (err) {
+      console.warn("[calls/decline] message insert failed:", err);
+    }
+  }
+
   const ch = supabase.channel(`call:${sessionId}`);
   await ch.send({
     type: "broadcast",

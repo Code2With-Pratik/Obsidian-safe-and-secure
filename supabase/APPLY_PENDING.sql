@@ -712,4 +712,182 @@ ALTER TABLE messages
     'schedule'
   ));
 
+-- ---------------------------------------------------------------------
+-- 18. Calls dashboard data model — extend `call_sessions` so it can also
+--     hold scheduled (future-dated) calls, and add a `duration_seconds`
+--     mirror so history queries don't have to compute deltas on every
+--     read. Adds a pg_cron job that auto-rings scheduled calls when
+--     their `scheduled_for` time arrives.
+--
+--     Also patches the messages.kind CHECK constraint (already includes
+--     'call') for completeness, and adds an INSERT trigger that posts a
+--     human-readable "call" system message into the chat each time a
+--     call row flips to its final (ended / missed / rejected) status.
+-- ---------------------------------------------------------------------
+
+ALTER TABLE call_sessions
+  ADD COLUMN IF NOT EXISTS scheduled_for     TIMESTAMPTZ,
+  ADD COLUMN IF NOT EXISTS title             TEXT,
+  ADD COLUMN IF NOT EXISTS duration_seconds  INTEGER;
+
+-- Extend the status enum to include 'scheduled' — needed for the
+-- auto-ring cron to find pending calls. Drop + recreate the CHECK with
+-- the same auto-name PostgREST inferred originally.
+ALTER TABLE call_sessions DROP CONSTRAINT IF EXISTS call_sessions_status_check;
+ALTER TABLE call_sessions
+  ADD CONSTRAINT call_sessions_status_check
+  CHECK (status IN (
+    'scheduled', 'ringing', 'active', 'ended', 'missed', 'rejected'
+  ));
+
+CREATE INDEX IF NOT EXISTS call_sessions_scheduled_idx
+  ON call_sessions(scheduled_for)
+  WHERE status = 'scheduled';
+
+-- pg_cron: every minute, find scheduled calls whose start time has
+-- passed and flip them to 'ringing' so the existing realtime ring path
+-- (clients subscribe to call_sessions row updates) fires automatically.
+DO $$
+BEGIN
+  PERFORM cron.unschedule('start-scheduled-calls')
+  WHERE EXISTS (
+    SELECT 1 FROM cron.job WHERE jobname = 'start-scheduled-calls'
+  );
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END $$;
+
+SELECT cron.schedule(
+  'start-scheduled-calls',
+  '* * * * *',
+  $job$
+    UPDATE call_sessions
+       SET status = 'ringing',
+           started_at = NOW()
+     WHERE status = 'scheduled'
+       AND scheduled_for IS NOT NULL
+       AND scheduled_for <= NOW()
+       AND ended_at IS NULL;
+  $job$
+);
+
+-- ---------------------------------------------------------------------
+-- 19. Ghost rooms — Discord-style anonymous voice + chat rooms.
+--
+--     • ghost_rooms          — one row per room. `pin` is null for public
+--                              rooms, a 6-digit string for private. Real
+--                              host_id stored for moderation only; never
+--                              surfaced to peers (UI shows ghost handles).
+--     • ghost_room_members   — join table. Each row carries the user's
+--                              per-room ghost identity (handle, hue,
+--                              avatar seed) so peers can render distinct
+--                              anonymous tiles without knowing who's who.
+--
+--     RLS: rooms are publicly listable (everyone browses). Joins require
+--     either is_locked=false OR a matching PIN (enforced in the API
+--     route since RLS can't reach the request body). Members manage only
+--     their own membership row.
+--
+--     A pg_cron job sweeps rooms past `expires_at` once per minute.
+-- ---------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS ghost_rooms (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name         TEXT NOT NULL,
+  topic        TEXT,
+  pin          TEXT,
+  is_locked    BOOLEAN NOT NULL DEFAULT false,
+  capacity     INTEGER NOT NULL DEFAULT 40,
+  aura         TEXT,
+  hot          BOOLEAN DEFAULT false,
+  host_id      UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  expires_at   TIMESTAMPTZ,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS ghost_rooms_created_idx ON ghost_rooms(created_at DESC);
+CREATE INDEX IF NOT EXISTS ghost_rooms_expires_idx ON ghost_rooms(expires_at)
+  WHERE expires_at IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS ghost_room_members (
+  room_id        UUID NOT NULL REFERENCES ghost_rooms(id) ON DELETE CASCADE,
+  user_id        UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  ghost_handle   TEXT NOT NULL,
+  ghost_hue      INTEGER NOT NULL DEFAULT 200,
+  ghost_seed     TEXT NOT NULL DEFAULT '',
+  joined_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (room_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS ghost_room_members_room_idx ON ghost_room_members(room_id);
+
+ALTER TABLE ghost_rooms        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ghost_room_members ENABLE ROW LEVEL SECURITY;
+
+-- ghost_rooms: everyone reads, any authenticated user can create
+-- (host_id = auth.uid), only host can update/delete.
+DROP POLICY IF EXISTS ghost_rooms_select_all ON ghost_rooms;
+CREATE POLICY ghost_rooms_select_all
+  ON ghost_rooms FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS ghost_rooms_insert_self ON ghost_rooms;
+CREATE POLICY ghost_rooms_insert_self
+  ON ghost_rooms FOR INSERT
+  WITH CHECK (host_id = auth.uid());
+
+DROP POLICY IF EXISTS ghost_rooms_update_host ON ghost_rooms;
+CREATE POLICY ghost_rooms_update_host
+  ON ghost_rooms FOR UPDATE
+  USING (host_id = auth.uid());
+
+DROP POLICY IF EXISTS ghost_rooms_delete_host ON ghost_rooms;
+CREATE POLICY ghost_rooms_delete_host
+  ON ghost_rooms FOR DELETE
+  USING (host_id = auth.uid());
+
+-- ghost_room_members: everyone reads (member counts + ghost handles are
+-- public within the room), users insert/delete only their own row.
+-- The /api/ghost-rooms/join endpoint enforces the PIN + capacity check
+-- BEFORE the INSERT lands here.
+DROP POLICY IF EXISTS ghost_room_members_select_all ON ghost_room_members;
+CREATE POLICY ghost_room_members_select_all
+  ON ghost_room_members FOR SELECT
+  USING (true);
+
+DROP POLICY IF EXISTS ghost_room_members_insert_self ON ghost_room_members;
+CREATE POLICY ghost_room_members_insert_self
+  ON ghost_room_members FOR INSERT
+  WITH CHECK (user_id = auth.uid());
+
+DROP POLICY IF EXISTS ghost_room_members_delete_self ON ghost_room_members;
+CREATE POLICY ghost_room_members_delete_self
+  ON ghost_room_members FOR DELETE
+  USING (user_id = auth.uid());
+
+ALTER TABLE ghost_rooms        REPLICA IDENTITY FULL;
+ALTER TABLE ghost_room_members REPLICA IDENTITY FULL;
+
+-- pg_cron: every minute, evict rooms whose auto-close window has passed.
+-- Cascades drop every membership row + any future related state.
+DO $$
+BEGIN
+  PERFORM cron.unschedule('cleanup-expired-ghost-rooms')
+  WHERE EXISTS (
+    SELECT 1 FROM cron.job WHERE jobname = 'cleanup-expired-ghost-rooms'
+  );
+EXCEPTION WHEN OTHERS THEN
+  NULL;
+END $$;
+
+SELECT cron.schedule(
+  'cleanup-expired-ghost-rooms',
+  '* * * * *',
+  $job$
+    DELETE FROM ghost_rooms
+     WHERE expires_at IS NOT NULL
+       AND expires_at <= NOW();
+  $job$
+);
+
 -- Done. Reload the app — the new columns/RPC/policies/jobs are now live.

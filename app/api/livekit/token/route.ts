@@ -14,7 +14,16 @@ import { createClient } from "@/lib/supabase/server";
  *   NEXT_PUBLIC_LIVEKIT_URL  (same wss URL, exposed to the browser)
  */
 export async function POST(req: Request) {
-  let body: { roomName?: string } = {};
+  let body: {
+    roomName?: string;
+    /** Optional ghost-room overrides — when set we mint the token with the
+     *  ghost handle as the LiveKit `identity` + `name` so peers see
+     *  "Whisper#1234" instead of the real profile. */
+    ghostIdentity?: string;
+    ghostName?: string;
+    ghostHue?: number;
+    ghostSeed?: string;
+  } = {};
   try {
     body = await req.json();
   } catch {
@@ -35,7 +44,8 @@ export async function POST(req: Request) {
     );
   }
 
-  // Verify Supabase auth before minting a token.
+  // Verify Supabase auth before minting a token. Even ghost-room joins
+  // require a real signed-in user — only the LiveKit identity is anonymized.
   const supabase = await createClient();
   const {
     data: { user }
@@ -44,17 +54,56 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
-  // Pull display name + avatar so other peers see a real identity, not a uuid.
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("name, username, avatar")
-    .eq("id", user.id)
-    .maybeSingle();
+  let identity = user.id;
+  let displayName: string;
+  let metadata: string;
+
+  if (body.ghostIdentity) {
+    // Ghost-room path — verify the caller is actually a member of this
+    // room with the claimed handle so a user can't impersonate someone
+    // else's ghost identity.
+    if (roomName.startsWith("ghost-")) {
+      const claimedRoomId = roomName.slice("ghost-".length);
+      const { data: membership } = await supabase
+        .from("ghost_room_members")
+        .select("ghost_handle, ghost_hue, ghost_seed")
+        .eq("room_id", claimedRoomId)
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (!membership || membership.ghost_handle !== body.ghostIdentity) {
+        return NextResponse.json(
+          { error: "Not a member of this ghost room" },
+          { status: 403 }
+        );
+      }
+      identity = body.ghostIdentity;
+      displayName = body.ghostName ?? body.ghostIdentity;
+      metadata = JSON.stringify({
+        ghost: true,
+        hue: membership.ghost_hue,
+        seed: membership.ghost_seed
+      });
+    } else {
+      return NextResponse.json(
+        { error: "ghostIdentity is only valid for ghost-* rooms" },
+        { status: 400 }
+      );
+    }
+  } else {
+    // Normal call path — surface real name + avatar so peers see who's who.
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("name, username, avatar")
+      .eq("id", user.id)
+      .maybeSingle();
+    displayName = profile?.name ?? profile?.username ?? "Guest";
+    metadata = JSON.stringify({ avatar: profile?.avatar ?? null });
+  }
 
   const at = new AccessToken(apiKey, apiSecret, {
-    identity: user.id,
-    name: profile?.name ?? profile?.username ?? "Guest",
-    metadata: JSON.stringify({ avatar: profile?.avatar ?? null }),
+    identity,
+    name: displayName,
+    metadata,
     // Tokens are valid for 6h — plenty for a single call, short enough to
     // limit blast radius if leaked.
     ttl: 60 * 60 * 6

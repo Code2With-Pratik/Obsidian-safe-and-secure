@@ -41,17 +41,67 @@ export async function POST(req: Request) {
   const initiatorEnding = session.initiator_id === user.id;
   const nextStatus = stillRinging && initiatorEnding ? "missed" : "ended";
 
+  // Duration = connected_at → now (if it ever connected). Ringing-only
+  // calls have duration 0.
+  const endedAtIso = new Date().toISOString();
+  const durationSec =
+    session.connected_at && nextStatus === "ended"
+      ? Math.max(
+          0,
+          Math.round(
+            (new Date(endedAtIso).getTime() -
+              new Date(session.connected_at).getTime()) /
+              1000
+          )
+        )
+      : 0;
+
   const { data: updated, error: updErr } = await supabase
     .from("call_sessions")
     .update({
       status: nextStatus,
-      ended_at: new Date().toISOString()
+      ended_at: endedAtIso,
+      duration_seconds: durationSec
     })
     .eq("id", sessionId)
     .select("*")
     .single();
   if (updErr) {
     return NextResponse.json({ error: updErr.message }, { status: 500 });
+  }
+
+  // Post a chat message summarizing the call so it shows up in the chat
+  // thread just like WhatsApp. The bubble UI (kind:'call') will read the
+  // payload fields and render the right icon + direction + duration.
+  //
+  // `direction` is stored relative to the INITIATOR — the client flips
+  // it on render based on whether the viewer is the author. We persist
+  // it as 'outgoing' for the initiator's perspective.
+  const callPayload = {
+    sessionId: session.id,
+    direction: "outgoing" as const,
+    status: nextStatus,
+    durationSec,
+    video: session.kind === "video",
+    ghost: !!session.is_ghost
+  };
+
+  // The call author of record is the initiator (so "you called Alice"
+  // reads correctly from either side via the directional flip in the
+  // bubble).
+  try {
+    await supabase.from("messages").insert({
+      chat_id: session.chat_id,
+      author_id: session.initiator_id,
+      kind: "call",
+      content: "",
+      status: "sent",
+      payload: { call: callPayload }
+    });
+  } catch (err) {
+    // Don't block the end response on message insertion — the call still
+    // wraps even if the chat row fails for some reason.
+    console.warn("[calls/end] message insert failed:", err);
   }
 
   const ch = supabase.channel(`call:${sessionId}`);

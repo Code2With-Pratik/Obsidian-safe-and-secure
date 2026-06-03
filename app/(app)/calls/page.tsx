@@ -26,34 +26,69 @@ import { ScheduleCallDialog } from "@/features/calls/schedule-call-dialog";
 import { GhostCallDialog } from "@/features/calls/ghost-call-dialog";
 import { useChatStore } from "@/store/use-chat-store";
 import { useUIStore } from "@/store/use-ui-store";
-import { users } from "@/lib/mock-data";
+import { useCallStore, type CallHistoryEntry } from "@/store/use-call-store";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
-import type { User } from "@/types";
 
 /** Kinds we track in the call history. "rejected" is a declined incoming /
  *  outgoing — duration "—" like missed but visually distinct. */
 type CallKind = "incoming" | "outgoing" | "missed" | "rejected";
 
+/** UI-shape adapter — turn a CallHistoryEntry from the store into the
+ *  flat shape the existing HistoryRow component expects. */
 interface HistoryEntry {
   id: string;
-  user: User;
+  sessionId: string;
+  name: string;
+  avatar: string | null;
+  counterpartyId: string | null;
   kind: CallKind;
   duration: string;
   time: string;
   video?: boolean;
 }
 
-const history: HistoryEntry[] = [
-  { id: "h1", user: users[1], kind: "outgoing", duration: "12:04", time: "9:42 AM", video: true },
-  { id: "h2", user: users[2], kind: "incoming", duration: "04:21", time: "Yesterday", video: false },
-  { id: "h3", user: users[6], kind: "missed", duration: "—", time: "Yesterday" },
-  { id: "h4", user: users[4], kind: "outgoing", duration: "00:58", time: "2 days ago", video: true },
-  { id: "h5", user: users[3], kind: "incoming", duration: "26:33", time: "3 days ago" },
-  { id: "h6", user: users[5], kind: "rejected", duration: "—", time: "3 days ago", video: true },
-  { id: "h7", user: users[7], kind: "outgoing", duration: "08:12", time: "Last week" },
-  { id: "h8", user: users[2], kind: "missed", duration: "—", time: "Last week", video: true }
-];
+function fmtRelative(iso: string): string {
+  const now = Date.now();
+  const t = new Date(iso).getTime();
+  const dayMs = 86400_000;
+  const diff = now - t;
+  if (diff < dayMs) {
+    return new Date(iso).toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit"
+    });
+  }
+  if (diff < dayMs * 2) return "Yesterday";
+  if (diff < dayMs * 7) return `${Math.floor(diff / dayMs)} days ago`;
+  return "Last week";
+}
+
+function fmtDurationLabel(seconds: number): string {
+  if (seconds <= 0) return "—";
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function adaptHistory(rows: CallHistoryEntry[]): HistoryEntry[] {
+  return rows.map((r) => {
+    let kind: CallKind = r.direction;
+    if (r.status === "missed") kind = "missed";
+    else if (r.status === "rejected") kind = "rejected";
+    return {
+      id: r.id,
+      sessionId: r.sessionId,
+      name: r.counterparty?.name ?? "Group call",
+      avatar: r.counterparty?.avatar ?? null,
+      counterpartyId: r.counterparty?.id ?? null,
+      kind,
+      duration: fmtDurationLabel(r.durationSec),
+      time: fmtRelative(r.startedAt),
+      video: r.video
+    };
+  });
+}
 
 const kindIcon: Record<CallKind, React.ReactNode> = {
   incoming: <PhoneIncoming className="size-3.5 text-emerald-400" />,
@@ -138,10 +173,28 @@ export default function CallsPage() {
   const t = useT();
   const router = useRouter();
   const startDM = useChatStore((s) => s.startDM);
-  // Surface every scheduled-call message across all chats so the Upcoming
-  // card reflects what the user has set up via the Schedule dialog.
-  const messagesByChat = useChatStore((s) => s.messages);
   const startCall = useUIStore((s) => s.startCall);
+  const callHistoryRaw = useCallStore((s) => s.history);
+  const callUpcoming = useCallStore((s) => s.upcoming);
+  const stats = useCallStore((s) => s.stats);
+  const historyLoaded = useCallStore((s) => s.historyLoaded);
+  const fetchHistory = useCallStore((s) => s.fetchHistory);
+  const fetchUpcoming = useCallStore((s) => s.fetchUpcoming);
+
+  // Load real call history + scheduled rows on mount. Refresh both whenever
+  // the incoming/outgoing call lifecycle ends so the dashboard reflects the
+  // call that just wrapped without a hard refresh.
+  const incoming = useCallStore((s) => s.incoming);
+  const outgoing = useCallStore((s) => s.outgoing);
+  React.useEffect(() => {
+    void fetchHistory();
+    void fetchUpcoming();
+  }, [fetchHistory, fetchUpcoming, incoming, outgoing]);
+
+  const history: HistoryEntry[] = React.useMemo(
+    () => adaptHistory(callHistoryRaw),
+    [callHistoryRaw]
+  );
 
   const [startOpen, setStartOpen] = React.useState(false);
   const [scheduleOpen, setScheduleOpen] = React.useState(false);
@@ -152,55 +205,24 @@ export default function CallsPage() {
 
   const filtered = applyFilter(history, filter);
 
-  const totals = React.useMemo(() => {
-    let incoming = 0;
-    let outgoing = 0;
-    for (const h of history) {
-      const d = parseDurationSec(h.duration);
-      if (h.kind === "incoming") incoming += d;
-      else if (h.kind === "outgoing") outgoing += d;
-    }
-    return { incoming, outgoing, total: incoming + outgoing };
-  }, []);
-  const totalFmt = formatTotal(totals.total);
-  const incomingFmt = formatTotal(totals.incoming);
-  const outgoingFmt = formatTotal(totals.outgoing);
+  const totalFmt = formatTotal(stats.totalSec);
+  const incomingFmt = formatTotal(stats.incomingSec);
+  const outgoingFmt = formatTotal(stats.outgoingSec);
 
-  // Collect every scheduled-call invite across all chats, drop already-past
-  // entries, sort by start time. Drives the Upcoming card list.
+  // Upcoming card now reads directly from call_sessions rows where
+  // status='scheduled', surfaced by useCallStore.fetchUpcoming(). The
+  // legacy "schedule" chat messages are still rendered as their own
+  // ScheduleBubble inside the chat thread (separate path).
   const upcoming = React.useMemo<UpcomingCall[]>(() => {
-    const now = Date.now();
-    // Scheduling a call with N people drops N copies of the invite (one per
-    // DM). Dedupe by `callInvite.callId` so the Upcoming list shows ONE
-    // entry per call — falling back to `whenIso|title` for legacy messages
-    // that pre-date the callId field.
-    const byKey = new Map<string, UpcomingCall>();
-    for (const [chatId, msgs] of Object.entries(messagesByChat ?? {})) {
-      for (const m of msgs) {
-        if (m.kind !== "schedule") continue;
-        if (!m.schedule?.callInvite) continue;
-        const when = new Date(m.schedule.whenIso).getTime();
-        // Keep calls that are scheduled for the future OR started within
-        // the last hour (so "join now" stays visible while live).
-        if (when < now - 60 * 60 * 1000) continue;
-        const key =
-          m.schedule.callInvite.callId ??
-          `${m.schedule.whenIso}|${m.schedule.callInvite.title}`;
-        if (byKey.has(key)) continue;
-        byKey.set(key, {
-          id: m.id,
-          chatId,
-          title: m.schedule.callInvite.title,
-          whenIso: m.schedule.whenIso,
-          video: m.schedule.callInvite.video,
-          participants: m.schedule.callInvite.participantIds?.length ?? 2
-        });
-      }
-    }
-    return Array.from(byKey.values()).sort(
-      (a, b) => new Date(a.whenIso).getTime() - new Date(b.whenIso).getTime()
-    );
-  }, [messagesByChat]);
+    return callUpcoming.map((u) => ({
+      id: u.id,
+      chatId: u.chatId,
+      title: u.title,
+      whenIso: u.scheduledForIso,
+      video: u.video,
+      participants: u.participantsCount
+    }));
+  }, [callUpcoming]);
 
   const joinScheduled = (u: UpcomingCall) => {
     startCall({
@@ -214,16 +236,19 @@ export default function CallsPage() {
     router.push("/calls/active");
   };
 
-  /** Start a 1-on-1 call with the given user. Reuses the existing chat (or
-   *  creates one) so End correctly returns to the Calls tab. */
-  const callUser = async (user: User, video: boolean) => {
-    const result = await startDM(user);
+  /** Start a 1-on-1 callback to the counterparty of a history row. Reuses
+   *  the existing DM (or creates one) so End correctly returns to the
+   *  Calls tab. The History list calls this when the user taps the small
+   *  phone / video icons on a row. */
+  const callUser = async (entry: HistoryEntry, video: boolean) => {
+    if (!entry.counterpartyId) return;
+    const result = await startDM(entry.counterpartyId);
     const chatId = result.data?.id;
     if (!chatId) return;
     startCall({
       chatId,
-      name: user.name,
-      avatar: user.avatar,
+      name: entry.name,
+      avatar: entry.avatar ?? undefined,
       video,
       group: false,
       participants: 2,
@@ -631,17 +656,21 @@ function HistoryRow({
   onCall
 }: {
   entry: HistoryEntry;
-  onCall: (user: User, video: boolean) => void;
+  onCall: (entry: HistoryEntry, video: boolean) => void;
 }) {
   const t = useT();
+  // Group calls + ghost calls don't expose a counterparty — callback
+  // buttons are disabled because the call store needs a target user id
+  // for startDM.
+  const canCallBack = !!entry.counterpartyId;
   return (
     <div className="flex items-center gap-3 px-2 py-3 rounded-xl hover:bg-foreground/[0.04] transition">
       <Avatar className="size-10">
-        <AvatarImage src={entry.user.avatar} />
+        <AvatarImage src={entry.avatar ?? undefined} />
       </Avatar>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium truncate">{entry.user.name}</span>
+          <span className="text-sm font-medium truncate">{entry.name}</span>
           {kindIcon[entry.kind]}
           {entry.video && <Video className="size-3 text-muted-foreground" />}
         </div>
@@ -652,16 +681,18 @@ function HistoryRow({
       <Button
         variant="ghost"
         size="icon-sm"
-        onClick={() => onCall(entry.user, false)}
-        aria-label={`${t("Voice call")} ${entry.user.name}`}
+        onClick={() => onCall(entry, false)}
+        disabled={!canCallBack}
+        aria-label={`${t("Voice call")} ${entry.name}`}
       >
         <PhoneCall className="size-4" />
       </Button>
       <Button
         variant="ghost"
         size="icon-sm"
-        onClick={() => onCall(entry.user, true)}
-        aria-label={`${t("Video call")} ${entry.user.name}`}
+        onClick={() => onCall(entry, true)}
+        disabled={!canCallBack}
+        aria-label={`${t("Video call")} ${entry.name}`}
       >
         <Video className="size-4" />
       </Button>
@@ -684,7 +715,7 @@ function FullScreenHistory({
   filter: Filter;
   onFilterChange: (f: Filter) => void;
   rows: HistoryEntry[];
-  onCall: (user: User, video: boolean) => void;
+  onCall: (entry: HistoryEntry, video: boolean) => void;
 }) {
   const t = useT();
   const filtered = applyFilter(rows, filter);
