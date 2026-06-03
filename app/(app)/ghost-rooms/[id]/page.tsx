@@ -13,6 +13,7 @@ import {
   GhostStreamOverlay
 } from "@/features/ghost/ghost-stream-chat";
 import { JoinPinDialog } from "@/features/ghost/join-pin-dialog";
+import { GhostRoomVoice } from "@/features/ghost/ghost-room-voice";
 import { CALL_FILTERS } from "@/features/calls/call-controls";
 import { useGhostStore } from "@/store/use-ghost-store";
 import { cn } from "@/lib/utils";
@@ -60,11 +61,18 @@ export default function GhostRoomPage() {
   const [filterId, setFilterId] = React.useState("none");
   const filterCss = CALL_FILTERS.find((f) => f.id === filterId)?.css ?? "none";
 
-  // Auto-join public rooms.
+  // Auto-join public rooms — and re-fetch room list on mount so a deep
+  // link into /ghost-rooms/<id> works even if the room cache is empty
+  // (e.g. first visit, after refresh).
+  const fetchRooms = useGhostStore((s) => s.fetchRooms);
+  const ghostLoaded = useGhostStore((s) => s.loaded);
+  React.useEffect(() => {
+    if (!ghostLoaded) void fetchRooms();
+  }, [ghostLoaded, fetchRooms]);
   React.useEffect(() => {
     if (!room) return;
     if (joined) return;
-    if (!room.isLocked) joinRoom(room.id);
+    if (!room.isLocked) void joinRoom(room.id);
   }, [room?.id, room?.isLocked, joined, joinRoom]);
 
   if (!room) {
@@ -136,7 +144,7 @@ export default function GhostRoomPage() {
   }
 
   const handleLeave = () => {
-    leaveRoom(room.id);
+    void leaveRoom(room.id);
     router.push("/ghost-rooms");
   };
 
@@ -232,6 +240,14 @@ export default function GhostRoomPage() {
 
       {/* Stream chat side panel */}
       <GhostStreamChat roomId={room.id} open={chatOpen} onOpenChange={setChatOpen} />
+
+      {/* Discord-style real voice plane — connects an audio-only LiveKit
+          room with the user's ghost handle as the identity so peers see
+          "Whisper#1234" instead of the real profile. Only mounts once we
+          have an identity (i.e. after joinRoom resolves). */}
+      {joined && myIdentity && (
+        <GhostRoomVoice roomId={room.id} myIdentity={myIdentity} />
+      )}
     </div>
   );
 }

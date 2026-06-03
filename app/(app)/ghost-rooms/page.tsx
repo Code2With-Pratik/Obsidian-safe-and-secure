@@ -21,6 +21,11 @@ export default function GhostRoomsPage() {
   const joinedIds = useGhostStore((s) => s.joinedIds);
   const createdIds = useGhostStore((s) => s.createdIds);
   const joinRoom = useGhostStore((s) => s.joinRoom);
+  const fetchRooms = useGhostStore((s) => s.fetchRooms);
+  const loaded = useGhostStore((s) => s.loaded);
+  React.useEffect(() => {
+    if (!loaded) void fetchRooms();
+  }, [loaded, fetchRooms]);
 
   const [pinDialogRoom, setPinDialogRoom] = React.useState<GhostRoom | null>(null);
   const [joinByPinOpen, setJoinByPinOpen] = React.useState(false);
@@ -153,7 +158,7 @@ export default function GhostRoomsPage() {
       <JoinPinDialog
         open={joinByPinOpen}
         onOpenChange={setJoinByPinOpen}
-        onJoined={(room) => joinRoom(room.id)}
+        onJoined={(room) => void joinRoom(room.id)}
       />
     </ScrollArea>
   );

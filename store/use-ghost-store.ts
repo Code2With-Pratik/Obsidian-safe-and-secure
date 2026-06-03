@@ -2,8 +2,40 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { createClient } from "@/lib/supabase/client";
 import { ghostRooms as seedRooms } from "@/lib/mock-data";
 import type { GhostRoom } from "@/types";
+
+/** Coerce a snake_case ghost_rooms row from Supabase into the camelCase
+ *  GhostRoom shape the UI consumes. */
+interface GhostRoomRow {
+  id: string;
+  name: string;
+  topic: string | null;
+  pin: string | null;
+  is_locked: boolean;
+  capacity: number;
+  aura: string | null;
+  hot: boolean | null;
+  host_id: string | null;
+  expires_at: string | null;
+  created_at: string;
+}
+
+function rowToRoom(row: GhostRoomRow, memberCount: number): GhostRoom {
+  return {
+    id: row.id,
+    name: row.name,
+    topic: row.topic ?? "",
+    pin: row.pin ?? "",
+    members: memberCount,
+    capacity: row.capacity,
+    isLocked: row.is_locked,
+    aura: row.aura ?? "linear-gradient(135deg,#8B5CF6,#EC4899)",
+    expiresAt: row.expires_at ?? undefined,
+    hot: !!row.hot
+  };
+}
 
 export type GhostChannelType = "text" | "voice";
 
@@ -98,9 +130,16 @@ interface State {
     }[]
   >;
 
-  createRoom: (input: CreateRoomInput) => GhostRoom;
-  joinRoom: (roomId: string) => void;
-  leaveRoom: (roomId: string) => void;
+  /** True once fetchRooms has resolved at least once. */
+  loaded: boolean;
+
+  fetchRooms: () => Promise<void>;
+  createRoom: (input: CreateRoomInput) => Promise<GhostRoom | null>;
+  joinRoom: (
+    roomId: string,
+    pin?: string
+  ) => Promise<{ ok: true } | { ok: false; error: string }>;
+  leaveRoom: (roomId: string) => Promise<void>;
   findByPin: (pin: string) => GhostRoom | undefined;
   isJoined: (roomId: string) => boolean;
 
@@ -340,7 +379,11 @@ const seeded = bootstrapSeedRooms();
 export const useGhostStore = create<State>()(
   persist(
     (set, get) => ({
-      rooms: seedRooms,
+      // Start empty — fetchRooms() hydrates from Supabase on mount. Mock
+      // seedRooms is still imported for parity in places that read from
+      // it before the network round-trip finishes.
+      rooms: [],
+      loaded: false,
       joinedIds: [],
       createdIds: [],
       channelsByRoom: seeded.channels,
@@ -353,41 +396,82 @@ export const useGhostStore = create<State>()(
       callByRoom: seeded.calls,
       streamChatByRoom: {},
 
-      createRoom: (input) => {
-        const id = `gr-${Date.now()}`;
-        const expiresAt =
-          input.autoCloseHours > 0
-            ? new Date(Date.now() + input.autoCloseHours * 60 * 60 * 1000).toISOString()
-            : undefined;
-        const room: GhostRoom = {
-          id,
-          name: input.name.trim() || "Untitled ghost room",
-          topic: input.topic.trim() || "Drop in. Be no one.",
-          pin: input.pin,
-          members: 1,
-          capacity: input.capacity,
-          isLocked: input.locked,
-          aura: pickAura(input.name + id),
-          expiresAt
+      fetchRooms: async () => {
+        const supabase = createClient();
+        // Pull every room. Member counts come from a parallel COUNT(*)
+        // grouped query — Supabase doesn't have a GROUP BY shortcut so we
+        // fetch all memberships and bucket them client-side. With the
+        // expected small N (rooms are ephemeral, capped ~200) this stays
+        // fast.
+        const [{ data: rows }, { data: memberRows }] = await Promise.all([
+          supabase
+            .from("ghost_rooms")
+            .select("*")
+            .order("created_at", { ascending: false }),
+          supabase.from("ghost_room_members").select("room_id, user_id")
+        ]);
+        if (!rows) {
+          set({ loaded: true });
+          return;
+        }
+        const counts = new Map<string, number>();
+        for (const m of memberRows ?? []) {
+          counts.set(m.room_id, (counts.get(m.room_id) ?? 0) + 1);
+        }
+        const rooms = (rows as GhostRoomRow[]).map((r) =>
+          rowToRoom(r, counts.get(r.id) ?? 0)
+        );
+        set({ rooms, loaded: true });
+      },
+
+      createRoom: async (input) => {
+        const res = await fetch("/api/ghost-rooms/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: input.name,
+            topic: input.topic,
+            isLocked: input.locked,
+            pin: input.pin,
+            capacity: input.capacity,
+            autoCloseHours: input.autoCloseHours
+          })
+        });
+        if (!res.ok) {
+          console.warn("[ghost-rooms/create] failed:", await res.text());
+          return null;
+        }
+        const { room: row, membership } = (await res.json()) as {
+          room: GhostRoomRow;
+          membership: { ghost_handle: string; ghost_hue: number; ghost_seed: string };
         };
-        const channels = defaultChannelsFor(id, room.topic);
-        const myIdentity = randomGhostIdentity();
+        const room = rowToRoom(row, 1);
+        const channels = defaultChannelsFor(room.id, room.topic);
+        const myIdentity: GhostIdentity = {
+          id: membership.ghost_handle,
+          name: membership.ghost_handle,
+          hue: membership.ghost_hue,
+          avatarSeed: membership.ghost_seed
+        };
         set((s) => ({
-          rooms: [room, ...s.rooms],
-          joinedIds: [...s.joinedIds, id],
-          createdIds: [...s.createdIds, id],
-          channelsByRoom: { ...s.channelsByRoom, [id]: channels },
+          rooms: [room, ...s.rooms.filter((r) => r.id !== room.id)],
+          joinedIds: [...s.joinedIds, room.id],
+          createdIds: [...s.createdIds, room.id],
+          channelsByRoom: { ...s.channelsByRoom, [room.id]: channels },
           messagesByChannel: {
             ...s.messagesByChannel,
             ...Object.fromEntries(channels.map((c) => [c.id, []]))
           },
-          myIdentityByRoom: { ...s.myIdentityByRoom, [id]: myIdentity },
-          membersByRoom: { ...s.membersByRoom, [id]: [myIdentity] },
-          activeChannelByRoom: { ...s.activeChannelByRoom, [id]: channels[0].id },
-          hostByRoom: { ...s.hostByRoom, [id]: myIdentity.id },
+          myIdentityByRoom: { ...s.myIdentityByRoom, [room.id]: myIdentity },
+          membersByRoom: { ...s.membersByRoom, [room.id]: [myIdentity] },
+          activeChannelByRoom: {
+            ...s.activeChannelByRoom,
+            [room.id]: channels[0].id
+          },
+          hostByRoom: { ...s.hostByRoom, [room.id]: myIdentity.id },
           callByRoom: {
             ...s.callByRoom,
-            [id]: {
+            [room.id]: {
               participants: {
                 [myIdentity.id]: {
                   muted: false,
@@ -405,18 +489,42 @@ export const useGhostStore = create<State>()(
         return room;
       },
 
-      joinRoom: (roomId) =>
+      joinRoom: async (roomId, pin) => {
+        const res = await fetch("/api/ghost-rooms/join", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ roomId, pin })
+        });
+        if (!res.ok) {
+          const text = await res.text();
+          let parsed: { error?: string } = {};
+          try {
+            parsed = JSON.parse(text);
+          } catch {
+            parsed = { error: text };
+          }
+          return { ok: false, error: parsed.error ?? "Failed to join" };
+        }
+        const { membership } = (await res.json()) as {
+          membership: { ghost_handle: string; ghost_hue: number; ghost_seed: string };
+        };
+        const myIdentity: GhostIdentity = {
+          id: membership.ghost_handle,
+          name: membership.ghost_handle,
+          hue: membership.ghost_hue,
+          avatarSeed: membership.ghost_seed
+        };
         set((s) => {
           if (s.joinedIds.includes(roomId)) return s;
-          // Ensure channels + identity exist for this room (mock rooms already have channels seeded).
           const channels = s.channelsByRoom[roomId] ?? defaultChannelsFor(roomId, "");
-          const myIdentity = s.myIdentityByRoom[roomId] ?? randomGhostIdentity();
           const existingMembers = s.membersByRoom[roomId] ?? [];
           const callState = s.callByRoom[roomId] ?? { participants: {}, pinnedId: null };
           return {
             joinedIds: [...s.joinedIds, roomId],
             rooms: s.rooms.map((r) =>
-              r.id === roomId ? { ...r, members: Math.min(r.capacity, r.members + 1) } : r
+              r.id === roomId
+                ? { ...r, members: Math.min(r.capacity, r.members + 1) }
+                : r
             ),
             channelsByRoom: { ...s.channelsByRoom, [roomId]: channels },
             myIdentityByRoom: { ...s.myIdentityByRoom, [roomId]: myIdentity },
@@ -449,22 +557,33 @@ export const useGhostStore = create<State>()(
               }
             }
           };
-        }),
+        });
+        return { ok: true };
+      },
 
-      leaveRoom: (roomId) =>
-        set((s) => {
-          const me = s.myIdentityByRoom[roomId];
-          return {
-            joinedIds: s.joinedIds.filter((id) => id !== roomId),
-            rooms: s.rooms.map((r) =>
-              r.id === roomId ? { ...r, members: Math.max(0, r.members - 1) } : r
-            ),
-            membersByRoom: {
-              ...s.membersByRoom,
-              [roomId]: (s.membersByRoom[roomId] ?? []).filter((m) => m.id !== me?.id)
-            }
-          };
-        }),
+      leaveRoom: async (roomId) => {
+        // Optimistic local removal — server call is best-effort.
+        const me = get().myIdentityByRoom[roomId];
+        set((s) => ({
+          joinedIds: s.joinedIds.filter((id) => id !== roomId),
+          rooms: s.rooms.map((r) =>
+            r.id === roomId ? { ...r, members: Math.max(0, r.members - 1) } : r
+          ),
+          membersByRoom: {
+            ...s.membersByRoom,
+            [roomId]: (s.membersByRoom[roomId] ?? []).filter((m) => m.id !== me?.id)
+          }
+        }));
+        try {
+          await fetch("/api/ghost-rooms/leave", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ roomId })
+          });
+        } catch (err) {
+          console.warn("[ghost-rooms/leave] failed:", err);
+        }
+      },
 
       findByPin: (pin) => {
         const trimmed = pin.trim();

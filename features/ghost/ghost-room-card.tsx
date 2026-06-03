@@ -21,14 +21,21 @@ export function GhostRoomCard({
   const joined = useGhostStore((s) => s.joinedIds.includes(room.id));
   const joinRoom = useGhostStore((s) => s.joinRoom);
 
-  const handleClick = () => {
+  const handleClick = async () => {
     // Locked rooms always go through the PIN dialog (handled by the parent).
     if (room.isLocked && !joined) {
       onJoin?.(room);
       return;
     }
-    // Public rooms join directly and enter the room immediately.
-    if (!joined) joinRoom(room.id);
+    // Public rooms join directly and enter the room immediately. If the
+    // server-side join fails (capacity, expired, etc.) we don't navigate.
+    if (!joined) {
+      const result = await joinRoom(room.id);
+      if (!result.ok) {
+        console.warn("[ghost-room-card] join failed:", result.error);
+        return;
+      }
+    }
     onJoin?.(room);
     router.push(`/ghost-rooms/${room.id}`);
   };
@@ -91,7 +98,7 @@ export function GhostRoomCard({
             </div>
           </div>
           <Button
-            onClick={handleClick}
+            onClick={() => void handleClick()}
             size="sm"
             className={
               joined
