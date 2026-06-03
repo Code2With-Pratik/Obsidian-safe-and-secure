@@ -55,11 +55,25 @@ export default function WhiteboardPage() {
   const loaded = useWhiteboardStore((s) => s.loaded);
   const saveActiveBoard = useWhiteboardStore((s) => s.saveActiveBoard);
   const myRole = useWhiteboardStore((s) => s.myRole());
+  const subscribeMembership = useWhiteboardStore((s) => s.subscribeMembership);
+  const teardownMembership = useWhiteboardStore((s) => s.teardownMembership);
 
-  // First-mount: pull every board I own or have been added to from the DB.
+  // First-mount: force-fetch boards (bypassing the in-memory `loaded`
+  // cache, which would otherwise skip a re-visit and miss any boards
+  // that were shared to me while this tab was on a different route)
+  // AND open the membership realtime channel so live shares appear
+  // within seconds. Tear the channel down on unmount so we don't leak
+  // a subscription if the user navigates away.
   React.useEffect(() => {
-    if (!loaded) void fetchBoards();
-  }, [loaded, fetchBoards]);
+    void fetchBoards(true);
+    subscribeMembership();
+    return () => {
+      teardownMembership();
+    };
+    // Deliberately empty deps — this effect must run exactly once per
+    // mount of the whiteboard page.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Real-time presence — every collaborator's cursor on this board.
   const { cursors, publish } = useWhiteboardPresence(board?.id ?? null);

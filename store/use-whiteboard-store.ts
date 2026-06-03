@@ -37,6 +37,83 @@ function debounce(key: string, ms: number, fn: () => void) {
   );
 }
 
+/** Realtime channel that listens for share/unshare events on the current
+ *  user. Lives at module scope so subscribeMembership is idempotent and
+ *  teardownMembership can null it on sign-out. */
+type RealtimeChannelLike = ReturnType<
+  ReturnType<typeof createClient>["channel"]
+>;
+let _membershipChannel: RealtimeChannelLike | null = null;
+
+/** Reentrancy guard for fetchBoards — a burst of share grants would
+ *  otherwise multiply round-trips. */
+let _fetchInFlight = false;
+
+/** Whether the auth-state-change listener has been attached. Guards
+ *  against multiple attachments under Fast Refresh / HMR. */
+let _authListenerAttached = false;
+
+/** Attach a single module-scope listener that tears down the membership
+ *  channel + resets the in-memory caches when the user signs out.
+ *
+ *  Without this, the module-level `_membershipChannel` survives the
+ *  sign-out and the `subscribeMembership` idempotency guard skips the
+ *  next user's resubscription — they'd miss every live share event
+ *  until a full page reload.
+ *
+ *  We deliberately handle ONLY `SIGNED_OUT`, not `USER_UPDATED` or
+ *  `TOKEN_REFRESHED`. Those events fire for routine session refreshes
+ *  (profile edits, expiring access tokens) where the underlying user
+ *  hasn't changed — and the empty-deps useEffect on the whiteboard
+ *  page won't re-run on its own, so clearing `loaded` / `myRoles` on
+ *  those events would silently break:
+ *    • auto-save (gated on `loaded`)
+ *    • realtime share notifications (channel never recreated)
+ *    • permission display (`myRole()` falls back to 'owner' for
+ *      unknown boards, briefly exposing edit affordances to viewers).
+ *
+ *  Account switching is handled implicitly: any flow that promotes a
+ *  different user to the active session in this app already goes
+ *  through SIGNED_OUT first (logout in `lib/supabase/actions.ts`
+ *  redirects to '/'), so a fresh `/whiteboard` mount runs the empty-
+ *  deps effect again and re-subscribes the channel scoped to the new
+ *  `auth.uid()`.
+ *
+ *  Browser-only — guarded for SSR. */
+function attachAuthListener() {
+  if (_authListenerAttached) return;
+  if (typeof window === "undefined") return;
+  _authListenerAttached = true;
+  const supabase = createClient();
+  supabase.auth.onAuthStateChange((event) => {
+    if (event !== "SIGNED_OUT") return;
+    // Drop the realtime subscription so the next user gets a fresh
+    // channel scoped to their own user_id.
+    if (_membershipChannel) {
+      supabase.removeChannel(_membershipChannel);
+      _membershipChannel = null;
+    }
+    _fetchInFlight = false;
+    // Reset the in-memory caches that depend on `auth.uid()` so the
+    // next user doesn't transiently see the previous user's `myRoles`
+    // while their own fetchBoards is in flight. (`partialize` already
+    // excludes `myRoles` + `loaded`, but the live in-memory copy
+    // outlives sign-out within the same SPA session.)
+    try {
+      useWhiteboardStore.setState({
+        myRoles: {},
+        loaded: false
+      });
+    } catch {
+      /* store may not be hydrated yet — harmless */
+    }
+  });
+}
+
+if (typeof window !== "undefined") {
+  attachAuthListener();
+}
+
 export type Tool =
   | "select"
   | "hand"
@@ -224,8 +301,17 @@ interface State {
   /** Roles I have on each board, by board id. Owner > editor > viewer. */
   myRoles: Record<string, "owner" | "editor" | "viewer">;
   /** Load every board I own or have been added to. Replaces the local
-   *  cache so refresh + cross-device sync work. */
-  fetchBoards: () => Promise<void>;
+   *  cache so refresh + cross-device sync work. Pass `force` to skip
+   *  the `loaded` short-circuit (used by the realtime subscription when
+   *  a new membership row lands). */
+  fetchBoards: (force?: boolean) => Promise<void>;
+  /** Subscribe to postgres_changes on `whiteboard_members` filtered to
+   *  the current user — re-fetches when anyone shares a board to / from
+   *  me. Idempotent; safe to call after fetchBoards. */
+  subscribeMembership: () => void;
+  /** Tear down the membership channel — call on sign-out or full
+   *  unmount of the whiteboard surface. */
+  teardownMembership: () => void;
   /** Create a new board on the server (returns the persisted row). */
   createBoardOnServer: (name: string) => Promise<Board | null>;
   /** Debounced save of the active board's elements + camera. Safe to
@@ -427,48 +513,137 @@ export const useWhiteboardStore = create<State>()(
         return r === "owner" || r === "editor";
       },
 
-      fetchBoards: async () => {
+      fetchBoards: async (force?: boolean) => {
+        // Reentrancy guard — the realtime listener can trigger many
+        // back-to-back fetches; we only need one. Without this, a burst
+        // of share grants would N-fold the round-trip.
+        if (_fetchInFlight) return;
+        if (!force && get().loaded) return;
+        _fetchInFlight = true;
+        try {
+          const supabase = createClient();
+          const { data: rows, error } = await supabase
+            .from("whiteboards")
+            .select("*")
+            .order("updated_at", { ascending: false });
+          if (error || !rows) {
+            set({ loaded: true });
+            return;
+          }
+          const { data: { user } } = await supabase.auth.getUser();
+          const meId = user?.id ?? null;
+
+          // Resolve my role on each board via the membership table.
+          const { data: memberRows } = await supabase
+            .from("whiteboard_members")
+            .select("board_id, user_id, role")
+            .eq("user_id", meId ?? "");
+          const myRoles: Record<string, "owner" | "editor" | "viewer"> = {};
+          for (const m of memberRows ?? []) {
+            myRoles[m.board_id] = m.role;
+          }
+
+          // Also rehydrate Board.access for boards I OWN so the share
+          // popover keeps showing existing memberships after a refresh.
+          // Only owners can SELECT the full membership roster (per RLS),
+          // so we run this second query scoped to their boards.
+          const ownedIds = rows
+            .filter((r) => r.owner_id === meId)
+            .map((r) => r.id as string);
+          const accessByBoard: Record<string, Record<string, "viewer" | "editor">> = {};
+          if (ownedIds.length > 0) {
+            const { data: rosterRows } = await supabase
+              .from("whiteboard_members")
+              .select("board_id, user_id, role")
+              .in("board_id", ownedIds);
+            for (const m of rosterRows ?? []) {
+              if (m.role === "owner") continue; // owner is implicit on Board.owner_id
+              const map = accessByBoard[m.board_id] ?? {};
+              map[m.user_id] = m.role as "viewer" | "editor";
+              accessByBoard[m.board_id] = map;
+            }
+          }
+
+          const boards: Board[] = rows.map((r) => ({
+            id: r.id,
+            name: r.name,
+            elements: Array.isArray(r.elements) ? r.elements : [],
+            camera: r.camera ?? { x: 0, y: 0, zoom: 1 },
+            createdAt: r.created_at,
+            updatedAt: r.updated_at,
+            visibility: r.visibility ?? "private",
+            access: accessByBoard[r.id]
+          }));
+
+          set((s) => {
+            const prevActive = s.activeBoardId;
+            const nextActive =
+              boards.find((b) => b.id === prevActive)?.id ??
+              boards[0]?.id ??
+              prevActive;
+            // If the user's active board just got revoked (no longer in
+            // the result set), warn them so the canvas swap isn't silent.
+            if (
+              prevActive !== nextActive &&
+              boards.length > 0 &&
+              !boards.some((b) => b.id === prevActive) &&
+              typeof window !== "undefined"
+            ) {
+              console.warn(
+                "[whiteboard] Active board access was revoked — switching to:",
+                nextActive
+              );
+            }
+            return {
+              boards: boards.length > 0 ? boards : s.boards,
+              activeBoardId: nextActive,
+              myRoles,
+              loaded: true
+            };
+          });
+        } finally {
+          _fetchInFlight = false;
+        }
+      },
+
+      subscribeMembership: () => {
+        // Already subscribed? No-op (idempotent).
+        if (_membershipChannel) return;
         const supabase = createClient();
-        const { data: rows, error } = await supabase
-          .from("whiteboards")
-          .select("*")
-          .order("updated_at", { ascending: false });
-        if (error || !rows) {
-          set({ loaded: true });
-          return;
-        }
-        const { data: { user } } = await supabase.auth.getUser();
-        const meId = user?.id ?? null;
+        // Use a fresh closure read of meId at subscribe-time so a stale
+        // sign-in transition can't pin the channel to the previous user.
+        void (async () => {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (!user) return;
+          const meId = user.id;
+          // Belt-and-braces — re-check before creating the channel.
+          if (_membershipChannel) return;
+          _membershipChannel = supabase
+            .channel(`nova_whiteboard_members_${meId}`)
+            .on(
+              "postgres_changes",
+              {
+                event: "*",
+                schema: "public",
+                table: "whiteboard_members",
+                filter: `user_id=eq.${meId}`
+              },
+              () => {
+                // INSERT / UPDATE / DELETE — re-fetch unconditionally.
+                // UPDATE in particular has to refresh because
+                // `myRoles[boardId]` may have flipped (viewer→editor).
+                void get().fetchBoards(true);
+              }
+            )
+            .subscribe();
+        })();
+      },
 
-        // Resolve my role on each board via the membership table.
-        const { data: memberRows } = await supabase
-          .from("whiteboard_members")
-          .select("board_id, user_id, role")
-          .eq("user_id", meId ?? "");
-        const myRoles: Record<string, "owner" | "editor" | "viewer"> = {};
-        for (const m of memberRows ?? []) {
-          myRoles[m.board_id] = m.role;
-        }
-
-        const boards: Board[] = rows.map((r) => ({
-          id: r.id,
-          name: r.name,
-          elements: Array.isArray(r.elements) ? r.elements : [],
-          camera: r.camera ?? { x: 0, y: 0, zoom: 1 },
-          createdAt: r.created_at,
-          updatedAt: r.updated_at,
-          visibility: r.visibility ?? "private"
-        }));
-
-        set((s) => ({
-          boards: boards.length > 0 ? boards : s.boards,
-          activeBoardId:
-            boards.find((b) => b.id === s.activeBoardId)?.id ??
-            boards[0]?.id ??
-            s.activeBoardId,
-          myRoles,
-          loaded: true
-        }));
+      teardownMembership: () => {
+        if (!_membershipChannel) return;
+        const supabase = createClient();
+        supabase.removeChannel(_membershipChannel);
+        _membershipChannel = null;
       },
 
       createBoardOnServer: async (name) => {
