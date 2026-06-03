@@ -6,12 +6,20 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
-import { currentUser, users } from "@/lib/mock-data";
 import {
   useWhiteboardStore,
   type AccessLevel
 } from "@/store/use-whiteboard-store";
+import { useAuthStore } from "@/store/use-auth-store";
+import { createClient } from "@/lib/supabase/client";
 import { useT } from "@/lib/i18n";
+
+interface ProfileRow {
+  id: string;
+  name: string | null;
+  username: string | null;
+  avatar: string | null;
+}
 
 interface Props {
   children: React.ReactNode;
@@ -27,28 +35,46 @@ export function AccessPopover({ children }: Props) {
   const t = useT();
   const board = useWhiteboardStore((s) => s.activeBoard());
   const setBoardAccess = useWhiteboardStore((s) => s.setBoardAccess);
+  const me = useAuthStore((s) => s.user);
 
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
-  // Tab between "Has access" (already granted) and "Add people".
   const [tab, setTab] = React.useState<"current" | "add">("current");
+  const [results, setResults] = React.useState<ProfileRow[]>([]);
 
   const access = board?.access ?? {};
 
-  const filtered = React.useMemo(() => {
-    const q = query.trim().toLowerCase();
-    const list = users.filter((u) => u.id !== currentUser.id);
-    if (!q) return list;
-    return list.filter(
-      (u) =>
-        u.name.toLowerCase().includes(q) ||
-        u.username.toLowerCase().includes(q)
-    );
-  }, [query]);
+  // Debounced Supabase profile search. Only runs while the popover is
+  // open. Empty query → most-recently-seen people so the list isn't
+  // empty on first open.
+  React.useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    const supabase = createClient();
+    const timer = window.setTimeout(async () => {
+      let q = supabase
+        .from("profiles")
+        .select("id, name, username, avatar")
+        .limit(30);
+      const search = query.trim();
+      if (search) {
+        q = q.or(`name.ilike.%${search}%,username.ilike.%${search}%`);
+      } else {
+        q = q.order("last_seen_at", { ascending: false, nullsFirst: false });
+      }
+      const { data } = await q;
+      if (cancelled) return;
+      const exclude = new Set<string>(me ? [me.id] : []);
+      setResults(((data ?? []) as ProfileRow[]).filter((p) => !exclude.has(p.id)));
+    }, 200);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [open, query, me?.id]);
 
-  // Split into "has access" and "no access" for the two tabs.
-  const granted = filtered.filter((u) => access[u.id]);
-  const pending = filtered.filter((u) => !access[u.id]);
+  const granted = results.filter((u) => access[u.id]);
+  const pending = results.filter((u) => !access[u.id]);
   const visible = tab === "current" ? granted : pending;
 
   const setLevel = (userId: string, level: AccessLevel) => {
@@ -75,11 +101,11 @@ export function AccessPopover({ children }: Props) {
           {/* Owner row — always present, can't be changed. */}
           <div className="mt-3 flex items-center gap-2.5 p-2 rounded-lg bg-foreground/[0.04]">
             <Avatar className="size-7">
-              <AvatarImage src={currentUser.avatar} />
-              <AvatarFallback>{currentUser.name[0]}</AvatarFallback>
+              <AvatarImage src={me?.avatar} />
+              <AvatarFallback>{(me?.name ?? "?")[0]}</AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-medium truncate">{currentUser.name}</p>
+              <p className="text-xs font-medium truncate">{me?.name ?? "You"}</p>
               <p className="text-[10px] text-muted-foreground">{t("You · owner")}</p>
             </div>
             <span className="text-[10px] uppercase tracking-wider text-cyan-300 font-semibold">
@@ -121,20 +147,23 @@ export function AccessPopover({ children }: Props) {
           ) : (
             visible.map((u) => {
               const level = access[u.id] ?? "none";
+              const display = u.name ?? u.username ?? "User";
               return (
                 <div
                   key={u.id}
                   className="flex items-center gap-2.5 p-2 rounded-lg hover:bg-foreground/[0.04] transition"
                 >
                   <Avatar className="size-7">
-                    <AvatarImage src={u.avatar} />
-                    <AvatarFallback>{u.name[0]}</AvatarFallback>
+                    <AvatarImage src={u.avatar ?? undefined} />
+                    <AvatarFallback>{display[0]}</AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
-                    <p className="text-xs font-medium truncate">{u.name}</p>
-                    <p className="text-[10px] text-muted-foreground truncate">
-                      @{u.username}
-                    </p>
+                    <p className="text-xs font-medium truncate">{display}</p>
+                    {u.username && (
+                      <p className="text-[10px] text-muted-foreground truncate">
+                        @{u.username}
+                      </p>
+                    )}
                   </div>
                   <AccessChips
                     level={level}

@@ -890,4 +890,146 @@ SELECT cron.schedule(
   $job$
 );
 
+-- ---------------------------------------------------------------------
+-- 20. Whiteboards — Figma-style collaborative boards.
+--
+--     • whiteboards         — one row per board. Owner is the creator.
+--                             `elements` holds the full element list as
+--                             JSONB; `camera` holds {x,y,zoom}. Real-time
+--                             cursor movement is handled via Supabase
+--                             presence channels (no DB hop).
+--     • whiteboard_members  — join table. `role` is 'owner' / 'editor' /
+--                             'viewer'. Server-side RLS enforces that
+--                             viewers can SELECT but not UPDATE shapes.
+--
+--     RLS:
+--       • SELECT: owner, members, OR boards with visibility='link'
+--                 (link-share rooms — anyone with the URL can read).
+--       • INSERT: any authenticated user (host_id = auth.uid()).
+--       • UPDATE: owner OR editor member (so shape saves go through).
+--       • DELETE: owner only.
+-- ---------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS whiteboards (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name         TEXT NOT NULL,
+  owner_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  elements     JSONB NOT NULL DEFAULT '[]'::jsonb,
+  camera       JSONB NOT NULL DEFAULT '{"x":0,"y":0,"zoom":1}'::jsonb,
+  visibility   TEXT NOT NULL DEFAULT 'private'
+               CHECK (visibility IN ('private', 'team', 'link')),
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS whiteboards_owner_idx ON whiteboards(owner_id);
+CREATE INDEX IF NOT EXISTS whiteboards_updated_idx ON whiteboards(updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS whiteboard_members (
+  board_id    UUID NOT NULL REFERENCES whiteboards(id) ON DELETE CASCADE,
+  user_id     UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  role        TEXT NOT NULL CHECK (role IN ('owner', 'editor', 'viewer')),
+  added_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (board_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS whiteboard_members_user_idx
+  ON whiteboard_members(user_id);
+
+ALTER TABLE whiteboards         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE whiteboard_members  ENABLE ROW LEVEL SECURITY;
+
+-- whiteboards: owners + members can SELECT, plus anyone if visibility='link'.
+DROP POLICY IF EXISTS whiteboards_select_member ON whiteboards;
+CREATE POLICY whiteboards_select_member
+  ON whiteboards FOR SELECT
+  USING (
+    visibility = 'link'
+    OR owner_id = auth.uid()
+    OR EXISTS (
+      SELECT 1 FROM whiteboard_members m
+       WHERE m.board_id = whiteboards.id AND m.user_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS whiteboards_insert_self ON whiteboards;
+CREATE POLICY whiteboards_insert_self
+  ON whiteboards FOR INSERT
+  WITH CHECK (owner_id = auth.uid());
+
+-- UPDATE allowed for owner OR editor members. Viewers (and link-share
+-- guests without a membership row) are silently rejected.
+DROP POLICY IF EXISTS whiteboards_update_editor ON whiteboards;
+CREATE POLICY whiteboards_update_editor
+  ON whiteboards FOR UPDATE
+  USING (
+    owner_id = auth.uid()
+    OR EXISTS (
+      SELECT 1 FROM whiteboard_members m
+       WHERE m.board_id = whiteboards.id
+         AND m.user_id = auth.uid()
+         AND m.role IN ('owner', 'editor')
+    )
+  );
+
+DROP POLICY IF EXISTS whiteboards_delete_owner ON whiteboards;
+CREATE POLICY whiteboards_delete_owner
+  ON whiteboards FOR DELETE
+  USING (owner_id = auth.uid());
+
+-- whiteboard_members: everyone in the board can SELECT (so the share
+-- popover can list other members). Only the board owner can INSERT /
+-- UPDATE / DELETE membership rows (= grant + revoke access).
+DROP POLICY IF EXISTS whiteboard_members_select_member ON whiteboard_members;
+CREATE POLICY whiteboard_members_select_member
+  ON whiteboard_members FOR SELECT
+  USING (
+    user_id = auth.uid()
+    OR EXISTS (
+      SELECT 1 FROM whiteboards b
+       WHERE b.id = whiteboard_members.board_id
+         AND (
+           b.owner_id = auth.uid()
+           OR EXISTS (
+             SELECT 1 FROM whiteboard_members m2
+              WHERE m2.board_id = b.id AND m2.user_id = auth.uid()
+           )
+         )
+    )
+  );
+
+DROP POLICY IF EXISTS whiteboard_members_insert_owner ON whiteboard_members;
+CREATE POLICY whiteboard_members_insert_owner
+  ON whiteboard_members FOR INSERT
+  WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM whiteboards b
+       WHERE b.id = whiteboard_members.board_id AND b.owner_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS whiteboard_members_update_owner ON whiteboard_members;
+CREATE POLICY whiteboard_members_update_owner
+  ON whiteboard_members FOR UPDATE
+  USING (
+    EXISTS (
+      SELECT 1 FROM whiteboards b
+       WHERE b.id = whiteboard_members.board_id AND b.owner_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS whiteboard_members_delete_owner ON whiteboard_members;
+CREATE POLICY whiteboard_members_delete_owner
+  ON whiteboard_members FOR DELETE
+  USING (
+    user_id = auth.uid() -- members can leave themselves
+    OR EXISTS (
+      SELECT 1 FROM whiteboards b
+       WHERE b.id = whiteboard_members.board_id AND b.owner_id = auth.uid()
+    )
+  );
+
+ALTER TABLE whiteboards        REPLICA IDENTITY FULL;
+ALTER TABLE whiteboard_members REPLICA IDENTITY FULL;
+
 -- Done. Reload the app — the new columns/RPC/policies/jobs are now live.

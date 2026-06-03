@@ -67,6 +67,9 @@ export function WhiteboardToolbar({ onOpenIcons }: ToolbarProps = {}) {
   const redo = useWhiteboardStore((s) => s.redo);
   const clearBoard = useWhiteboardStore((s) => s.clearBoard);
   const pushHistory = useWhiteboardStore((s) => s.pushHistory);
+  // Viewers see the toolbar but every interactive control is disabled —
+  // they can pan + zoom and watch peers draw, but not modify the board.
+  const canEdit = useWhiteboardStore((s) => s.canEdit());
 
   // Color popover — pops open automatically when the user switches to a
   // drawing tool so they're prompted for a color before they start drawing.
@@ -128,16 +131,30 @@ export function WhiteboardToolbar({ onOpenIcons }: ToolbarProps = {}) {
       ref={rootRef}
       className="relative flex items-center gap-1 glass-strong rounded-2xl px-2 py-1.5 border border-border/60 shadow-floating"
     >
+      {!canEdit && (
+        // View-only chip — sits flush left of the tool row so users
+        // immediately understand why drawing is no-op'd. Drawing tools
+        // are kept visible (for visual parity with editors) but every
+        // click below short-circuits when canEdit is false.
+        <span className="mr-1 inline-flex items-center h-7 px-2 rounded-full bg-amber-500/15 text-amber-300 text-[10px] font-semibold uppercase tracking-wider">
+          {t("View only")}
+        </span>
+      )}
       {TOOLS.map((tl) => (
         <Tooltip key={tl.id}>
           <TooltipTrigger asChild>
             <button
-              onClick={() => pickTool(tl.id)}
+              onClick={() => {
+                if (!canEdit && tl.id !== "select" && tl.id !== "hand") return;
+                pickTool(tl.id);
+              }}
+              disabled={!canEdit && tl.id !== "select" && tl.id !== "hand"}
               className={cn(
                 "size-9 grid place-items-center rounded-xl transition [&_svg]:size-4",
                 tool === tl.id
                   ? "bg-foreground text-background"
-                  : "hover:bg-foreground/5 text-foreground/80 hover:text-foreground"
+                  : "hover:bg-foreground/5 text-foreground/80 hover:text-foreground",
+                !canEdit && tl.id !== "select" && tl.id !== "hand" && "opacity-40 cursor-not-allowed"
               )}
               aria-label={t(tl.label)}
             >
