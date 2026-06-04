@@ -8,6 +8,7 @@ import { MobileNav } from "@/components/layout/mobile-nav";
 import { FloatingMiniCall } from "@/components/layout/floating-dock";
 import { CallSessionProvider } from "@/components/layout/call-session-provider";
 import { NotificationToasts } from "@/components/notifications/notification-toasts";
+import { AIThemeBridge } from "@/features/ai/theme-bridge";
 import { cn } from "@/lib/utils";
 
 const FOCUSED_PATTERNS = [
@@ -44,6 +45,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             store's per-add queue and renders top-right banners. Portaled
             so it survives any transformed/filtered ancestor. */}
         <NotificationToasts />
+        {/* Invisible — caches next-themes' setTheme in a module slot so AI
+            tool handlers can switch the theme without going through React. */}
+        <AIThemeBridge />
       </div>
     </CallSessionProvider>
   );

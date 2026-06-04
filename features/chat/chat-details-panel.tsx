@@ -232,19 +232,15 @@ export function ChatDetailsPanel({ chat }: { chat: Chat }) {
 
       <div className="flex-1 min-h-0 overflow-y-auto scroll-fade-y">
         {/* Banner — pulled from the partner's profile when available; falls
-            back to the chat banner. Avatar sits half-overlapping the banner
-            edge so the header reads as a single hero unit. */}
-        <div
-          className="relative h-28 w-full overflow-hidden"
-          style={{
-            background:
-              displayBanner
-                ? `url("${displayBanner}") center/cover no-repeat`
-                : "linear-gradient(135deg,#8B5CF6,#EC4899)"
-          }}
-        >
-          <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/0 to-black/45" />
-        </div>
+            back to the chat banner. We branch on banner kind because
+            `displayBanner` can be three different things:
+              • a CSS gradient string ("linear-gradient(...)") — apply as `background`
+              • a video URL (.mp4/.webm/.mov or data:video/...) — render via <video>
+              • an image URL (http/https/data:image) — apply as `background-image`
+            Wrapping a gradient inside `url("...")` (the old code) produced
+            invalid CSS and silently rendered nothing — that's why the group
+            banner wasn't showing up. */}
+        <BannerHero banner={displayBanner} />
 
         <div className="px-4 -mt-10">
           <div className="flex flex-col items-center text-center">
@@ -617,6 +613,57 @@ export function ChatDetailsPanel({ chat }: { chat: Chat }) {
         onClose={() => setViewerIndex(null)}
       />
     </>
+  );
+}
+
+/**
+ *  Render the panel banner. `banner` may be:
+ *    • undefined/empty → fall back to a brand gradient.
+ *    • a CSS gradient ("linear-gradient(...)") → apply as `background`.
+ *    • a video URL (.mp4/.webm/.mov or data:video) → render via <video>.
+ *    • an image URL (http/https/data:image/*, including GIFs) → apply as
+ *      `background-image`. Browsers animate GIFs in CSS backgrounds the
+ *      same as in <img>, so no special-case needed.
+ *
+ *  Before this helper existed the inline render unconditionally wrapped
+ *  `banner` in `url("...")`, which produced invalid CSS for gradient
+ *  strings — the most common case for groups — and rendered nothing.
+ */
+function BannerHero({ banner }: { banner?: string | null }) {
+  const isGradient = !!banner && /^(linear|radial|conic)-gradient/.test(banner);
+  const isVideo =
+    !!banner &&
+    (/\.(mp4|webm|mov|m4v)(\?|$)/i.test(banner) || banner.startsWith("data:video"));
+  const fallback = "linear-gradient(135deg,#8B5CF6,#EC4899)";
+  return (
+    <div
+      className="relative h-28 w-full overflow-hidden"
+      style={
+        isVideo
+          ? { background: "#000" }
+          : isGradient
+            ? { background: banner ?? fallback }
+            : banner
+              ? {
+                  backgroundImage: `url("${banner}")`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center"
+                }
+              : { background: fallback }
+      }
+    >
+      {isVideo && banner && (
+        <video
+          src={banner}
+          autoPlay
+          loop
+          muted
+          playsInline
+          className="absolute inset-0 size-full object-cover"
+        />
+      )}
+      <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/0 to-black/45" />
+    </div>
   );
 }
 

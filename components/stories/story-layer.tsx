@@ -36,12 +36,31 @@ const supabase = createClient();
 /** Resolve a user record from the in-memory profile cache first, then the
  *  mock seed data (for dev-only fixtures), then fall back to the legacy "me"
  *  alias. Returns whatever fields are needed by the viewer/popups — name,
- *  username, avatar. */
+ *  username, avatar.
+ *
+ *  IMPORTANT: the auth-store ("me") branch runs BEFORE the mock-data
+ *  lookup. Mock-data includes a fake user with `id: "me"` (Aria Vance,
+ *  dicebear avatar) for dev fixtures — without this ordering, every
+ *  PhotoViewer("me") call would surface that mock user and the real
+ *  uploaded avatar would never appear in the profile-photo lightbox.
+ */
 function useUserLookup() {
   const profiles = useStoriesStore((s) => s.profiles);
   const me = useAuthStore((s) => s.user);
   return React.useCallback(
     (userId: string) => {
+      // (1) Highest priority: the signed-in user. We match both the
+      //     legacy "me" alias AND the real user id so callers using
+      //     either form land on the live auth-store avatar.
+      if (me && (userId === "me" || userId === me.id)) {
+        return {
+          id: me.id,
+          name: me.name,
+          username: me.username,
+          avatar: me.avatar
+        };
+      }
+      // (2) Profile cache (other users we've seen in chats / posts).
       const cached = profiles[userId];
       if (cached) {
         return {
@@ -53,18 +72,13 @@ function useUserLookup() {
             `https://api.dicebear.com/9.x/notionists/svg?seed=${cached.id}`
         };
       }
+      // (3) Mock seed data — dev-only fixtures.
       const mock = users.find((u) => u.id === userId);
       if (mock) return mock;
-      if (userId === "me" || (me && userId === me.id)) {
-        return me
-          ? {
-              id: me.id,
-              name: me.name,
-              username: me.username,
-              avatar: me.avatar
-            }
-          : currentUser;
-      }
+      // (4) Final fallback when nothing else matches — the legacy "me"
+      //     alias without a signed-in auth user (e.g. story prompts
+      //     fired before auth has settled).
+      if (userId === "me") return currentUser;
       return undefined;
     },
     [profiles, me]

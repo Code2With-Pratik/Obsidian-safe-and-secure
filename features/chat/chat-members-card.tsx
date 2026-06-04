@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { UserPlus, X as XIcon } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,8 @@ import { initials } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { useChatStore } from "@/store/use-chat-store";
 import { useAuthStore } from "@/store/use-auth-store";
+import { useUIStore } from "@/store/use-ui-store";
+import { useImageLightbox } from "./image-lightbox";
 import { users as allUsers } from "@/lib/mock-data";
 import { createClient } from "@/lib/supabase/client";
 import type { Chat, User } from "@/types";
@@ -26,12 +29,50 @@ import type { Chat, User } from "@/types";
  */
 export function ChatMembersCard({ chat }: { chat: Chat }) {
   const t = useT();
+  const router = useRouter();
   const meId = useAuthStore((s) => s.user?.id);
   const addMembers = useChatStore((s) => s.addMembers);
   const removeMembers = useChatStore((s) => s.removeMembers);
+  const startDM = useChatStore((s) => s.startDM);
+  const setRightPanel = useUIStore((s) => s.setRightPanel);
+  const lightbox = useImageLightbox();
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [removeTarget, setRemoveTarget] = React.useState<User | null>(null);
   const [members, setMembers] = React.useState<User[]>([]);
+  // Tracks the user we're navigating to via row click — prevents
+  // double-clicks racing into two separate startDM calls.
+  const [openingId, setOpeningId] = React.useState<string | null>(null);
+
+  /** Row click → open or create a 1-on-1 chat with the picked member,
+   *  close the details panel, and navigate to that chat. Skipped for
+   *  the signed-in user's own row (you can't DM yourself). */
+  const onMemberClick = async (u: User) => {
+    if (!meId || u.id === meId || openingId) return;
+    setOpeningId(u.id);
+    try {
+      const res = await startDM({
+        id: u.id,
+        name: u.name,
+        avatar: u.avatar
+      });
+      const chatId = (res as { data?: { id?: string } })?.data?.id;
+      // Close the panel + jump to the DM. setActiveChat already fires
+      // inside startDM; the router push aligns the URL so deep links
+      // and the chat list highlight stay in sync.
+      setRightPanel(null);
+      if (chatId) router.push(`/chats/${chatId}`);
+    } finally {
+      setOpeningId(null);
+    }
+  };
+
+  /** Avatar click → open the image lightbox with just this avatar
+   *  full-size. Caller must stop propagation so the row click below
+   *  doesn't fire. */
+  const onAvatarClick = (u: User) => {
+    if (!u.avatar) return;
+    lightbox.open([{ src: u.avatar, alt: u.name }], 0);
+  };
 
   const memberIds = React.useMemo(() => chat.memberIds ?? [], [chat.memberIds]);
 
@@ -105,34 +146,72 @@ export function ChatMembersCard({ chat }: { chat: Chat }) {
             {t("No members yet.")}
           </p>
         )}
-        {members.map((u) => (
-          <div
-            key={u.id}
-            className="flex items-center gap-2.5 rounded-xl px-2 py-1.5 hover:bg-foreground/5"
-          >
-            <Avatar className="size-8 shrink-0">
-              <AvatarImage src={u.avatar} alt={u.name} />
-              <AvatarFallback>{initials(u.name)}</AvatarFallback>
-            </Avatar>
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">
-                {u.name} {u.id === meId && <span className="text-muted-foreground">({t("You")})</span>}
-              </p>
-              <p className="truncate text-[11px] text-muted-foreground">@{u.username}</p>
-            </div>
-            {u.id !== meId && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label={t("Remove")}
-                onClick={() => setRemoveTarget(u)}
-                className="text-muted-foreground hover:text-rose-500"
+        {members.map((u) => {
+          const isMe = u.id === meId;
+          // The whole row is a button when the member isn't the signed-in
+          // user — clicking it opens the DM. The avatar inside is its OWN
+          // button (with stopPropagation) so clicking the photo opens the
+          // lightbox instead of triggering the DM navigation.
+          return (
+            <div
+              key={u.id}
+              role={!isMe ? "button" : undefined}
+              tabIndex={!isMe ? 0 : undefined}
+              onClick={!isMe ? () => onMemberClick(u) : undefined}
+              onKeyDown={
+                !isMe
+                  ? (e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        void onMemberClick(u);
+                      }
+                    }
+                  : undefined
+              }
+              className={
+                "group flex items-center gap-2.5 rounded-xl px-2 py-1.5 transition " +
+                (!isMe
+                  ? "cursor-pointer hover:bg-foreground/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  : "")
+              }
+            >
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAvatarClick(u);
+                }}
+                aria-label={t("View photo")}
+                className="rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <XIcon className="size-3.5" />
-              </Button>
-            )}
-          </div>
-        ))}
+                <Avatar className="size-8 shrink-0 transition group-hover:ring-2 group-hover:ring-foreground/10">
+                  <AvatarImage src={u.avatar} alt={u.name} />
+                  <AvatarFallback>{initials(u.name)}</AvatarFallback>
+                </Avatar>
+              </button>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-medium">
+                  {u.name} {isMe && <span className="text-muted-foreground">({t("You")})</span>}
+                </p>
+                <p className="truncate text-[11px] text-muted-foreground">@{u.username}</p>
+              </div>
+              {!isMe && (
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={t("Remove")}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setRemoveTarget(u);
+                  }}
+                  className="text-muted-foreground hover:text-rose-500"
+                >
+                  <XIcon className="size-3.5" />
+                </Button>
+              )}
+            </div>
+          );
+        })}
       </div>
 
       <AddMemberDialog

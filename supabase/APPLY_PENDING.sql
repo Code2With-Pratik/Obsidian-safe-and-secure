@@ -1146,4 +1146,137 @@ CREATE POLICY whiteboard_members_update_owner
     )
   );
 
+-- ─────────────────────────────────────────────────────────────────────────
+-- SECTION 21 — Obsidian AI conversation persistence
+-- ─────────────────────────────────────────────────────────────────────────
+-- The AI assistant popup stores its dialog server-side so the same history
+-- shows up on every device. One row per conversation thread; one row per
+-- message. Tool calls + tool results are stored alongside assistant
+-- messages as JSONB so the client can replay them visually.
+
+CREATE TABLE IF NOT EXISTS ai_conversations (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  title       text NOT NULL DEFAULT 'New chat',
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ai_conversations_user_idx
+  ON ai_conversations(user_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS ai_messages (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id uuid NOT NULL REFERENCES ai_conversations(id) ON DELETE CASCADE,
+  -- role mirrors OpenAI chat-completion roles: 'user' | 'assistant' | 'tool'
+  role            text NOT NULL,
+  -- plain text content; for tool messages this is the JSON-stringified
+  -- tool result so the model can re-read it on resume.
+  content         text NOT NULL DEFAULT '',
+  -- assistant rows: array of { id, name, arguments } tool-call records.
+  -- tool rows: single { tool_call_id, name } reference.
+  tool_calls      jsonb,
+  created_at      timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ai_messages_conversation_idx
+  ON ai_messages(conversation_id, created_at);
+
+ALTER TABLE ai_conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_messages      ENABLE ROW LEVEL SECURITY;
+
+-- Conversations: owner-only.
+DROP POLICY IF EXISTS ai_conv_select_own ON ai_conversations;
+CREATE POLICY ai_conv_select_own ON ai_conversations
+  FOR SELECT USING (user_id = auth.uid());
+DROP POLICY IF EXISTS ai_conv_insert_own ON ai_conversations;
+CREATE POLICY ai_conv_insert_own ON ai_conversations
+  FOR INSERT WITH CHECK (user_id = auth.uid());
+DROP POLICY IF EXISTS ai_conv_update_own ON ai_conversations;
+CREATE POLICY ai_conv_update_own ON ai_conversations
+  FOR UPDATE USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+DROP POLICY IF EXISTS ai_conv_delete_own ON ai_conversations;
+CREATE POLICY ai_conv_delete_own ON ai_conversations
+  FOR DELETE USING (user_id = auth.uid());
+
+-- Messages: scoped through the parent conversation.
+DROP POLICY IF EXISTS ai_msg_select_own ON ai_messages;
+CREATE POLICY ai_msg_select_own ON ai_messages
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM ai_conversations c
+       WHERE c.id = ai_messages.conversation_id AND c.user_id = auth.uid()
+    )
+  );
+DROP POLICY IF EXISTS ai_msg_insert_own ON ai_messages;
+CREATE POLICY ai_msg_insert_own ON ai_messages
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM ai_conversations c
+       WHERE c.id = ai_messages.conversation_id AND c.user_id = auth.uid()
+    )
+  );
+DROP POLICY IF EXISTS ai_msg_delete_own ON ai_messages;
+CREATE POLICY ai_msg_delete_own ON ai_messages
+  FOR DELETE USING (
+    EXISTS (
+      SELECT 1 FROM ai_conversations c
+       WHERE c.id = ai_messages.conversation_id AND c.user_id = auth.uid()
+    )
+  );
+
+-- Bump the parent conversation's updated_at whenever a new message lands so
+-- "recently active" sorting in the history panel stays accurate without a
+-- second round-trip from the client.
+CREATE OR REPLACE FUNCTION ai_touch_conversation()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  UPDATE ai_conversations
+     SET updated_at = now()
+   WHERE id = NEW.conversation_id;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS ai_messages_touch_conv ON ai_messages;
+CREATE TRIGGER ai_messages_touch_conv
+AFTER INSERT ON ai_messages
+FOR EACH ROW EXECUTE FUNCTION ai_touch_conversation();
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- SECTION 22 — Avatars storage bucket
+-- ─────────────────────────────────────────────────────────────────────────
+-- Profile photos (and banner uploads from edit-profile-dialog) need a
+-- dedicated public bucket. Without it, the dialog's upload silently
+-- fails — the user picks a file, sees a toast that they may dismiss,
+-- the avatar URL never gets written, and the profile page falls back
+-- to the dicebear default. This block creates `avatars` as a public
+-- read-anyone / owner-write bucket so uploaded photos show up
+-- immediately on /profile and everywhere else the avatar URL is used.
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('avatars', 'avatars', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+DROP POLICY IF EXISTS avatars_read ON storage.objects;
+CREATE POLICY avatars_read
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'avatars');
+
+DROP POLICY IF EXISTS avatars_insert ON storage.objects;
+CREATE POLICY avatars_insert
+  ON storage.objects FOR INSERT
+  TO authenticated
+  WITH CHECK (bucket_id = 'avatars');
+
+DROP POLICY IF EXISTS avatars_update ON storage.objects;
+CREATE POLICY avatars_update
+  ON storage.objects FOR UPDATE
+  TO authenticated
+  USING (bucket_id = 'avatars' AND owner = auth.uid())
+  WITH CHECK (bucket_id = 'avatars' AND owner = auth.uid());
+
+DROP POLICY IF EXISTS avatars_delete ON storage.objects;
+CREATE POLICY avatars_delete
+  ON storage.objects FOR DELETE
+  TO authenticated
+  USING (bucket_id = 'avatars' AND owner = auth.uid());
+
 -- Done. Reload the app — the new columns/RPC/policies/jobs are now live.
+
