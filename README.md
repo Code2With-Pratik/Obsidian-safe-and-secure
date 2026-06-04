@@ -9,6 +9,9 @@
   A futuristic communication OS — real-time chats, stories, voice & video calls, ghost rooms, communities, a collaborative whiteboard and an encrypted vault, all wrapped in a luminous glassmorphic interface and backed by Supabase + LiveKit.
 </p>
 
+<img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/3108cfbc-944c-49df-b03b-e7cd3298f530" />
+
+
 <p align="center">
   <img alt="Next.js" src="https://img.shields.io/badge/Next.js-15-black?logo=next.js" />
   <img alt="React" src="https://img.shields.io/badge/React-19-149ECA?logo=react" />
