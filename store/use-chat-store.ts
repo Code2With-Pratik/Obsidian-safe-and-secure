@@ -161,6 +161,12 @@ interface ChatState {
   }) => Promise<Chat>;
   addMembers: (chatId: string, userIds: string[]) => Promise<void>;
   removeMembers: (chatId: string, userIds: string[]) => Promise<void>;
+  /** Update a group/channel's editable fields (name, description, banner,
+   *  avatar). Optimistic; reverts on failure. Returns true on success. */
+  updateGroup: (
+    chatId: string,
+    patch: { name?: string; description?: string; banner?: string; avatar?: string }
+  ) => Promise<boolean>;
   pinChat: (chatId: string, pinned: boolean) => Promise<void>;
   muteChat: (chatId: string, muted: boolean) => Promise<void>;
   favouriteChat: (chatId: string, favorite: boolean) => Promise<void>;
@@ -1568,6 +1574,48 @@ export const useChatStore = create<ChatState>((set, get) => ({
       });
       set({ chats: prev });
     }
+  },
+
+  updateGroup: async (chatId, patch) => {
+    const me = useAuthStore.getState().user;
+    if (!me) return false;
+    // Strip undefined keys so we don't blow away existing columns by
+    // accident — `undefined` reaches the DB as a JSON null otherwise.
+    const dbPatch: Record<string, string | null> = {};
+    if (typeof patch.name === "string") dbPatch.name = patch.name;
+    if (typeof patch.description === "string") dbPatch.description = patch.description;
+    if (typeof patch.banner === "string") dbPatch.banner = patch.banner;
+    if (typeof patch.avatar === "string") dbPatch.avatar = patch.avatar;
+    if (Object.keys(dbPatch).length === 0) return true;
+
+    const prev = get().chats;
+    // Optimistic local update so the panel reflects the change instantly.
+    set((s) => ({
+      chats: s.chats.map((c) =>
+        c.id === chatId
+          ? {
+              ...c,
+              ...(patch.name !== undefined && { name: patch.name }),
+              ...(patch.description !== undefined && { description: patch.description }),
+              ...(patch.banner !== undefined && { banner: patch.banner }),
+              ...(patch.avatar !== undefined && { avatar: patch.avatar })
+            }
+          : c
+      )
+    }));
+
+    const { error } = await supabase.from("chats").update(dbPatch).eq("id", chatId);
+    if (error) {
+      console.error("[updateGroup] failed", {
+        message: (error as unknown as { message?: string }).message,
+        code: (error as unknown as { code?: string }).code,
+        hint:
+          "Ensure supabase/APPLY_PENDING.sql section 13 (chats UPDATE policy) is applied."
+      });
+      set({ chats: prev });
+      return false;
+    }
+    return true;
   },
 
   setDisappearingTimer: async (chatId, seconds) => {

@@ -68,10 +68,13 @@ export function ChatMembersCard({ chat }: { chat: Chat }) {
 
   /** Avatar click → open the image lightbox with just this avatar
    *  full-size. Caller must stop propagation so the row click below
-   *  doesn't fire. */
+   *  doesn't fire. Falls back to a deterministic dicebear URL when the
+   *  user has no avatar uploaded, so the click is never a dead end. */
   const onAvatarClick = (u: User) => {
-    if (!u.avatar) return;
-    lightbox.open([{ src: u.avatar, alt: u.name }], 0);
+    const src =
+      u.avatar ||
+      `https://api.dicebear.com/9.x/notionists/svg?seed=${encodeURIComponent(u.id)}`;
+    lightbox.open([{ src, alt: u.name }], 0);
   };
 
   const memberIds = React.useMemo(() => chat.memberIds ?? [], [chat.memberIds]);

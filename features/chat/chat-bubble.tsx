@@ -48,6 +48,7 @@ import { DeleteMessageDialog } from "./delete-message-dialog";
 import { ForwardDialog } from "./forward-dialog";
 import { useImageLightbox } from "./image-lightbox";
 import { useChatStore } from "../../store/use-chat-store";
+import { createClient } from "@/lib/supabase/client";
 import { useMessageSelectionStore } from "../../store/use-message-selection-store";
 import { useAuthStore } from "../../store/use-auth-store";
 import { users } from "@/lib/mock-data";
@@ -679,38 +680,144 @@ function extractUrls(text: string): string[] {
   return text.match(re) ?? [];
 }
 
-/** Render text with URLs converted to <a> tags inline. */
+/** Render text with URLs converted to <a> tags inline AND `@username`
+ *  mentions turned into clickable blue links that open a DM with the
+ *  mentioned user. The single combined regex tokenises in one pass so
+ *  URLs and mentions can interleave freely within a message. */
 function LinkifiedText({ text, me }: { text: string; me: boolean }) {
   if (!text) return null;
-  const re = /(https?:\/\/[^\s<>"')\]]+)/gi;
+  // Two alternatives, captured in order so we can tell them apart by
+  // testing which group matched:
+  //   1. `(https?://…)`  — URL
+  //   2. `@([a-z0-9._-]+)` — mention (preceded by start-of-string or
+  //                          whitespace; we re-check that below to
+  //                          avoid matching inside foo@bar.com)
+  const re = /(https?:\/\/[^\s<>"')\]]+)|@([a-z0-9._-]+)/gi;
   const parts: React.ReactNode[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   let key = 0;
   while ((match = re.exec(text)) !== null) {
+    const [whole, url, handle] = match;
+    // For mentions, ensure the `@` isn't immediately preceded by a word
+    // character (otherwise we'd incorrectly highlight the `@bar` in
+    // "foo@bar.com"). Skip the match if so — push the literal text and
+    // keep scanning.
+    if (handle !== undefined) {
+      const prev = match.index > 0 ? text[match.index - 1] : " ";
+      if (!/[\s]/.test(prev) && match.index !== 0) {
+        continue;
+      }
+    }
     if (match.index > lastIndex) {
       parts.push(text.slice(lastIndex, match.index));
     }
-    const url = match[0];
-    parts.push(
-      <a
-        key={`u-${key++}`}
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        onClick={(e) => e.stopPropagation()}
-        className={cn(
-          "underline underline-offset-2 break-all",
-          me ? "decoration-white/60 hover:decoration-white" : "decoration-cyan-400/70 hover:decoration-cyan-400"
-        )}
-      >
-        {url}
-      </a>
-    );
+    if (url) {
+      parts.push(
+        <a
+          key={`u-${key++}`}
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          className={cn(
+            "underline underline-offset-2 break-all",
+            me ? "decoration-white/60 hover:decoration-white" : "decoration-cyan-400/70 hover:decoration-cyan-400"
+          )}
+        >
+          {url}
+        </a>
+      );
+    } else if (handle) {
+      parts.push(
+        <MentionLink key={`m-${key++}`} username={handle} me={me} text={whole} />
+      );
+    }
     lastIndex = re.lastIndex;
   }
   if (lastIndex < text.length) parts.push(text.slice(lastIndex));
   return <>{parts}</>;
+}
+
+/** Render `@username` as a blue clickable link. On click we resolve the
+ *  username → user id (profile cache first, then a one-off Supabase
+ *  lookup) and call `startDM` so the chat thread for that DM opens
+ *  immediately. Falls back to a no-op if the username doesn't match a
+ *  real profile — better than navigating to a 404. */
+function MentionLink({
+  username,
+  me,
+  text
+}: {
+  username: string;
+  me: boolean;
+  text: string;
+}) {
+  const router = useRouter();
+  const startDM = useChatStore((s) => s.startDM);
+  const profiles = useChatStore((s) => s.profiles);
+  const setRightPanel = useUIStore((s) => s.setRightPanel);
+  const [busy, setBusy] = React.useState(false);
+
+  const handleClick = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (busy) return;
+    setBusy(true);
+    try {
+      // First check the profile cache populated by fetchChats / ensureProfile.
+      let userId: string | null = null;
+      for (const p of Object.values(profiles)) {
+        if (p.username && p.username.toLowerCase() === username.toLowerCase()) {
+          userId = p.id;
+          break;
+        }
+      }
+      // Cache miss → direct Supabase lookup. The username column has a
+      // unique index in the schema, so this is a single-row hit.
+      if (!userId) {
+        const supabase = createClient();
+        const { data } = await supabase
+          .from("profiles")
+          .select("id, name, username, avatar")
+          .ilike("username", username)
+          .limit(1)
+          .maybeSingle();
+        if (data) userId = data.id as string;
+      }
+      if (!userId) return;
+      const res = await startDM({ id: userId });
+      const chatId = (res as { data?: { id?: string } }).data?.id;
+      if (chatId) {
+        setRightPanel(null);
+        router.push(`/chats/${chatId}`);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // Dark-blue link affordance — readable on both glass bubbles (received)
+  // and the colored "me" gradient bubble. `blue-700` reads as a classic
+  // hyperlink on light surfaces; `blue-300` keeps contrast on the
+  // gradient-filled "me" bubble where pure blue-700 muddies into the
+  // background. Both shades stay distinctly DARK blue per the user's
+  // request — no light/sky shades anymore.
+  return (
+    <button
+      type="button"
+      onClick={handleClick}
+      disabled={busy}
+      className={cn(
+        "underline underline-offset-2 font-medium transition",
+        me
+          ? "text-blue-300 hover:text-blue-200 decoration-blue-300/70"
+          : "text-blue-700 hover:text-blue-800 decoration-blue-700/70 dark:text-blue-400 dark:hover:text-blue-300 dark:decoration-blue-400/70"
+      )}
+    >
+      {text}
+    </button>
+  );
 }
 
 interface OgPayload {

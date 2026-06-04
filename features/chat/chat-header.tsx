@@ -46,6 +46,7 @@ import { useUIStore } from "@/store/use-ui-store";
 import { useChatStore } from "@/store/use-chat-store";
 import { useCallStore } from "@/store/use-call-store";
 import { useStoriesStore } from "@/store/use-stories-store";
+import { useImageLightbox } from "@/features/chat/image-lightbox";
 import { StoryAvatar } from "@/components/stories/story-avatar";
 import { users as allUsers } from "@/lib/mock-data";
 import { formatLastSeen } from "@/lib/utils";
@@ -108,10 +109,17 @@ export function ChatHeader({
   const selectionActive = selectionCount > 0;
   const rightPanel = useUIStore((s) => s.rightPanel);
   const setRightPanel = useUIStore((s) => s.setRightPanel);
-  // Clicking the header name/avatar (or "View profile") toggles the docked
+  // Clicking the header NAME (or "View profile") toggles the docked
   // details panel — the single profile surface. The old full-screen overlay
   // sheet has been removed to avoid two competing profile UIs.
   const openProfile = () => setRightPanel(rightPanel === "details" ? null : "details");
+
+  // Clicking the AVATAR specifically is treated as "view photo / story" —
+  // distinct from clicking the name (which opens the details panel).
+  // DM → "Profile or Story?" prompt (story-layer's Prompt component).
+  // Group → straight to the shared lightbox; no story concept for groups.
+  const openPrompt = useStoriesStore((s) => s.openPrompt);
+  const lightbox = useImageLightbox();
   const [themeOpen, setThemeOpen] = React.useState(false);
   const [scheduleOpen, setScheduleOpen] = React.useState(false);
   const [reportOpen, setReportOpen] = React.useState(false);
@@ -304,14 +312,30 @@ export function ChatHeader({
           </Link>
 
           <div className="flex items-center gap-3 flex-1 min-w-0 -ml-2 pl-2 py-1.5">
-            {hasStory && storyUserId && (
-              <StoryAvatar userId={storyUserId} src={chat.avatar} name={chat.name} size={40} />
-            )}
+            {/* Avatar is its OWN button now (was bundled with the name).
+                Click the AVATAR → "Profile / Story" prompt for DMs, or
+                straight-to-lightbox for groups. Click the NAME → toggle
+                the docked details panel as before. */}
             <button
-              onClick={openProfile}
-              className="flex items-center gap-3 flex-1 min-w-0 hover:bg-foreground/[0.03] rounded-xl py-1 transition group"
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (chat.type === "dm" && storyUserId) {
+                  openPrompt(storyUserId);
+                } else if (chat.type !== "dm" && chat.avatar) {
+                  lightbox.open([{ src: chat.avatar, alt: chat.name }], 0);
+                } else {
+                  // Fallback for DMs without a resolvable partner id —
+                  // just open the details panel.
+                  openProfile();
+                }
+              }}
+              aria-label={chat.type === "dm" ? t("View profile or story") : t("View group photo")}
+              className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-ring shrink-0"
             >
-              {!(hasStory && storyUserId) && (
+              {hasStory && storyUserId ? (
+                <StoryAvatar userId={storyUserId} src={chat.avatar} name={chat.name} size={40} />
+              ) : (
                 <AnimatedAvatar
                   src={chat.avatar}
                   name={chat.name}
@@ -323,6 +347,11 @@ export function ChatHeader({
                   hoverLift={false}
                 />
               )}
+            </button>
+            <button
+              onClick={openProfile}
+              className="flex items-center gap-3 flex-1 min-w-0 hover:bg-foreground/[0.03] rounded-xl py-1 transition group"
+            >
               <div className="flex-1 min-w-0 text-left">
                 <div className="flex items-center gap-2">
                   <span className="font-semibold truncate">{chat.name}</span>

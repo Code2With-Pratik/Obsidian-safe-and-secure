@@ -38,9 +38,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
-import { useVaultStore, type VaultNode, type VaultFileKind } from "@/store/use-vault-store";
+import {
+  useVaultStore,
+  type VaultNode,
+  type VaultFileKind,
+  VAULT_QUOTA_BYTES,
+  VAULT_ACCEPT_ATTRIBUTE
+} from "@/store/use-vault-store";
 import { NewFolderDialog, VaultPasswordDialog, ConfirmDeleteDialog } from "@/features/vault/vault-dialogs";
 import { FilePreviewDialog } from "@/features/vault/file-preview-dialog";
+import { useToast } from "@/components/ui/toaster";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 
@@ -79,21 +86,33 @@ function truncateName(name: string, max: number): string {
 
 export default function FilesPage() {
   const t = useT();
+  const { toast } = useToast();
   /* ---- state ---- */
   const nodes = useVaultStore((s) => s.nodes);
   const byParent = useVaultStore((s) => s.byParent);
   const pathTo = useVaultStore((s) => s.pathTo);
+  const fetchNodes = useVaultStore((s) => s.fetchNodes);
   const addFiles = useVaultStore((s) => s.addFiles);
   const createFolder = useVaultStore((s) => s.createFolder);
   const toggleStar = useVaultStore((s) => s.toggleStar);
   const toggleVault = useVaultStore((s) => s.toggleVault);
   const remove = useVaultStore((s) => s.remove);
-  const password = useVaultStore((s) => s.password);
+  // `hasPassword` is a boolean — true once the user has set a vault PIN.
+  // The actual hash lives only on the server (vault_secrets); we never
+  // expose it client-side.
+  const hasPassword = useVaultStore((s) => s.hasPassword);
   const unlocked = useVaultStore((s) => s.unlocked);
   const setVaultPassword = useVaultStore((s) => s.setVaultPassword);
   const unlock = useVaultStore((s) => s.unlock);
   const lock = useVaultStore((s) => s.lock);
   const changePassword = useVaultStore((s) => s.changePassword);
+  // Server-truth quota (refreshes after every upload + delete).
+  const quotaUsed = useVaultStore((s) => s.quotaUsed);
+
+  // Initial hydrate. RLS keeps this scoped to the signed-in user.
+  React.useEffect(() => {
+    void fetchNodes();
+  }, [fetchNodes]);
 
   const [currentFolderId, setCurrentFolderId] = React.useState<string | null>(null);
   const [tab, setTab] = React.useState("all");
@@ -167,13 +186,13 @@ export default function FilesPage() {
         pendingActionRef.current = fn;
         // Will use "unlock" automatically since a password exists when
         // there are vault items (we don't allow vault flag without one).
-        setPwMode(password ? "unlock" : "set");
+        setPwMode(hasPassword ? "unlock" : "set");
         setPwOpen(true);
         return;
       }
       fn();
     },
-    [unlocked, password]
+    [unlocked, hasPassword]
   );
 
   /** Open the "Are you sure?" alert before removing `ids`. If ANY target is a
@@ -185,7 +204,7 @@ export default function FilesPage() {
       if (ids.length === 0) return;
       const all = useVaultStore.getState().nodes;
       const securedWithPw =
-        !!password && ids.some((id) => all.find((n) => n.id === id)?.vault);
+        hasPassword && ids.some((id) => all.find((n) => n.id === id)?.vault);
       const run = () => {
         if (securedWithPw) {
           pendingActionRef.current = () => performDelete(ids);
@@ -197,7 +216,7 @@ export default function FilesPage() {
       };
       setConfirmDelete({ count: ids.length, locked: securedWithPw, run });
     },
-    [password, performDelete]
+    [hasPassword, performDelete]
   );
 
   /** Single-item convenience wrapper used by each file/folder card. */
@@ -210,11 +229,11 @@ export default function FilesPage() {
    *  "unlock"; pass "change" explicitly. */
   const openPwDialog = React.useCallback(
     (mode?: "set" | "unlock" | "change") => {
-      const next = mode ?? (password ? "unlock" : "set");
+      const next = mode ?? (hasPassword ? "unlock" : "set");
       setPwMode(next);
       setPwOpen(true);
     },
-    [password]
+    [hasPassword]
   );
 
   /** Same idea for actions that aren't tied to a specific node — used by the
@@ -254,12 +273,12 @@ export default function FilesPage() {
       });
       clearSelection();
     };
-    if (!password) {
+    if (!hasPassword) {
       requirePassword(doMove);
       return;
     }
     doMove();
-  }, [selected, password, toggleVault, requirePassword, clearSelection]);
+  }, [selected, hasPassword, toggleVault, requirePassword, clearSelection]);
 
   /** Open the preview dialog at `node`. The navigable list = every FILE
    *  currently visible (folders excluded) — so the user can swipe through
@@ -313,28 +332,56 @@ export default function FilesPage() {
       setCurrentFolderId(null);
       clearSelection();
       if (next === "vault" && !unlocked) {
-        setPwMode(password ? "unlock" : "set");
+        setPwMode(hasPassword ? "unlock" : "set");
         setPwOpen(true);
       }
     },
-    [clearSelection, unlocked, password]
+    [clearSelection, unlocked, hasPassword]
   );
 
   /* ---- drag and drop ---- */
+  /** Common path for both drop-zone and file-input uploads. Surfaces the
+   *  store's per-file rejection reasons (extension blocked / 2 MB cap /
+   *  5-per-batch / 50 MB quota) as toasts so the user sees exactly what
+   *  was dropped and why. */
+  const ingestFiles = React.useCallback(
+    async (files: File[]) => {
+      if (files.length === 0) return;
+      const result = await addFiles(files, currentFolderId);
+      if (result.added > 0 && result.rejected.length === 0) {
+        toast({
+          title: `${result.added} ${result.added === 1 ? "file" : "files"} uploaded`,
+          description: `${formatBytes(result.quotaUsed)} of ${formatBytes(result.quotaTotal)} used.`
+        });
+      } else if (result.rejected.length > 0) {
+        toast({
+          title:
+            result.added > 0
+              ? `${result.added} uploaded, ${result.rejected.length} skipped`
+              : "Upload skipped",
+          description: result.rejected
+            .slice(0, 4)
+            .map((r) => `• ${r.name}: ${r.reason}`)
+            .join("\n"),
+          variant: result.added > 0 ? "default" : "destructive"
+        });
+      }
+    },
+    [addFiles, currentFolderId, toast]
+  );
+
   const onDrop = async (e: React.DragEvent) => {
     e.preventDefault();
     setDrag(false);
     const dropped = Array.from(e.dataTransfer?.files ?? []);
-    if (dropped.length === 0) return;
-    await addFiles(dropped, currentFolderId);
+    await ingestFiles(dropped);
   };
 
   const onUploadClick = () => fileInputRef.current?.click();
 
   const onFileInput = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const picked = Array.from(e.target.files ?? []);
-    if (picked.length === 0) return;
-    await addFiles(picked, currentFolderId);
+    await ingestFiles(picked);
     e.target.value = "";
   };
 
@@ -344,14 +391,14 @@ export default function FilesPage() {
     openPwDialog();
   };
 
-  // Total bytes (across files, ignoring vault items the user can't see yet).
-  const usedBytes = React.useMemo(
-    () =>
-      nodes
-        .filter((n) => n.kind === "file" && (!n.vault || unlocked))
-        .reduce((a, n) => a + (n.size ?? 0), 0),
-    [nodes, unlocked]
-  );
+  // Quota source-of-truth comes from the store, which mirrors the server
+  // RPC (`used_vault_bytes`). Falls back to a local tally on cold load so
+  // the gauge isn't blank for the first frame after navigation.
+  const usedBytes =
+    quotaUsed ||
+    nodes
+      .filter((n) => n.kind === "file")
+      .reduce((a, n) => a + (n.size ?? 0), 0);
 
   /** Select-all toggle over the currently-visible nodes. */
   const allVisibleSelected =
@@ -462,6 +509,10 @@ export default function FilesPage() {
         ref={fileInputRef}
         type="file"
         multiple
+        // Restrict the picker to the supported extensions. The store still
+        // validates server-bound, but `accept` filters at the OS level so
+        // users mostly avoid the wrong file types entirely.
+        accept={VAULT_ACCEPT_ATTRIBUTE}
         hidden
         onChange={onFileInput}
       />
@@ -495,13 +546,13 @@ export default function FilesPage() {
                 {formatBytes(usedBytes)}
               </p>
               <p className="text-sm md:text-base text-muted-foreground mt-1.5">
-                {t("of 5 GB used")}
+                {t("of 50 MB used")}
               </p>
               <div className="mt-2.5 h-3 w-full rounded-full bg-foreground/10 overflow-hidden">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-violet-500 via-fuchsia-500 to-cyan-400 transition-all"
                   style={{
-                    width: `${Math.max(2, Math.min(100, (usedBytes / 5e9) * 100))}%`
+                    width: `${Math.max(2, Math.min(100, (usedBytes / VAULT_QUOTA_BYTES) * 100))}%`
                   }}
                 />
               </div>
@@ -547,7 +598,7 @@ export default function FilesPage() {
               <Button variant="glass" size="sm" onClick={() => setNewFolderOpen(true)}>
                 <Folder /> {t("New folder")}
               </Button>
-              {!password ? (
+              {!hasPassword ? (
                 <Button variant="glass" size="sm" onClick={() => openPwDialog("set")}>
                   <ShieldCheck /> {t("Set vault password")}
                 </Button>
@@ -621,7 +672,7 @@ export default function FilesPage() {
             <TabsTrigger value="starred">{t("Starred")}</TabsTrigger>
             <TabsTrigger value="vault">
               <Lock className="size-3 mr-1" /> {t("Vault")}
-              {!unlocked && password && <span className="ml-1 text-[10px] opacity-70">{t("locked")}</span>}
+              {!unlocked && hasPassword && <span className="ml-1 text-[10px] opacity-70">{t("locked")}</span>}
             </TabsTrigger>
           </TabsList>
 
@@ -664,11 +715,11 @@ export default function FilesPage() {
               }
               onStar={toggleStar}
               onVault={(id) => {
-                if (!password) {
+                if (!hasPassword) {
                   requirePassword(() => toggleVault(id));
                   return;
                 }
-                toggleVault(id);
+                void toggleVault(id);
               }}
               onDelete={requestDeleteOne}
               emptyLabel={t("This folder is empty — drag files in or click Upload.")}
@@ -694,7 +745,7 @@ export default function FilesPage() {
               }
               onStar={toggleStar}
               onVault={(id) =>
-                password ? toggleVault(id) : requirePassword(() => toggleVault(id))
+                hasPassword ? void toggleVault(id) : requirePassword(() => toggleVault(id))
               }
               onDelete={requestDeleteOne}
               emptyLabel={t("Nothing starred yet.")}
@@ -703,7 +754,7 @@ export default function FilesPage() {
 
           <TabsContent value="vault" className="mt-5">
             {!unlocked ? (
-              <VaultLockedState onUnlock={requestVaultAccess} hasPassword={!!password} />
+              <VaultLockedState onUnlock={requestVaultAccess} hasPassword={hasPassword} />
             ) : (
               <>
                 {/* Vault breadcrumb (left) + selection actions (right). Fixed
@@ -754,7 +805,12 @@ export default function FilesPage() {
       <NewFolderDialog
         open={newFolderOpen}
         onClose={() => setNewFolderOpen(false)}
-        onCreate={(name) => createFolder(name, currentFolderId)}
+        onCreate={(name) => {
+          // createFolder is async now (Supabase round-trip); fire-and-forget
+          // is fine because the optimistic insert lands in store state and
+          // the page re-renders the new folder regardless.
+          void createFolder(name, currentFolderId);
+        }}
       />
 
       <ConfirmDeleteDialog
@@ -769,14 +825,16 @@ export default function FilesPage() {
         open={pwOpen}
         onClose={() => setPwOpen(false)}
         mode={pwMode}
-        onSubmit={(payload) => {
+        onSubmit={async (payload) => {
           let ok = false;
           if (pwMode === "change") {
             const { current, next } = payload as { current: string; next: string };
-            ok = changePassword(current, next);
+            ok = await changePassword(current, next);
           } else {
             const pw = payload as string;
-            ok = !password ? (setVaultPassword(pw), true) : unlock(pw);
+            // First-time set (no PIN row yet) → setVaultPassword.
+            // Otherwise verify_vault_pin RPC.
+            ok = !hasPassword ? await setVaultPassword(pw) : await unlock(pw);
           }
           if (ok) {
             // Fire whatever the user was trying to do before we asked for

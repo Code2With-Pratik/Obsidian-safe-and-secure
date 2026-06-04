@@ -39,6 +39,7 @@ import {
 import { useChatStore } from "@/store/use-chat-store";
 import { useCommunityStore } from "@/store/use-community-store";
 import { useStoriesStore } from "@/store/use-stories-store";
+import { useImageLightbox } from "@/features/chat/image-lightbox";
 import { StoryAvatar } from "@/components/stories/story-avatar";
 import { users as allUsers } from "@/lib/mock-data";
 import { cn, formatRelative } from "@/lib/utils";
@@ -683,6 +684,32 @@ function ChatRow({
   const hasStory = useStoriesStore((s) =>
     storyUserId ? !!s.byUser[storyUserId]?.slides.length : false
   );
+  const openPrompt = useStoriesStore((s) => s.openPrompt);
+  const lightbox = useImageLightbox();
+
+  /** Click intercept for the AVATAR specifically. The whole row is a
+   *  <Link> that navigates into the chat — preventDefault + stopPropagation
+   *  keep that from firing. Then:
+   *    • DM with a partner user → "Profile photo or Story?" prompt
+   *    • Group / channel / ghost → open the group image directly in
+   *      the shared lightbox (no prompt — groups don't have stories).
+   *  Falls back to the row-level navigation when neither path applies
+   *  (e.g. a DM with no resolvable partner id). */
+  const onAvatarClick = (e: React.MouseEvent) => {
+    if (chat.type === "dm" && storyUserId) {
+      e.preventDefault();
+      e.stopPropagation();
+      openPrompt(storyUserId);
+      return;
+    }
+    if (chat.type !== "dm" && chat.avatar) {
+      e.preventDefault();
+      e.stopPropagation();
+      lightbox.open([{ src: chat.avatar, alt: chat.name }], 0);
+    }
+    // else: let the parent <Link> handle navigation as normal.
+  };
+
   return (
     <Link
       href={`/chats/${chat.id}`}
@@ -698,7 +725,13 @@ function ChatRow({
         />
       )}
 
-        <div className="relative shrink-0">
+        <div
+          className="relative shrink-0 cursor-pointer"
+          onClick={onAvatarClick}
+          role="button"
+          tabIndex={-1}
+          aria-label={chat.type === "dm" ? "View profile or story" : "View group photo"}
+        >
           {hasStory && storyUserId ? (
             <StoryAvatar userId={storyUserId} src={chat.avatar} name={chat.name} size={52} />
           ) : (
@@ -743,15 +776,16 @@ function ChatRow({
               {chat.muted && <BellOff className="size-3 text-muted-foreground" />}
               {chat.pinned && <Pin className="size-3 text-muted-foreground" />}
               {!!chat.unread && (
-                <Badge
-                  variant="default"
-                  className={cn(
-                    "!px-2 !py-0.5 !text-[10px] min-w-[20px] justify-center",
-                    "bg-gradient-to-br from-rose-500 to-pink-500 text-white border-0"
-                  )}
+                // Solid red pill, white text, small + tight. WhatsApp-style.
+                // `min-w-[18px] h-[18px]` keeps a perfect circle for single
+                // digits and grows naturally for 2+ digit counts. `99+`
+                // caps the visible value so the pill never breaks the row.
+                <span
+                  className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-red-600 text-white text-[10px] font-semibold leading-none tabular-nums shadow-sm"
+                  aria-label={`${chat.unread} unread`}
                 >
-                  {chat.unread}
-                </Badge>
+                  {chat.unread > 99 ? "99+" : chat.unread}
+                </span>
               )}
             </div>
           </div>

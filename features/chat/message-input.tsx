@@ -12,8 +12,10 @@ import {
   PollCreatorDialog
 } from "./attachment-dialogs";
 import { ExpressionsPicker, type ExpressionPick } from "./expressions-picker";
+import { MentionPicker, type MentionablePerson } from "./mention-picker";
 import { useUIStore } from "@/store/use-ui-store";
 import { useChatStore } from "@/store/use-chat-store";
+import { useAuthStore } from "@/store/use-auth-store";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
@@ -66,6 +68,150 @@ export function MessageInput({
   }, [messagesForChat, replyTo]);
   const [text, setText] = React.useState("");
   const [showAi, setShowAi] = React.useState(false);
+  // Textarea ref — used by the mention picker (below) to restore the
+  // caret after splicing in `@username`, as well as by the lower-level
+  // textarea element. Originally declared further down; hoisted so the
+  // mention-picker callbacks above the textarea JSX can reference it.
+  const ref = React.useRef<HTMLTextAreaElement>(null);
+
+  /* ── @-mentions ────────────────────────────────────────────────
+   *
+   *  A trigger fires when the textarea contains an "@" that isn't
+   *  preceded by a non-space character (so "foo@bar.com" doesn't
+   *  trigger inside an email), and the caret sits at or past the
+   *  end of the typed query. We track:
+   *    • `mentionTrigger` — the index of the live `@` symbol in `text`.
+   *      null means no picker visible.
+   *    • `mentionQuery`   — the text between the `@` and the caret.
+   *    • `mentionIndex`   — which member is highlighted (kbd nav).
+   *
+   *  When the user picks a member, we splice `@username ` into the
+   *  textarea at the trigger position, keeping the rest of the text
+   *  unchanged. The notification path on the receiving side already
+   *  looks for `@<their-username>` in the message content — so we
+   *  don't need a separate `mentions` column to ship a working
+   *  notification.
+   */
+  const chat = useChatStore((s) => s.chats.find((c) => c.id === chatId));
+  const profiles = useChatStore((s) => s.profiles);
+  const ensureProfile = useChatStore((s) => s.ensureProfile);
+  const meId = useAuthStore((s) => s.user?.id);
+  const isGroup = chat?.type === "group" || chat?.type === "channel";
+  const [mentionTrigger, setMentionTrigger] = React.useState<number | null>(null);
+  const [mentionQuery, setMentionQuery] = React.useState("");
+  const [mentionIndex, setMentionIndex] = React.useState(0);
+
+  // Hydrate profiles for every member id on the chat so the picker has
+  // names/avatars to display. ensureProfile is a cache-aware fetch — it
+  // no-ops if we already have the row.
+  React.useEffect(() => {
+    if (!isGroup) return;
+    const ids = chat?.memberIds ?? [];
+    ids.forEach((id) => {
+      if (!profiles[id]) void ensureProfile(id);
+    });
+  }, [isGroup, chat?.memberIds, profiles, ensureProfile]);
+
+  // Build the picker's member list from `chat.memberIds` + profile cache.
+  // Includes anyone whose profile has at least a name OR username; falls
+  // back to a "User" placeholder so members with empty profiles still
+  // appear (otherwise the picker would silently drop them).
+  const mentionables: MentionablePerson[] = React.useMemo(() => {
+    if (!isGroup) return [];
+    const ids = chat?.memberIds ?? [];
+    return ids
+      .filter((id) => id !== meId)
+      .map((id) => {
+        const p = profiles[id];
+        return {
+          id,
+          name: p?.name || p?.username || "User",
+          username: p?.username || "user",
+          avatar: p?.avatar
+        };
+      });
+  }, [isGroup, chat?.memberIds, profiles, meId]);
+
+  /** Re-derive the mention state from the textarea every time `text`
+   *  changes OR the caret moves. Called from onChange + onKeyUp /
+   *  onClick so caret-only movements (arrow keys, click-to-position)
+   *  also close the picker when they exit a mention zone. */
+  const refreshMention = React.useCallback(
+    (nextText: string, caret: number) => {
+      if (!isGroup) {
+        setMentionTrigger(null);
+        return;
+      }
+      // Walk left from the caret looking for the most recent `@` that
+      // isn't preceded by a word character. Bail if we hit whitespace
+      // or the start of the string first.
+      let i = caret - 1;
+      while (i >= 0) {
+        const ch = nextText[i];
+        if (ch === "@") {
+          const prev = i > 0 ? nextText[i - 1] : " ";
+          // Only treat `@` as a trigger if it's at the start of the
+          // input OR preceded by whitespace — avoids matching inside
+          // email addresses ("a@b.com") and code snippets.
+          if (/[\s]/.test(prev) || i === 0) {
+            const q = nextText.slice(i + 1, caret);
+            // Bail if the query contains a space — that means the user
+            // already moved past the mention. Also bail if longer than
+            // 20 chars; mentions are short.
+            if (/\s/.test(q) || q.length > 20) {
+              setMentionTrigger(null);
+              return;
+            }
+            setMentionTrigger(i);
+            setMentionQuery(q.toLowerCase());
+            setMentionIndex(0);
+            return;
+          }
+          setMentionTrigger(null);
+          return;
+        }
+        if (/\s/.test(ch)) {
+          // Hit whitespace before any `@` — no mention in progress.
+          setMentionTrigger(null);
+          return;
+        }
+        i--;
+      }
+      setMentionTrigger(null);
+    },
+    [isGroup]
+  );
+
+  const closeMention = React.useCallback(() => {
+    setMentionTrigger(null);
+    setMentionQuery("");
+    setMentionIndex(0);
+  }, []);
+
+  /** Replace the @query with @username + trailing space, leaving the
+   *  caret at the inserted end so the user can keep typing. */
+  const insertMention = React.useCallback(
+    (person: MentionablePerson) => {
+      if (mentionTrigger === null) return;
+      const before = text.slice(0, mentionTrigger);
+      // mentionTrigger points AT the `@`. We replace from that index up
+      // to mentionTrigger + 1 (the `@`) + mentionQuery.length.
+      const after = text.slice(mentionTrigger + 1 + mentionQuery.length);
+      const insert = `@${person.username} `;
+      const next = before + insert + after;
+      setText(next);
+      closeMention();
+      // Restore the caret position to right after the inserted username.
+      requestAnimationFrame(() => {
+        const el = ref.current;
+        if (!el) return;
+        const pos = before.length + insert.length;
+        el.focus();
+        el.setSelectionRange(pos, pos);
+      });
+    },
+    [mentionTrigger, mentionQuery, text, closeMention]
+  );
 
   // Typing is broadcast over Supabase Realtime (see store.initializeRealtime).
   // Each keystroke is a fresh "typing:true" heartbeat — the recipient arms a
@@ -221,7 +367,7 @@ export function MessageInput({
   const setAi = useUIStore((s) => s.setAiAssistantOpen);
   const isDesktop = useMediaQuery("(min-width: 768px)");
   const liftAbovePicker = exprOpen && !isDesktop;
-  const ref = React.useRef<HTMLTextAreaElement>(null);
+  // `ref` is declared higher up (the mention-picker callbacks reference it).
   const emojiBtnRef = React.useRef<HTMLButtonElement>(null);
 
   /* ---------------------- voice recording ---------------------- */
@@ -697,16 +843,87 @@ export function MessageInput({
             />
           ) : (
             <>
+              {/* @-mention popover — opens upward from the textarea. Only
+                  renders for group/channel chats, and only when an
+                  in-progress `@query` is detected. Owns no state of its
+                  own; the consumer (this component) drives open + activeIndex
+                  so kbd nav lands here BEFORE the textarea's Enter-to-send. */}
+              <MentionPicker
+                open={mentionTrigger !== null}
+                query={mentionQuery}
+                members={mentionables}
+                activeIndex={mentionIndex}
+                setActiveIndex={setMentionIndex}
+                onPick={insertMention}
+                onClose={closeMention}
+              />
               <textarea
                 ref={ref}
                 value={text}
-                onChange={(e) => setText(e.target.value)}
+                onChange={(e) => {
+                  const next = e.target.value;
+                  setText(next);
+                  // Caret position right after onChange settles — used to
+                  // recompute the active mention query.
+                  refreshMention(next, e.target.selectionStart ?? next.length);
+                }}
+                onKeyUp={(e) => {
+                  const el = e.currentTarget;
+                  refreshMention(el.value, el.selectionStart ?? el.value.length);
+                }}
+                onClick={(e) => {
+                  const el = e.currentTarget;
+                  refreshMention(el.value, el.selectionStart ?? el.value.length);
+                }}
                 onFocus={() => setFocused(true)}
                 onBlur={() => {
                   setFocused(false);
                   sendStopTyping();
                 }}
                 onKeyDown={(e) => {
+                  // Mention picker keyboard nav — intercepts BEFORE the
+                  // textarea's Enter-to-send so users can pick a member
+                  // without firing the message.
+                  const picker = mentionTrigger !== null;
+                  if (picker) {
+                    if (e.key === "ArrowDown") {
+                      e.preventDefault();
+                      setMentionIndex((i) => i + 1);
+                      return;
+                    }
+                    if (e.key === "ArrowUp") {
+                      e.preventDefault();
+                      setMentionIndex((i) => Math.max(0, i - 1));
+                      return;
+                    }
+                    if (e.key === "Escape") {
+                      e.preventDefault();
+                      closeMention();
+                      return;
+                    }
+                    if (e.key === "Enter" || e.key === "Tab") {
+                      // Filter list is the same one the picker shows.
+                      const q = mentionQuery.toLowerCase();
+                      const filtered = mentionables
+                        .filter((m) => m.id !== meId)
+                        .filter((m) =>
+                          !q
+                            ? true
+                            : m.name.toLowerCase().includes(q) ||
+                              m.username.toLowerCase().includes(q)
+                        )
+                        .slice(0, 8);
+                      const safeIdx = Math.min(mentionIndex, filtered.length - 1);
+                      const pick = filtered[safeIdx];
+                      if (pick) {
+                        e.preventDefault();
+                        insertMention(pick);
+                        return;
+                      }
+                      // Empty filter → close + let Enter fall through to send.
+                      closeMention();
+                    }
+                  }
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
                     send();

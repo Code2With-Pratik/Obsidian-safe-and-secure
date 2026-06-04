@@ -208,13 +208,16 @@ export function FilePreviewDialog({
 function LockedStage() {
   const t = useT();
   const unlock = useVaultStore((s) => s.unlock);
-  const hasPassword = useVaultStore((s) => s.password != null);
+  // `hasPassword` is now a boolean on the store (true once the user has set
+  // a vault PIN). Previously this read a plaintext `password` field; the
+  // PIN now lives only as a bcrypt hash on the server.
+  const hasPassword = useVaultStore((s) => s.hasPassword);
   const [pw, setPw] = React.useState("");
   const [err, setErr] = React.useState(false);
 
-  const submit = () => {
+  const submit = async () => {
     if (!pw) return;
-    const ok = unlock(pw);
+    const ok = await unlock(pw);
     if (!ok) {
       setErr(true);
       setPw("");

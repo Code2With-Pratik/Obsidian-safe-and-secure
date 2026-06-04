@@ -216,11 +216,13 @@ export function VaultPasswordDialog({
   /** "set" = first-time creation, "unlock" = enter existing, "change" = old → new. */
   mode: VaultPwMode;
   /** For "set"/"unlock" only the new password is passed. For "change" we
-   *  pass `{ current, next }`. Return `false` to keep the dialog open and
-   *  display "Wrong password". */
+   *  pass `{ current, next }`. Return `false` (sync OR resolved promise)
+   *  to keep the dialog open and display "Wrong password". Async returns
+   *  are awaited so server-side PIN verification (verify_vault_pin RPC)
+   *  can drive the result. */
   onSubmit: (
     payload: string | { current: string; next: string }
-  ) => boolean | void;
+  ) => boolean | void | Promise<boolean | void>;
 }) {
   const t = useT();
   const [current, setCurrent] = React.useState("");
@@ -237,7 +239,7 @@ export function VaultPasswordDialog({
     }
   }, [open]);
 
-  const submit = () => {
+  const submit = async () => {
     setErr(null);
     if (mode === "change") {
       if (!current) {
@@ -252,7 +254,7 @@ export function VaultPasswordDialog({
         setErr("New passwords don't match.");
         return;
       }
-      const ok = onSubmit({ current, next: pw });
+      const ok = await Promise.resolve(onSubmit({ current, next: pw }));
       if (ok === false) {
         setErr("Current password is wrong.");
         setCurrent("");
@@ -270,7 +272,7 @@ export function VaultPasswordDialog({
       setErr("Passwords don't match.");
       return;
     }
-    const ok = onSubmit(pw);
+    const ok = await Promise.resolve(onSubmit(pw));
     if (ok === false) {
       setErr("Wrong password. Try again.");
       setPw("");
