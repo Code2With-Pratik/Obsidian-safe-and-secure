@@ -176,7 +176,14 @@ export function ChatThread({ chat }: { chat: Chat }) {
         <DisappearingBanner seconds={chat.disappearingSeconds ?? null} />
 
         <ScrollArea className="flex-1 px-3 md:px-6 py-4 scroll-fade-y" key={theme}>
-          <div className="mx-auto w-full max-w-[min(100%,1200px)] space-y-4">
+          {/* Full-width wrapper — earlier this was capped at 1200px and
+              centered with `mx-auto`, which on wide displays (>1200px)
+              clustered bubbles in the middle of the thread, leaving
+              dead space against the gutters. Bubbles already self-cap
+              their own width (~75%) inside ChatBubble, so removing the
+              outer cap pushes received-left and sent-right flush to the
+              ScrollArea's px-3/px-6 gutters as expected on wide screens. */}
+          <div className="w-full space-y-4">
             {grouped.map((group) => (
               <div key={group.day} className="space-y-3">
                 <div className="flex items-center gap-3 my-3">

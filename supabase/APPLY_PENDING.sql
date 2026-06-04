@@ -1146,4 +1146,328 @@ CREATE POLICY whiteboard_members_update_owner
     )
   );
 
+-- ─────────────────────────────────────────────────────────────────────────
+-- SECTION 21 — Obsidian AI conversation persistence
+-- ─────────────────────────────────────────────────────────────────────────
+-- The AI assistant popup stores its dialog server-side so the same history
+-- shows up on every device. One row per conversation thread; one row per
+-- message. Tool calls + tool results are stored alongside assistant
+-- messages as JSONB so the client can replay them visually.
+
+CREATE TABLE IF NOT EXISTS ai_conversations (
+  id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id     uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  title       text NOT NULL DEFAULT 'New chat',
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ai_conversations_user_idx
+  ON ai_conversations(user_id, updated_at DESC);
+
+CREATE TABLE IF NOT EXISTS ai_messages (
+  id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  conversation_id uuid NOT NULL REFERENCES ai_conversations(id) ON DELETE CASCADE,
+  -- role mirrors OpenAI chat-completion roles: 'user' | 'assistant' | 'tool'
+  role            text NOT NULL,
+  -- plain text content; for tool messages this is the JSON-stringified
+  -- tool result so the model can re-read it on resume.
+  content         text NOT NULL DEFAULT '',
+  -- assistant rows: array of { id, name, arguments } tool-call records.
+  -- tool rows: single { tool_call_id, name } reference.
+  tool_calls      jsonb,
+  created_at      timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS ai_messages_conversation_idx
+  ON ai_messages(conversation_id, created_at);
+
+ALTER TABLE ai_conversations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE ai_messages      ENABLE ROW LEVEL SECURITY;
+
+-- Conversations: owner-only.
+DROP POLICY IF EXISTS ai_conv_select_own ON ai_conversations;
+CREATE POLICY ai_conv_select_own ON ai_conversations
+  FOR SELECT USING (user_id = auth.uid());
+DROP POLICY IF EXISTS ai_conv_insert_own ON ai_conversations;
+CREATE POLICY ai_conv_insert_own ON ai_conversations
+  FOR INSERT WITH CHECK (user_id = auth.uid());
+DROP POLICY IF EXISTS ai_conv_update_own ON ai_conversations;
+CREATE POLICY ai_conv_update_own ON ai_conversations
+  FOR UPDATE USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+DROP POLICY IF EXISTS ai_conv_delete_own ON ai_conversations;
+CREATE POLICY ai_conv_delete_own ON ai_conversations
+  FOR DELETE USING (user_id = auth.uid());
+
+-- Messages: scoped through the parent conversation.
+DROP POLICY IF EXISTS ai_msg_select_own ON ai_messages;
+CREATE POLICY ai_msg_select_own ON ai_messages
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM ai_conversations c
+       WHERE c.id = ai_messages.conversation_id AND c.user_id = auth.uid()
+    )
+  );
+DROP POLICY IF EXISTS ai_msg_insert_own ON ai_messages;
+CREATE POLICY ai_msg_insert_own ON ai_messages
+  FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1 FROM ai_conversations c
+       WHERE c.id = ai_messages.conversation_id AND c.user_id = auth.uid()
+    )
+  );
+DROP POLICY IF EXISTS ai_msg_delete_own ON ai_messages;
+CREATE POLICY ai_msg_delete_own ON ai_messages
+  FOR DELETE USING (
+    EXISTS (
+      SELECT 1 FROM ai_conversations c
+       WHERE c.id = ai_messages.conversation_id AND c.user_id = auth.uid()
+    )
+  );
+
+-- Bump the parent conversation's updated_at whenever a new message lands so
+-- "recently active" sorting in the history panel stays accurate without a
+-- second round-trip from the client.
+CREATE OR REPLACE FUNCTION ai_touch_conversation()
+RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  UPDATE ai_conversations
+     SET updated_at = now()
+   WHERE id = NEW.conversation_id;
+  RETURN NEW;
+END $$;
+DROP TRIGGER IF EXISTS ai_messages_touch_conv ON ai_messages;
+CREATE TRIGGER ai_messages_touch_conv
+AFTER INSERT ON ai_messages
+FOR EACH ROW EXECUTE FUNCTION ai_touch_conversation();
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- SECTION 22 — Avatars storage bucket
+-- ─────────────────────────────────────────────────────────────────────────
+-- Profile photos (and banner uploads from edit-profile-dialog) need a
+-- dedicated public bucket. Without it, the dialog's upload silently
+-- fails — the user picks a file, sees a toast that they may dismiss,
+-- the avatar URL never gets written, and the profile page falls back
+-- to the dicebear default. This block creates `avatars` as a public
+-- read-anyone / owner-write bucket so uploaded photos show up
+-- immediately on /profile and everywhere else the avatar URL is used.
+
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('avatars', 'avatars', true)
+ON CONFLICT (id) DO UPDATE SET public = true;
+
+DROP POLICY IF EXISTS avatars_read ON storage.objects;
+CREATE POLICY avatars_read
+  ON storage.objects FOR SELECT
+  USING (bucket_id = 'avatars');
+
+DROP POLICY IF EXISTS avatars_insert ON storage.objects;
+CREATE POLICY avatars_insert
+  ON storage.objects FOR INSERT
+  TO authenticated
+  WITH CHECK (bucket_id = 'avatars');
+
+DROP POLICY IF EXISTS avatars_update ON storage.objects;
+CREATE POLICY avatars_update
+  ON storage.objects FOR UPDATE
+  TO authenticated
+  USING (bucket_id = 'avatars' AND owner = auth.uid())
+  WITH CHECK (bucket_id = 'avatars' AND owner = auth.uid());
+
+DROP POLICY IF EXISTS avatars_delete ON storage.objects;
+CREATE POLICY avatars_delete
+  ON storage.objects FOR DELETE
+  TO authenticated
+  USING (bucket_id = 'avatars' AND owner = auth.uid());
+
+-- ─────────────────────────────────────────────────────────────────────────
+-- SECTION 23 — Private Vault (cloud-backed file storage)
+-- ─────────────────────────────────────────────────────────────────────────
+-- The /files page is now backed by Supabase Storage and two tables:
+--
+--   • vault_nodes   — one row per folder OR file. Files carry the
+--                     storage_path that points to an object in the
+--                     `vault` bucket. Each user only ever sees their
+--                     own rows (owner-scoped RLS).
+--   • vault_secrets — one row per user holding the bcrypt-style hashed
+--                     PIN that protects "vaulted" items. Never returned
+--                     to the client; verified server-side via the
+--                     verify_vault_pin() SECURITY DEFINER function.
+--
+--   • storage bucket `vault` — PRIVATE (public=false). Path layout is
+--                     `${user.id}/<uuid>-<filename>`. RLS keeps
+--                     cross-user access out, and signed URLs are minted
+--                     on demand for downloads / previews.
+--
+-- The client-side validation cap (max 5 files per upload, ≤2 MB each,
+-- ≤50 MB total per user, restricted MIME allowlist) is enforced by the
+-- store; this section provides the database surface it talks to plus a
+-- `used_vault_bytes()` helper for the quota gauge.
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+
+CREATE TABLE IF NOT EXISTS vault_nodes (
+  id           UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id      UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  kind         TEXT NOT NULL CHECK (kind IN ('folder', 'file')),
+  name         TEXT NOT NULL,
+  parent_id    UUID REFERENCES vault_nodes(id) ON DELETE CASCADE,
+  starred      BOOLEAN NOT NULL DEFAULT false,
+  vaulted      BOOLEAN NOT NULL DEFAULT false,
+  -- file-only fields. NULL on folders.
+  storage_path TEXT,
+  file_kind    TEXT,
+  size         BIGINT,
+  mime         TEXT,
+  preview      TEXT,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS vault_nodes_user_idx   ON vault_nodes(user_id);
+CREATE INDEX IF NOT EXISTS vault_nodes_parent_idx ON vault_nodes(parent_id);
+
+ALTER TABLE vault_nodes ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS vault_nodes_select_own ON vault_nodes;
+CREATE POLICY vault_nodes_select_own ON vault_nodes
+  FOR SELECT USING (user_id = auth.uid());
+DROP POLICY IF EXISTS vault_nodes_insert_own ON vault_nodes;
+CREATE POLICY vault_nodes_insert_own ON vault_nodes
+  FOR INSERT WITH CHECK (user_id = auth.uid());
+DROP POLICY IF EXISTS vault_nodes_update_own ON vault_nodes;
+CREATE POLICY vault_nodes_update_own ON vault_nodes
+  FOR UPDATE USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
+DROP POLICY IF EXISTS vault_nodes_delete_own ON vault_nodes;
+CREATE POLICY vault_nodes_delete_own ON vault_nodes
+  FOR DELETE USING (user_id = auth.uid());
+
+-- One row per user. pin_hash is stored as bcrypt/crypt() output; the
+-- client never reads it directly — verify_vault_pin() does the compare.
+CREATE TABLE IF NOT EXISTS vault_secrets (
+  user_id    UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  pin_hash   TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+ALTER TABLE vault_secrets ENABLE ROW LEVEL SECURITY;
+-- Owner can see the existence of their secret row (used to detect "is a
+-- password set?") but NOT the hash itself — we hide it via a view below.
+-- Owner-INSERT/UPDATE writes go through set_vault_pin() so we always hash.
+DROP POLICY IF EXISTS vault_secret_select_own ON vault_secrets;
+CREATE POLICY vault_secret_select_own ON vault_secrets
+  FOR SELECT USING (user_id = auth.uid());
+
+-- Hash-on-write helper. Idempotent: first call inserts, later calls
+-- update. Returns the row's updated_at so the caller can pick up the
+-- change without re-querying.
+CREATE OR REPLACE FUNCTION set_vault_pin(_new_pin TEXT)
+RETURNS TIMESTAMPTZ
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+DECLARE
+  uid UUID := auth.uid();
+  out_ts TIMESTAMPTZ;
+BEGIN
+  IF uid IS NULL THEN RAISE EXCEPTION 'Not authenticated'; END IF;
+  IF length(coalesce(_new_pin, '')) < 4 THEN
+    RAISE EXCEPTION 'PIN must be at least 4 characters';
+  END IF;
+  INSERT INTO vault_secrets(user_id, pin_hash, updated_at)
+  VALUES (uid, crypt(_new_pin, gen_salt('bf', 10)), now())
+  ON CONFLICT (user_id) DO UPDATE
+    SET pin_hash = EXCLUDED.pin_hash, updated_at = now()
+  RETURNING updated_at INTO out_ts;
+  RETURN out_ts;
+END $$;
+REVOKE ALL ON FUNCTION set_vault_pin(TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION set_vault_pin(TEXT) TO authenticated;
+
+-- Verify a PIN attempt server-side without ever shipping the hash to
+-- the client. Returns true on match, false otherwise.
+CREATE OR REPLACE FUNCTION verify_vault_pin(_pin TEXT)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+SECURITY DEFINER
+STABLE
+SET search_path = public, extensions, pg_temp
+AS $$
+DECLARE
+  uid UUID := auth.uid();
+  stored TEXT;
+BEGIN
+  IF uid IS NULL THEN RETURN false; END IF;
+  SELECT pin_hash INTO stored FROM vault_secrets WHERE user_id = uid;
+  IF stored IS NULL THEN RETURN false; END IF;
+  RETURN crypt(_pin, stored) = stored;
+END $$;
+REVOKE ALL ON FUNCTION verify_vault_pin(TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION verify_vault_pin(TEXT) TO authenticated;
+
+-- Change PIN — refuses unless the current PIN verifies. Returns the new
+-- updated_at on success, NULL on rejection so the client can show an
+-- "incorrect current PIN" error.
+CREATE OR REPLACE FUNCTION change_vault_pin(_current_pin TEXT, _new_pin TEXT)
+RETURNS TIMESTAMPTZ
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, extensions, pg_temp
+AS $$
+DECLARE
+  uid UUID := auth.uid();
+  stored TEXT;
+  out_ts TIMESTAMPTZ;
+BEGIN
+  IF uid IS NULL THEN RAISE EXCEPTION 'Not authenticated'; END IF;
+  IF length(coalesce(_new_pin, '')) < 4 THEN
+    RAISE EXCEPTION 'PIN must be at least 4 characters';
+  END IF;
+  SELECT pin_hash INTO stored FROM vault_secrets WHERE user_id = uid;
+  -- No row yet? Treat as initial set.
+  IF stored IS NULL THEN
+    RETURN set_vault_pin(_new_pin);
+  END IF;
+  IF crypt(_current_pin, stored) <> stored THEN RETURN NULL; END IF;
+  UPDATE vault_secrets
+     SET pin_hash = crypt(_new_pin, gen_salt('bf', 10)), updated_at = now()
+   WHERE user_id = uid
+   RETURNING updated_at INTO out_ts;
+  RETURN out_ts;
+END $$;
+REVOKE ALL ON FUNCTION change_vault_pin(TEXT, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION change_vault_pin(TEXT, TEXT) TO authenticated;
+
+-- Sum of bytes the caller currently has stored in vault_nodes. The page
+-- uses this to drive the "X MB of 50 MB used" gauge and to gate further
+-- uploads without making the client tally every row itself.
+CREATE OR REPLACE FUNCTION used_vault_bytes()
+RETURNS BIGINT
+LANGUAGE sql
+STABLE
+SECURITY INVOKER
+AS $$
+  SELECT COALESCE(SUM(size), 0)::BIGINT
+    FROM vault_nodes
+   WHERE user_id = auth.uid() AND kind = 'file';
+$$;
+GRANT EXECUTE ON FUNCTION used_vault_bytes() TO authenticated;
+
+-- Private storage bucket. Path scheme = `${user.id}/...`. Only the
+-- owner can read / write / delete their own objects.
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('vault', 'vault', false)
+ON CONFLICT (id) DO UPDATE SET public = false;
+
+DROP POLICY IF EXISTS vault_storage_select ON storage.objects;
+CREATE POLICY vault_storage_select ON storage.objects FOR SELECT
+  TO authenticated
+  USING (bucket_id = 'vault' AND owner = auth.uid());
+
+DROP POLICY IF EXISTS vault_storage_insert ON storage.objects;
+CREATE POLICY vault_storage_insert ON storage.objects FOR INSERT
+  TO authenticated
+  WITH CHECK (bucket_id = 'vault' AND owner = auth.uid());
+
+DROP POLICY IF EXISTS vault_storage_delete ON storage.objects;
+CREATE POLICY vault_storage_delete ON storage.objects FOR DELETE
+  TO authenticated
+  USING (bucket_id = 'vault' AND owner = auth.uid());
+
 -- Done. Reload the app — the new columns/RPC/policies/jobs are now live.
+

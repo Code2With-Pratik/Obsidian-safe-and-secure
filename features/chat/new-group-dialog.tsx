@@ -74,7 +74,16 @@ export function NewGroupDialog({ open, onOpenChange, onCreate, onCreated }: Prop
   const [results, setResults] = React.useState<DirectoryUser[]>([]);
   const [searching, setSearching] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
+  // Banner upload — when the user picks an image / gif / video we stash
+  // both a transient blob URL (for the in-dialog preview, which streams
+  // instantly without waiting for the network) AND the actual file, then
+  // upload to Supabase Storage on submit and replace `banner` with the
+  // public URL before `addGroup` writes the row. Keeps the dialog snappy
+  // and avoids leaving an orphaned upload if the user cancels.
+  const [bannerFile, setBannerFile] = React.useState<File | null>(null);
+  const [bannerIsVideo, setBannerIsVideo] = React.useState(false);
   const avatarInputRef = React.useRef<HTMLInputElement>(null);
+  const bannerInputRef = React.useRef<HTMLInputElement>(null);
 
   // Debounced live profile search against Supabase. Empty query lists the
   // most-recently-active profiles so the picker doesn't feel empty on open.
@@ -112,6 +121,19 @@ export function NewGroupDialog({ open, onOpenChange, onCreate, onCreated }: Prop
     setAvatarSrc(URL.createObjectURL(file));
   };
 
+  /** Banner file picker — accepts image (including GIF) and video.
+   *  We render the picked media inline via a blob URL so the user sees
+   *  the chosen banner immediately; the actual upload to Supabase
+   *  happens on submit. */
+  const onBannerFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setBannerFile(file);
+    setBannerIsVideo(file.type.startsWith("video/"));
+    setBanner(URL.createObjectURL(file));
+    e.target.value = "";
+  };
+
   const togglePick = (u: DirectoryUser) =>
     setPicked((cur) =>
       cur.find((x) => x.id === u.id) ? cur.filter((x) => x.id !== u.id) : [...cur, u]
@@ -126,6 +148,8 @@ export function NewGroupDialog({ open, onOpenChange, onCreate, onCreated }: Prop
     setAvatarSrc(null);
     setAvatarFile(null);
     setBanner(GRADIENTS[0]);
+    setBannerFile(null);
+    setBannerIsVideo(false);
     setSearch("");
   };
 
@@ -147,11 +171,29 @@ export function NewGroupDialog({ open, onOpenChange, onCreate, onCreated }: Prop
           const uploaded = await uploadAttachment(avatarFile);
           if (uploaded) avatarUrl = uploaded;
         }
+        // Upload the banner file if one was picked — the in-dialog
+        // preview was using a transient blob URL which only exists in
+        // this browser tab. We must swap it for the public URL before
+        // it lands in the DB or peers will see a dead `blob:` link.
+        let bannerToSave = banner;
+        if (bannerFile) {
+          const uploaded = await uploadAttachment(bannerFile);
+          if (uploaded) {
+            bannerToSave = uploaded;
+            // Free the transient blob URL — keeping it around leaks the
+            // entire file into memory until the tab closes.
+            try {
+              URL.revokeObjectURL(banner);
+            } catch {
+              /* not a blob URL — harmless */
+            }
+          }
+        }
         const created = await addGroup({
           name: name.trim(),
           description: description.trim(),
           memberIds: picked.map((u) => u.id),
-          banner,
+          banner: bannerToSave,
           avatar: avatarUrl
         });
         onCreated?.(created.id);
@@ -175,40 +217,82 @@ export function NewGroupDialog({ open, onOpenChange, onCreate, onCreated }: Prop
           hidden
           onChange={onAvatarFile}
         />
+        <input
+          ref={bannerInputRef}
+          type="file"
+          accept="image/*,video/*"
+          hidden
+          onChange={onBannerFile}
+        />
 
-        {/* Banner */}
-        <div className="relative h-32" style={{ background: banner }}>
-          <motion.div
-            className="absolute inset-0"
-            animate={{ backgroundPosition: ["0% 0%", "100% 100%"] }}
-            transition={{ duration: 14, repeat: Infinity, repeatType: "reverse" }}
-            style={{
-              backgroundImage:
-                "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.35), transparent 40%), radial-gradient(circle at 70% 70%, rgba(0,0,0,0.25), transparent 50%)",
-              backgroundSize: "200% 200%"
+        {/* Banner — render the picked file when present, the chosen
+            gradient otherwise. Three branches:
+              • gradient string → apply as CSS background
+              • video file       → <video autoPlay loop muted>
+              • image / GIF      → background-image
+            (CSS animates GIFs in backgrounds, no special-case needed.)
+            Single outer wrapper because the Group avatar floats below
+            the banner (`absolute -bottom-9`) and needs a positioned
+            ancestor to anchor to. */}
+        <div className="relative h-32">
+          {(() => {
+            const isGradient = /^(linear|radial|conic)-gradient/.test(banner);
+            if (bannerIsVideo) {
+              return (
+                <video
+                  src={banner}
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="absolute inset-0 size-full object-cover bg-black"
+                />
+              );
+            }
+            return (
+              <div
+                className="absolute inset-0"
+                style={
+                  isGradient
+                    ? { background: banner }
+                    : {
+                        backgroundImage: `url("${banner}")`,
+                        backgroundSize: "cover",
+                        backgroundPosition: "center"
+                      }
+                }
+              >
+                {/* Glossy sheen — only meaningful over gradients;
+                    hidden when there's an actual photo backing it. */}
+                {isGradient && (
+                  <motion.div
+                    className="absolute inset-0"
+                    animate={{ backgroundPosition: ["0% 0%", "100% 100%"] }}
+                    transition={{ duration: 14, repeat: Infinity, repeatType: "reverse" }}
+                    style={{
+                      backgroundImage:
+                        "radial-gradient(circle at 30% 30%, rgba(255,255,255,0.35), transparent 40%), radial-gradient(circle at 70% 70%, rgba(0,0,0,0.25), transparent 50%)",
+                      backgroundSize: "200% 200%"
+                    }}
+                  />
+                )}
+              </div>
+            );
+          })()}
+
+          <BannerOverlay
+            t={t}
+            banner={banner}
+            setBanner={(g) => {
+              setBanner(g);
+              setBannerFile(null);
+              setBannerIsVideo(false);
             }}
+            onUploadClick={() => bannerInputRef.current?.click()}
+            gradients={GRADIENTS}
           />
 
-          <DialogTitle className="absolute top-3 left-5 text-white drop-shadow text-lg font-display font-semibold">
-            {t("New group")}
-          </DialogTitle>
-
-          {/* banner color picker */}
-          <div className="absolute bottom-3 right-3 flex gap-1.5">
-            {GRADIENTS.map((g) => (
-              <button
-                key={g}
-                onClick={() => setBanner(g)}
-                className={cn(
-                  "size-5 rounded-full ring-2 ring-offset-2 ring-offset-transparent transition",
-                  banner === g ? "ring-white" : "ring-transparent"
-                )}
-                style={{ background: g }}
-              />
-            ))}
-          </div>
-
-          {/* Group avatar */}
+          {/* Group avatar — floats half outside the banner via `-bottom-9`. */}
           <button
             onClick={() => avatarInputRef.current?.click()}
             className="absolute -bottom-9 left-5 size-20 rounded-3xl overflow-hidden ring-4 ring-background shadow-floating grid place-items-center bg-card group"
@@ -361,5 +445,65 @@ export function NewGroupDialog({ open, onOpenChange, onCreate, onCreated }: Prop
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ *  The chrome that floats over the banner area in NewGroupDialog —
+ *  dialog title (top-left), upload button + gradient swatches
+ *  (bottom-right). Pulled out of the main render so the gradient and
+ *  image / video branches share one source of truth.
+ *
+ *  The Camera button sits immediately LEFT of the gradient swatches —
+ *  one tap opens a file picker that accepts image/gif/video. Picking a
+ *  file replaces the gradient preview with the file; clicking any
+ *  gradient swatch clears the file back to a gradient. Either choice
+ *  is what gets persisted on Save.
+ */
+function BannerOverlay({
+  t,
+  banner,
+  setBanner,
+  onUploadClick,
+  gradients
+}: {
+  t: (s: string) => string;
+  banner: string;
+  setBanner: (g: string) => void;
+  onUploadClick: () => void;
+  gradients: string[];
+}) {
+  return (
+    <>
+      <DialogTitle className="absolute top-3 left-5 text-white drop-shadow text-lg font-display font-semibold">
+        {t("New group")}
+      </DialogTitle>
+      <div className="absolute bottom-3 right-3 flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onUploadClick}
+          aria-label={t("Upload banner image or video")}
+          title={t("Upload banner image or video")}
+          className="size-6 rounded-full bg-black/40 backdrop-blur grid place-items-center text-white hover:bg-black/60 ring-2 ring-white/40 hover:ring-white transition"
+        >
+          <Camera className="size-3.5" />
+        </button>
+        <div className="flex gap-1.5">
+          {gradients.map((g) => (
+            <button
+              key={g}
+              type="button"
+              onClick={() => setBanner(g)}
+              aria-label="Banner gradient"
+              className={cn(
+                "size-5 rounded-full ring-2 ring-offset-2 ring-offset-transparent transition",
+                banner === g ? "ring-white" : "ring-transparent"
+              )}
+              style={{ background: g }}
+            />
+          ))}
+        </div>
+      </div>
+    </>
   );
 }

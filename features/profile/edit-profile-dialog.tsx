@@ -210,8 +210,16 @@ export function EditProfileDialog({ open, onOpenChange }: Props) {
 
     if (result.publicUrl) {
       setAvatar(result.publicUrl);
+      toast({ title: "Avatar uploaded — click Save to apply." });
     } else {
-      toast({ title: "Upload failed", description: result.error, variant: "destructive" });
+      // The `avatars` Storage bucket is the most common reason this
+      // fails on a fresh project — section 22 of APPLY_PENDING.sql
+      // creates it. Surface the cause directly instead of a generic
+      // toast so the user knows to apply the SQL.
+      const detail = result.error?.toLowerCase().includes("bucket")
+        ? `${result.error} — apply section 22 of supabase/APPLY_PENDING.sql to create the "avatars" bucket.`
+        : result.error;
+      toast({ title: "Upload failed", description: detail, variant: "destructive" });
     }
     e.target.value = "";
   };

@@ -23,7 +23,8 @@ import {
   Music2,
   CheckCircle2,
   AtSign,
-  MoreHorizontal
+  MoreHorizontal,
+  Pencil
 } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -40,6 +41,8 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { useT } from "@/lib/i18n";
 import { MediaViewer, type MediaItem } from "./media-viewer";
 import { ChatMembersCard } from "./chat-members-card";
+import { useImageLightbox } from "./image-lightbox";
+import { EditGroupDialog } from "./edit-group-dialog";
 import type { Chat } from "@/types";
 import { createClient } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/use-auth-store";
@@ -68,6 +71,12 @@ export function ChatDetailsPanel({ chat }: { chat: Chat }) {
   const muteChat = useChatStore((s) => s.muteChat);
   const setDisappearingTimer = useChatStore((s) => s.setDisappearingTimer);
   const chatMessages = useChatStore((s) => s.messages[chat.id]);
+  const lightbox = useImageLightbox();
+  // Edit-group dialog opens when the user taps the pencil on the group
+  // avatar. Edit mode is only meaningful for groups/channels — DMs reuse
+  // the avatar tap to open the profile-photo lightbox instead.
+  const [editOpen, setEditOpen] = React.useState(false);
+  const isGroup = chat.type !== "dm";
 
   // Derive the Media / Files / Links lists from real messages in this chat.
   // Newest first so the panel always opens on the most recent content.
@@ -218,7 +227,11 @@ export function ChatDetailsPanel({ chat }: { chat: Chat }) {
   const hasStory = useStoriesStore((s) =>
     storyUserId ? !!s.byUser[storyUserId]?.slides.length : false
   );
-  const openStoryPhoto = useStoriesStore((s) => s.openPhoto);
+  // openStoryPrompt fires the "Profile or Story?" picker (story-layer's
+  // Prompt) — used for the DM avatar click in this panel. The old
+  // `openPhoto` is no longer needed here because the prompt itself routes
+  // to the photo viewer when the user picks "View profile photo".
+  const openStoryPrompt = useStoriesStore((s) => s.openPrompt);
 
 
   const body = (
@@ -232,37 +245,63 @@ export function ChatDetailsPanel({ chat }: { chat: Chat }) {
 
       <div className="flex-1 min-h-0 overflow-y-auto scroll-fade-y">
         {/* Banner — pulled from the partner's profile when available; falls
-            back to the chat banner. Avatar sits half-overlapping the banner
-            edge so the header reads as a single hero unit. */}
-        <div
-          className="relative h-28 w-full overflow-hidden"
-          style={{
-            background:
-              displayBanner
-                ? `url("${displayBanner}") center/cover no-repeat`
-                : "linear-gradient(135deg,#8B5CF6,#EC4899)"
-          }}
-        >
-          <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/0 to-black/45" />
-        </div>
+            back to the chat banner. We branch on banner kind because
+            `displayBanner` can be three different things:
+              • a CSS gradient string ("linear-gradient(...)") — apply as `background`
+              • a video URL (.mp4/.webm/.mov or data:video/...) — render via <video>
+              • an image URL (http/https/data:image) — apply as `background-image`
+            Wrapping a gradient inside `url("...")` (the old code) produced
+            invalid CSS and silently rendered nothing — that's why the group
+            banner wasn't showing up. */}
+        <BannerHero banner={displayBanner} />
 
         <div className="px-4 -mt-10">
           <div className="flex flex-col items-center text-center">
             {hasStory && storyUserId ? (
               <StoryAvatar userId={storyUserId} src={displayAvatar} name={displayName} size={84} />
             ) : (
-              <button
-                onClick={() => {
-                  if (storyUserId) openStoryPhoto(storyUserId);
-                }}
-                aria-label={t("View profile photo")}
-                className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
-              >
-                <Avatar className="size-20 ring-4 ring-background shadow-floating">
-                  <AvatarImage src={displayAvatar} />
-                  <AvatarFallback>{initials(displayName)}</AvatarFallback>
-                </Avatar>
-              </button>
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    // DM → "Profile or Story?" prompt. Always — even when
+                    // there's no story yet — so the user lands in the same
+                    // surface they get from the chat list / topbar. The
+                    // prompt itself routes to the photo viewer when there
+                    // is no story.
+                    // Group / channel → straight to the shared lightbox;
+                    // groups don't carry stories.
+                    if (storyUserId) {
+                      openStoryPrompt(storyUserId);
+                    } else if (displayAvatar) {
+                      lightbox.open([{ src: displayAvatar, alt: displayName }], 0);
+                    }
+                  }}
+                  aria-label={t("View profile photo")}
+                  className="rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/60"
+                >
+                  <Avatar className="size-20 ring-4 ring-background shadow-floating">
+                    <AvatarImage src={displayAvatar} />
+                    <AvatarFallback>{initials(displayName)}</AvatarFallback>
+                  </Avatar>
+                </button>
+                {/* Pencil overlay — only on groups. Tapping it opens the
+                    edit-group dialog so the user can rename, change
+                    description, or swap the banner. */}
+                {isGroup && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setEditOpen(true);
+                    }}
+                    aria-label={t("Edit group")}
+                    title={t("Edit group")}
+                    className="absolute bottom-0 right-0 size-7 rounded-full bg-primary text-primary-foreground grid place-items-center shadow-glow ring-2 ring-background hover:scale-105 active:scale-95 transition"
+                  >
+                    <Pencil className="size-3.5" />
+                  </button>
+                )}
+              </div>
             )}
             {/* Name truly centered (3-col grid) with the pronouns chip sitting
                 just to its right — so the chip never pulls the name off
@@ -297,6 +336,12 @@ export function ChatDetailsPanel({ chat }: { chat: Chat }) {
                 <Lock className="size-3" /> {t("End-to-end encrypted")}
               </Badge>
             )}
+
+            {/* Group description — DMs use partner.bio (below). Groups have
+                no partner row, so they need their own block reading
+                chat.description. Same BioBlock so long descriptions get
+                the "Read more / Show less" treatment. */}
+            {isGroup && chat.description && <BioBlock text={chat.description} />}
 
             {/* Bio — bumped to text-sm + collapsed by default with a
                 "Read more / Show less" toggle so long bios don't dominate
@@ -591,6 +636,13 @@ export function ChatDetailsPanel({ chat }: { chat: Chat }) {
           startIndex={viewerIndex ?? 0}
           onClose={() => setViewerIndex(null)}
         />
+        {isGroup && (
+          <EditGroupDialog
+            chat={chat}
+            open={editOpen}
+            onOpenChange={setEditOpen}
+          />
+        )}
       </>
     );
   }
@@ -616,7 +668,65 @@ export function ChatDetailsPanel({ chat }: { chat: Chat }) {
         startIndex={viewerIndex ?? 0}
         onClose={() => setViewerIndex(null)}
       />
+      {isGroup && (
+        <EditGroupDialog
+          chat={chat}
+          open={editOpen}
+          onOpenChange={setEditOpen}
+        />
+      )}
     </>
+  );
+}
+
+/**
+ *  Render the panel banner. `banner` may be:
+ *    • undefined/empty → fall back to a brand gradient.
+ *    • a CSS gradient ("linear-gradient(...)") → apply as `background`.
+ *    • a video URL (.mp4/.webm/.mov or data:video) → render via <video>.
+ *    • an image URL (http/https/data:image/*, including GIFs) → apply as
+ *      `background-image`. Browsers animate GIFs in CSS backgrounds the
+ *      same as in <img>, so no special-case needed.
+ *
+ *  Before this helper existed the inline render unconditionally wrapped
+ *  `banner` in `url("...")`, which produced invalid CSS for gradient
+ *  strings — the most common case for groups — and rendered nothing.
+ */
+function BannerHero({ banner }: { banner?: string | null }) {
+  const isGradient = !!banner && /^(linear|radial|conic)-gradient/.test(banner);
+  const isVideo =
+    !!banner &&
+    (/\.(mp4|webm|mov|m4v)(\?|$)/i.test(banner) || banner.startsWith("data:video"));
+  const fallback = "linear-gradient(135deg,#8B5CF6,#EC4899)";
+  return (
+    <div
+      className="relative h-40 w-full overflow-hidden"
+      style={
+        isVideo
+          ? { background: "#000" }
+          : isGradient
+            ? { background: banner ?? fallback }
+            : banner
+              ? {
+                  backgroundImage: `url("${banner}")`,
+                  backgroundSize: "cover",
+                  backgroundPosition: "center"
+                }
+              : { background: fallback }
+      }
+    >
+      {isVideo && banner && (
+        <video
+          src={banner}
+          autoPlay
+          loop
+          muted
+          playsInline
+          className="absolute inset-0 size-full object-cover"
+        />
+      )}
+      <div className="absolute inset-0 bg-gradient-to-b from-black/0 via-black/0 to-black/45" />
+    </div>
   );
 }
 

@@ -25,7 +25,12 @@ import {
   MessageSquarePlus,
   Bell,
   History,
-  Volume2
+  Volume2,
+  VolumeX,
+  Mic,
+  Square,
+  Loader2,
+  Wrench
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -41,12 +46,21 @@ import { useAuthStore } from "@/store/use-auth-store";
 import { NovaMascot } from "@/components/nova-mascot";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
+import { useAIChat } from "@/features/ai/use-ai-chat";
+import { useAIVoice } from "@/features/ai/use-ai-voice";
+import type { AIMessage } from "@/features/ai/types";
 
-interface Msg {
-  id: string;
-  role: "user" | "ai";
-  text: string;
-}
+/** Where the "Voice responses" toggle is persisted. Lives in localStorage
+ *  so it survives reload without bloating the settings store. Default is
+ *  ON — the user enabled voice mode by configuring ElevenLabs, so we
+ *  treat that as opt-in already; they can flip it off via the header
+ *  speaker button or the gear menu.
+ *
+ *  The "-v2" suffix is a deliberate one-time bump: the previous version
+ *  defaulted to OFF, so existing users had "0" persisted. Renaming the
+ *  key forces the new ON default to take effect for them.
+ */
+const VOICE_TTS_KEY = "obsidian-ai-voice-tts-v2";
 
 const MASCOT_LINES = [
   "Not bad, not good.",
@@ -60,18 +74,18 @@ const MASCOT_LINES = [
 ];
 
 const PRESETS: { icon: React.ReactNode; label: string }[] = [
-  { icon: <Mail />, label: "With an email" },
-  { icon: <Plane />, label: "Plan a trip" },
-  { icon: <Lightbulb />, label: "Tell me a fun fact" },
-  { icon: <GraduationCap />, label: "Help me my education" },
-  { icon: <Compass />, label: "Exploration" },
-  { icon: <Sparkles />, label: "Evolution" },
-  { icon: <FileText />, label: "Summarize a doc" },
-  { icon: <Music />, label: "Make a playlist" },
-  { icon: <CalendarClock />, label: "Schedule something" },
-  { icon: <ImageIcon />, label: "Generate an image" },
-  { icon: <Languages />, label: "Translate text" },
-  { icon: <Code2 />, label: "Help me with code" }
+  { icon: <Mail />, label: "Read my notifications" },
+  { icon: <Plane />, label: "What happened while I was offline?" },
+  { icon: <Lightbulb />, label: "Show trending communities" },
+  { icon: <GraduationCap />, label: "Summarize this chat" },
+  { icon: <Compass />, label: "Open whiteboard" },
+  { icon: <Sparkles />, label: "Find files shared today" },
+  { icon: <FileText />, label: "Search for invoice PDFs" },
+  { icon: <Music />, label: "Open my vault" },
+  { icon: <CalendarClock />, label: "Show my recent calls" },
+  { icon: <ImageIcon />, label: "Search for images" },
+  { icon: <Languages />, label: "Open my profile" },
+  { icon: <Code2 />, label: "What can I do in Ghost Rooms?" }
 ];
 
 export function AIAssistant() {
@@ -79,9 +93,66 @@ export function AIAssistant() {
   const open = useUIStore((s) => s.aiAssistantOpen);
   const setOpen = useUIStore((s) => s.setAiAssistantOpen);
   const user = useAuthStore((s) => s.user);
-  const [messages, setMessages] = React.useState<Msg[]>([]);
   const [text, setText] = React.useState("");
   const [tagline, setTagline] = React.useState(MASCOT_LINES[0]);
+
+  // Voice TTS preference — persisted in localStorage so user choice survives.
+  // Defaults to ON: the user explicitly configured ElevenLabs, so we
+  // assume they want to hear replies unless they opt out.
+  const [ttsEnabled, setTtsEnabled] = React.useState(true);
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem(VOICE_TTS_KEY);
+    if (stored !== null) setTtsEnabled(stored === "1");
+  }, []);
+  const toggleTts = React.useCallback(() => {
+    setTtsEnabled((v) => {
+      const next = !v;
+      if (typeof window !== "undefined") {
+        window.localStorage.setItem(VOICE_TTS_KEY, next ? "1" : "0");
+      }
+      return next;
+    });
+  }, []);
+
+  // Refs to break the chicken-and-egg between the two hooks: voice's
+  // STT callback wants to call chat.send, and chat's onAssistantReply
+  // wants to call voice.speak. Both are declared via hook returns below.
+  // We stash refs here, populate them after both hooks resolve, and the
+  // callbacks read through the refs at event-firing time.
+  const sendRef = React.useRef<(text: string) => void>(() => {});
+  const speakRef = React.useRef<(text: string) => void>(() => {});
+
+  // Single error string surfaced just above the composer when TTS fails
+  // (bad key, blocked autoplay, etc.). Clears after 6s or on next send.
+  const [ttsError, setTtsError] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    if (!ttsError) return;
+    const id = setTimeout(() => setTtsError(null), 6000);
+    return () => clearTimeout(id);
+  }, [ttsError]);
+
+  const voice = useAIVoice({
+    ttsEnabled,
+    onFinalTranscript: (transcript) => {
+      // Treat a final transcript as a sent message — the bubble appears
+      // directly without intermediate composer edits.
+      sendRef.current(transcript);
+    },
+    onTtsError: (msg) => setTtsError(msg)
+  });
+
+  const chat = useAIChat({
+    onAssistantReply: (final) => {
+      // Pipe the assistant's final spoken text into ElevenLabs. The voice
+      // hook is a no-op if ttsEnabled is false.
+      speakRef.current(final);
+    }
+  });
+
+  // Wire the refs after both hooks have resolved.
+  sendRef.current = (t) => void chat.send(t);
+  speakRef.current = (t) => void voice.speak(t);
 
   // Rotate tagline under the mascot
   React.useEffect(() => {
@@ -92,25 +163,29 @@ export function AIAssistant() {
     return () => clearInterval(id);
   }, [open]);
 
+  // Close the popup → stop any in-flight stream + cancel any audio so we
+  // don't end up with the assistant speaking after the popup is closed.
+  React.useEffect(() => {
+    if (!open) {
+      chat.stop();
+      voice.stopListening();
+      voice.stopSpeaking();
+    }
+    // We intentionally only react to `open`. Calling stop functions on
+    // every render would race with normal speech playback.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   const firstName = (user?.name ?? "Aria").split(" ")[0];
-  const empty = messages.length === 0;
+  const empty = chat.messages.length === 0;
 
   const send = (incoming?: string) => {
     const trimmed = (incoming ?? text).trim();
     if (!trimmed) return;
-    const u: Msg = { id: `u${Date.now()}`, role: "user", text: trimmed };
-    setMessages((m) => [...m, u]);
     setText("");
-    setTimeout(() => {
-      setMessages((m) => [
-        ...m,
-        {
-          id: `a${Date.now()}`,
-          role: "ai",
-          text: t("On it — I'll surface relevant threads, suggest replies, and keep you posted. (Demo response — wire this to your model API.)")
-        }
-      ]);
-    }, 700);
+    // Cancel any in-progress speech — the user gave us new input.
+    voice.stopSpeaking();
+    void chat.send(trimmed);
   };
 
   return (
@@ -144,8 +219,40 @@ export function AIAssistant() {
                 <NovaMascot size={36} />
               </motion.div>
               <div className="font-display font-semibold tracking-tight">Obsidian AI</div>
+              {chat.isStreaming && (
+                <span className="ml-1 inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-foreground/60">
+                  <Loader2 className="size-3 animate-spin" />
+                  {t("thinking")}
+                </span>
+              )}
+              {voice.speaking && !chat.isStreaming && (
+                <span className="ml-1 inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-violet-300">
+                  <Volume2 className="size-3 animate-pulse" />
+                  {t("speaking")}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-1">
+              {/* Header speaker toggle — visible 1-tap on/off for voice
+                  replies. The same state is mirrored in the gear menu's
+                  "Voice responses" item. */}
+              <button
+                onClick={toggleTts}
+                aria-label={ttsEnabled ? t("Mute voice replies") : t("Enable voice replies")}
+                title={ttsEnabled ? t("Voice replies on") : t("Voice replies off")}
+                className={cn(
+                  "size-9 rounded-full grid place-items-center transition",
+                  ttsEnabled
+                    ? "glass-subtle text-foreground hover:bg-foreground/5"
+                    : "glass-subtle text-foreground/40 hover:bg-foreground/5"
+                )}
+              >
+                {ttsEnabled ? (
+                  <Volume2 className="size-4" />
+                ) : (
+                  <VolumeX className="size-4" />
+                )}
+              </button>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <button
@@ -165,7 +272,7 @@ export function AIAssistant() {
                     Obsidian AI · {t("session")}
                   </DropdownMenuLabel>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem onSelect={() => setMessages([])}>
+                  <DropdownMenuItem onSelect={() => chat.reset()}>
                     <MessageSquarePlus />
                     {t("New chat")}
                     <DropdownMenuShortcut>⌘N</DropdownMenuShortcut>
@@ -176,7 +283,9 @@ export function AIAssistant() {
                         navigator
                           .share({
                             title: "Obsidian AI conversation",
-                            text: messages.map((m) => `${m.role}: ${m.text}`).join("\n\n")
+                            text: chat.messages
+                              .map((m) => `${m.role}: ${m.content}`)
+                              .join("\n\n")
                           })
                           .catch(() => {});
                       }
@@ -190,9 +299,10 @@ export function AIAssistant() {
                     {t("Chat history")}
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem>
-                    <Volume2 />
+                  <DropdownMenuItem onSelect={(e) => { e.preventDefault(); toggleTts(); }}>
+                    {ttsEnabled ? <Volume2 /> : <VolumeX />}
                     {t("Voice responses")}
+                    <DropdownMenuShortcut>{ttsEnabled ? t("On") : t("Off")}</DropdownMenuShortcut>
                   </DropdownMenuItem>
                   <DropdownMenuItem>
                     <Bell />
@@ -200,7 +310,7 @@ export function AIAssistant() {
                   </DropdownMenuItem>
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
-                    onSelect={() => setMessages([])}
+                    onSelect={() => chat.reset()}
                     className="text-rose-400 focus:text-rose-400"
                   >
                     <Trash2 />
@@ -224,7 +334,7 @@ export function AIAssistant() {
             {empty ? (
               <Greeting firstName={firstName} tagline={tagline} />
             ) : (
-              <Conversation messages={messages} />
+              <Conversation messages={chat.messages} />
             )}
 
             <PresetRail
@@ -234,11 +344,29 @@ export function AIAssistant() {
             />
           </div>
 
+          {/* TTS error banner — shown right above the composer when
+              ElevenLabs fails (bad key, no quota, blocked autoplay, etc.). */}
+          {ttsError && (
+            <div className="mx-3 mb-1 px-3 py-2 rounded-2xl text-[12px] leading-snug bg-rose-500/15 border border-rose-300/30 text-rose-100">
+              <span className="font-semibold">{t("Voice")}: </span>
+              {ttsError}
+            </div>
+          )}
+
           {/* Composer */}
           <Composer
             value={text}
             onChange={setText}
             onSend={() => send()}
+            voiceSupported={voice.supported}
+            listening={voice.listening}
+            interimText={voice.interimText}
+            onMicToggle={() => {
+              if (voice.listening) voice.stopListening();
+              else voice.startListening();
+            }}
+            isStreaming={chat.isStreaming}
+            onAbort={chat.stop}
           />
         </motion.div>
       )}
@@ -289,7 +417,7 @@ function Greeting({ firstName, tagline }: { firstName: string; tagline: string }
 
 /* ---------- Conversation (after first message) ---------- */
 
-function Conversation({ messages }: { messages: Msg[] }) {
+function Conversation({ messages }: { messages: AIMessage[] }) {
   const scrollerRef = React.useRef<HTMLDivElement>(null);
 
   React.useLayoutEffect(() => {
@@ -300,7 +428,7 @@ function Conversation({ messages }: { messages: Msg[] }) {
     requestAnimationFrame(() => {
       el.scrollTop = el.scrollHeight;
     });
-  }, [messages.length]);
+  }, [messages.length, messages[messages.length - 1]?.content?.length]);
 
   return (
     <div className="relative z-10 flex-1 min-h-0 overflow-hidden flex flex-col">
@@ -308,25 +436,51 @@ function Conversation({ messages }: { messages: Msg[] }) {
         ref={scrollerRef}
         className="flex-1 overflow-y-auto no-scrollbar px-4 pt-3 pb-2 space-y-2"
       >
-        {messages.map((m) => (
-          <motion.div
-            key={m.id}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}
-          >
-            <div
-              className={cn(
-                "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)]",
-                m.role === "user"
-                  ? "bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white"
-                  : "glass-strong text-foreground border border-white/10"
-              )}
+        {messages
+          // Tool result messages are model-facing only — never render them
+          // as bubbles. We surface the tool *call* instead via a chip on the
+          // assistant bubble that emitted it.
+          .filter((m) => m.role !== "tool")
+          .map((m) => (
+            <motion.div
+              key={m.id}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={cn("flex", m.role === "user" ? "justify-end" : "justify-start")}
             >
-              {m.text}
-            </div>
-          </motion.div>
-        ))}
+              <div
+                className={cn(
+                  "max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)]",
+                  m.role === "user"
+                    ? "bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white"
+                    : "glass-strong text-foreground border border-white/10"
+                )}
+              >
+                {/* Tool call chips — small badges above the text so the
+                    user sees WHAT the assistant decided to do. */}
+                {m.role === "assistant" && m.toolCalls && m.toolCalls.length > 0 && (
+                  <div className="flex flex-wrap gap-1 mb-1.5">
+                    {m.toolCalls.map((tc) => (
+                      <span
+                        key={tc.id}
+                        className="inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-white/10 border border-white/15 text-foreground/80"
+                      >
+                        <Wrench className="size-2.5" />
+                        {tc.name}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {m.content || (
+                  m.streaming ? (
+                    <span className="inline-flex gap-1 items-center text-foreground/60">
+                      <Loader2 className="size-3 animate-spin" />
+                    </span>
+                  ) : null
+                )}
+              </div>
+            </motion.div>
+          ))}
         {/* spacer so the last bubble has air above the chip rail */}
         <div className="h-1" />
       </div>
@@ -404,11 +558,23 @@ function MarqueeRow({
 function Composer({
   value,
   onChange,
-  onSend
+  onSend,
+  voiceSupported,
+  listening,
+  interimText,
+  onMicToggle,
+  isStreaming,
+  onAbort
 }: {
   value: string;
   onChange: (v: string) => void;
   onSend: () => void;
+  voiceSupported: boolean;
+  listening: boolean;
+  interimText: string;
+  onMicToggle: () => void;
+  isStreaming: boolean;
+  onAbort: () => void;
 }) {
   const t = useT();
   const ref = React.useRef<HTMLTextAreaElement>(null);
@@ -423,10 +589,36 @@ function Composer({
 
   return (
     <div className="px-3 pb-3 pt-1">
+      {/* Interim transcript banner — shows the user what the recognizer
+          is hearing live while listening. Disappears as soon as the
+          phrase commits. */}
+      {listening && interimText && (
+        <div className="mb-2 px-3 py-1.5 rounded-full bg-violet-500/15 border border-violet-300/30 text-[12.5px] text-foreground/85 text-center">
+          {interimText}
+        </div>
+      )}
       <div className="flex items-center gap-1 pl-1.5 pr-1 py-1 rounded-full glass glass-specular border border-white/20 shadow-[0_8px_24px_-12px_rgba(0,0,0,0.4)]">
-        <button className="size-9 rounded-full grid place-items-center hover:bg-foreground/5 text-foreground/70">
-          <Plus className="size-[18px]" />
-        </button>
+        {voiceSupported ? (
+          <button
+            onClick={onMicToggle}
+            aria-label={listening ? t("Stop listening") : t("Voice input")}
+            className={cn(
+              "size-9 rounded-full grid place-items-center transition",
+              listening
+                ? "bg-rose-500 text-white shadow-[0_0_0_4px_rgba(244,63,94,0.25)] animate-pulse"
+                : "hover:bg-foreground/5 text-foreground/70"
+            )}
+          >
+            <Mic className="size-[18px]" />
+          </button>
+        ) : (
+          <button
+            aria-label={t("Attach")}
+            className="size-9 rounded-full grid place-items-center hover:bg-foreground/5 text-foreground/70"
+          >
+            <Plus className="size-[18px]" />
+          </button>
+        )}
         <div className="relative flex-1 min-w-0">
           <textarea
             ref={ref}
@@ -444,27 +636,38 @@ function Composer({
           />
           {!hasText && (
             <div className="pointer-events-none absolute inset-y-0 left-0 right-2 flex items-center text-[14px] text-muted-foreground/60">
-              {t("Got Questions...")}
+              {listening ? t("Listening…") : t("Got Questions...")}
             </div>
           )}
         </div>
-        <motion.button
-          whileTap={{ scale: 0.92 }}
-          onClick={onSend}
-          className={cn(
-            "size-9 rounded-full grid place-items-center text-white shadow-[0_6px_22px_-4px_rgba(34,211,238,0.7)] transition",
-            hasText
-              ? "bg-gradient-to-br from-cyan-400 via-sky-500 to-blue-600"
-              : "bg-gradient-to-br from-sky-400/60 to-blue-500/60"
-          )}
-          aria-label={t("Send")}
-        >
-          {hasText ? (
-            <ArrowUp className="size-[18px]" strokeWidth={2.5} />
-          ) : (
-            <Send className="size-[16px]" />
-          )}
-        </motion.button>
+        {isStreaming ? (
+          <motion.button
+            whileTap={{ scale: 0.92 }}
+            onClick={onAbort}
+            aria-label={t("Stop")}
+            className="size-9 rounded-full grid place-items-center text-white bg-gradient-to-br from-rose-400 to-rose-600 shadow-[0_6px_22px_-4px_rgba(244,63,94,0.7)]"
+          >
+            <Square className="size-[16px]" strokeWidth={2.5} />
+          </motion.button>
+        ) : (
+          <motion.button
+            whileTap={{ scale: 0.92 }}
+            onClick={onSend}
+            className={cn(
+              "size-9 rounded-full grid place-items-center text-white shadow-[0_6px_22px_-4px_rgba(34,211,238,0.7)] transition",
+              hasText
+                ? "bg-gradient-to-br from-cyan-400 via-sky-500 to-blue-600"
+                : "bg-gradient-to-br from-sky-400/60 to-blue-500/60"
+            )}
+            aria-label={t("Send")}
+          >
+            {hasText ? (
+              <ArrowUp className="size-[18px]" strokeWidth={2.5} />
+            ) : (
+              <Send className="size-[16px]" />
+            )}
+          </motion.button>
+        )}
       </div>
     </div>
   );
