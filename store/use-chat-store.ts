@@ -457,7 +457,11 @@ export const useChatStore = create<ChatState>((set, get) => ({
                       title: isGroup
                         ? `${senderName} in ${chat?.name ?? "Group"}`
                         : senderName,
-                      body: text.length > 140 ? text.slice(0, 140) + "…" : text || "(attachment)",
+                      // Store the full message text — the notification card
+                      // collapses it to two lines and reveals the rest on
+                      // "Read more". Truncating here would cap that expansion
+                      // mid-message (only ~3 lines could ever show).
+                      body: text || "(attachment)",
                       avatar: get().profiles?.[incoming.authorId]?.avatar,
                       // Click the chip → open the exact chat thread.
                       targetHref: `/chats/${chatId}`

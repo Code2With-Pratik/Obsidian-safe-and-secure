@@ -224,11 +224,15 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
             // Profile-card bubbles need to fill the column so the landscape
             // hero layout has room to grow. All other bubbles keep `w-fit`
             // so they hug their content (the bubble shape is what you'd
-            // expect for a text / image / voice message).
+            // expect for a text / image / voice message). `max-w-full`
+            // caps the wrapper at the parent column's width — without it
+            // a single long unbreakable token (URL, base64 blob, env var
+            // value) made the wrapper grow past the column's `max-w-[78%]`
+            // and overflow into / under the details panel.
             (message.kind === "contact" && (message.contacts?.length ?? 0) === 1) ||
             (message.kind === "community" && message.community)
               ? "w-full"
-              : "w-fit",
+              : "w-fit max-w-full",
             me && "ml-auto self-end"
           )}
         >
@@ -309,7 +313,11 @@ export function ChatBubble({ message, bubbleMe, bubbleThem, textOnMe, textOnThem
         animate={{ opacity: showActions && !selectionActive ? 1 : 0, scale: showActions && !selectionActive ? 1 : 0.9 }}
         transition={{ duration: 0.15 }}
         className={cn(
-          "self-start mt-2 flex gap-0.5 glass rounded-full px-1 py-0.5 border border-border/60",
+          // `self-center` keeps the action pill vertically aligned to the
+          // middle of the bubble row, so it floats centered on tall messages
+          // (read-more / long voice notes / image+caption) instead of pinning
+          // to the top edge.
+          "self-center flex gap-0.5 glass rounded-full px-1 py-0.5 border border-border/60",
           showActions && !selectionActive ? "pointer-events-auto" : "pointer-events-none"
         )}
       >
@@ -660,13 +668,21 @@ function BubbleBody({
       <div
         style={me ? meStyle : themStyleProp}
         className={cn(
-          "px-3.5 py-2 rounded-xl text-sm leading-relaxed shadow-sm max-w-full break-words whitespace-pre-wrap",
+          // `[overflow-wrap:anywhere]` is more aggressive than `break-words`
+          // — it forces breaks inside long unbreakable tokens (URLs, env
+          // var values, base64 blobs) so they wrap inside the bubble
+          // instead of forcing the bubble itself to grow.
+          "px-3.5 py-2 rounded-xl text-sm leading-relaxed shadow-sm max-w-full break-words [overflow-wrap:anywhere] whitespace-pre-wrap",
           me
             ? "rounded-br-none " + (bubbleMe ? "" : "bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white")
-            : "glass border border-border/60 rounded-bl-none"
+            // Receiver bubble — explicit `text-foreground` so light-mode glass
+            // surfaces don't fall back to an inherited pale color.
+            : "glass border border-border/60 rounded-bl-none text-foreground"
         )}
       >
-        <LinkifiedText text={message.content} me={me} />
+        <CollapsibleText me={me}>
+          <LinkifiedText text={message.content} me={me} />
+        </CollapsibleText>
       </div>
       {firstUrl && <LinkPreview url={firstUrl} />}
     </div>
@@ -678,6 +694,79 @@ function extractUrls(text: string): string[] {
   if (!text) return [];
   const re = /(https?:\/\/[^\s<>"')\]]+)/gi;
   return text.match(re) ?? [];
+}
+
+/**
+ * Wraps long text messages in a 10-line clamp with a "Read more / Read less"
+ * toggle. The clamp is implemented with `-webkit-line-clamp` so visual line
+ * wrapping is counted (not just `\n`); we then compare `scrollHeight` against
+ * `clientHeight` to detect when content actually got cut, so the toggle only
+ * appears on messages that need it.
+ *
+ * Smooth height transition: framer-motion's `layout` prop measures the
+ * element before/after the clamp style flips and animates the height delta.
+ */
+function CollapsibleText({
+  children,
+  maxLines = 10,
+  me
+}: {
+  children: React.ReactNode;
+  maxLines?: number;
+  me: boolean;
+}) {
+  const t = useT();
+  const [expanded, setExpanded] = React.useState(false);
+  const [overflows, setOverflows] = React.useState(false);
+  const ref = React.useRef<HTMLDivElement>(null);
+
+  // Re-measure whenever the content changes (initial render, edits, layout
+  // shifts from images loading above, etc.). Using useLayoutEffect so the
+  // measurement happens before paint and we never flash "Read more" briefly.
+  React.useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || expanded) return;
+    setOverflows(el.scrollHeight > el.clientHeight + 1);
+  }, [children, expanded]);
+
+  return (
+    <>
+      <div
+        ref={ref}
+        // No framer-motion `layout` wrapper here — when expanded toggled the
+        // wrapper's height, layout's animated measurement could leave the
+        // element capped at its pre-expansion size and the bottom of long
+        // messages stayed hidden. A plain div with the clamp style toggled
+        // on/off shows the FULL content immediately on expand.
+        style={
+          !expanded
+            ? {
+                display: "-webkit-box",
+                WebkitLineClamp: maxLines,
+                WebkitBoxOrient: "vertical",
+                overflow: "hidden"
+              }
+            : undefined
+        }
+      >
+        {children}
+      </div>
+      {overflows && (
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className={cn(
+            "mt-1 text-[11px] font-semibold underline-offset-2 hover:underline transition cursor-pointer select-none",
+            // Blue accent — bright on dark "me" bubbles, deeper on light
+            // glass "them" bubbles for adequate contrast in both modes.
+            me ? "text-blue-200 hover:text-white" : "text-blue-500 hover:text-blue-600"
+          )}
+        >
+          {expanded ? t("Read less") : t("Read more")}
+        </button>
+      )}
+    </>
+  );
 }
 
 /** Render text with URLs converted to <a> tags inline AND `@username`

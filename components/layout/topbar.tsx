@@ -20,8 +20,8 @@ export function Topbar() {
   const setCommand = useUIStore((s) => s.setCommandOpen);
   const toggleAi = useUIStore((s) => s.toggleAiAssistant);
   // Live unread count powers the bell badge — same value the notification
-  // panel renders. Hidden when zero; capped at "9+" so the badge stays
-  // narrow inside its existing Tailwind layout.
+  // panel renders. Hidden when zero. Displayed with a trailing "+" to match
+  // the sidebar Chats badge + chat list unread convention.
   const unreadCount = useNotificationsStore((s) =>
     s.items.reduce((n, it) => n + (it.read ? 0 : 1), 0)
   );
@@ -77,7 +77,7 @@ export function Topbar() {
                 variant="danger"
                 className="absolute -top-0.5 -right-0.5 !px-1.5 !py-0 !text-[9px]"
               >
-                {unreadCount > 9 ? "9+" : unreadCount}
+                {unreadCount}+
               </Badge>
             )}
           </Button>
