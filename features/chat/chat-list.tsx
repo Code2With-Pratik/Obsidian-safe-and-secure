@@ -71,13 +71,13 @@ const COMMUNITY_FILTERS: { id: CommunityFilter; label: string }[] = [
 function typeIcon(t: Chat["type"]) {
   switch (t) {
     case "secret":
-      return <Lock className="size-3" />;
+      return <Lock className="size-3.5" />;
     case "ghost":
-      return <Ghost className="size-3" />;
+      return <Ghost className="size-3.5" />;
     case "channel":
-      return <Hash className="size-3" />;
+      return <Hash className="size-3.5" />;
     case "group":
-      return <Users className="size-3" />;
+      return <Users className="size-3.5" />;
     default:
       return null;
   }
@@ -715,13 +715,23 @@ function ChatRow({
       href={`/chats/${chat.id}`}
       onClick={() => onSelect?.(chat.id)}
       className={cn(
-        "relative flex items-center gap-3.5 px-3 py-3 rounded-2xl transition group active:scale-[0.99]",
-        active ? "bg-foreground/[0.07]" : "hover:bg-foreground/[0.04]"
+        // Compact row — `py-1.5` keeps the row tight so the active chat
+        // never looks visibly taller than its inactive neighbours. `mt-1.5`
+        // adds breathing room between consecutive rows so the list doesn't
+        // read as one solid block.
+        "relative flex items-center gap-3 px-3 py-1.5 mt-1.5 transition group active:scale-[0.99]",
+        // Square left corners + rounded right corners on BOTH hover and
+        // active so the row shape is consistent and the active indicator
+        // bar always sits flush against a straight edge.
+        "rounded-l-none rounded-r-2xl",
+        active
+          ? "bg-foreground/[0.07]"
+          : "hover:bg-foreground/[0.04]"
       )}
     >
       {active && (
         <span
-          className="absolute left-0 top-3 bottom-3 w-1 rounded-r-full bg-gradient-to-b from-violet-400 to-cyan-400"
+          className="absolute left-0 top-0 bottom-0 w-1 bg-gradient-to-b from-violet-400 to-cyan-400"
         />
       )}
 
@@ -733,12 +743,12 @@ function ChatRow({
           aria-label={chat.type === "dm" ? "View profile or story" : "View group photo"}
         >
           {hasStory && storyUserId ? (
-            <StoryAvatar userId={storyUserId} src={chat.avatar} name={chat.name} size={52} />
+            <StoryAvatar userId={storyUserId} src={chat.avatar} name={chat.name} size={44} />
           ) : (
             <AnimatedAvatar
               src={chat.avatar}
               name={chat.name}
-              size={52}
+              size={44}
               status={isOnline ? "online" : "offline"}
               pulse={false}
               breathe={false}
@@ -754,37 +764,45 @@ function ChatRow({
         </div>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-[15px] font-semibold truncate">{chat.name}</span>
+          <div className="flex items-center gap-1.5">
+            <span className="text-[15px] font-semibold truncate leading-tight">
+              {chat.name}
+            </span>
             {typeIcon(chat.type) && (
-              <span className="text-muted-foreground">{typeIcon(chat.type)}</span>
+              <span className="text-muted-foreground shrink-0">
+                {typeIcon(chat.type)}
+              </span>
             )}
             {chat.favorite && (
-              <Star className="size-3 text-amber-400 fill-amber-400/70" />
+              <Star className="size-3.5 text-amber-400 fill-amber-400/70 shrink-0" />
             )}
             <span
-              className="ml-auto text-[11px] text-muted-foreground shrink-0"
+              className="ml-auto text-[11px] text-muted-foreground shrink-0 tabular-nums"
               suppressHydrationWarning
             >
               {chat.lastMessageAt && formatRelative(chat.lastMessageAt)}
             </span>
           </div>
 
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex items-center gap-2 mt-0.5">
             <HintOrPreview chat={chat} isTyping={isTyping} />
-            <div className="ml-auto flex items-center gap-1.5">
-              {chat.muted && <BellOff className="size-3 text-muted-foreground" />}
-              {chat.pinned && <Pin className="size-3 text-muted-foreground" />}
+            <div className="ml-auto flex items-center gap-2 shrink-0">
+              {chat.muted && (
+                <BellOff className="size-4 text-muted-foreground" />
+              )}
+              {chat.pinned && (
+                <Pin className="size-4 text-muted-foreground" />
+              )}
               {!!chat.unread && (
                 // Solid red pill, white text, small + tight. WhatsApp-style.
                 // `min-w-[18px] h-[18px]` keeps a perfect circle for single
-                // digits and grows naturally for 2+ digit counts. `99+`
-                // caps the visible value so the pill never breaks the row.
+                // digits and grows naturally for 2+ digit counts. The "+"
+                // suffix matches the sidebar Chats badge convention.
                 <span
                   className="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1.5 rounded-full bg-red-600 text-white text-[10px] font-semibold leading-none tabular-nums shadow-sm"
                   aria-label={`${chat.unread} unread`}
                 >
-                  {chat.unread > 99 ? "99+" : chat.unread}
+                  {chat.unread}+
                 </span>
               )}
             </div>

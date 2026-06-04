@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   X,
@@ -19,9 +20,20 @@ import {
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useMediaQuery } from "@/hooks/use-media-query";
-import { users } from "@/lib/mock-data";
+import { createClient } from "@/lib/supabase/client";
+import { useAuthStore } from "@/store/use-auth-store";
+import { useChatStore } from "@/store/use-chat-store";
 import { useT } from "@/lib/i18n";
 import { initials, cn } from "@/lib/utils";
+
+/** Minimal profile shape used by the contact picker — populated from
+ *  Supabase `profiles` (excluding the signed-in user). */
+interface PickerProfile {
+  id: string;
+  name: string;
+  username: string;
+  avatar?: string;
+}
 
 /** Shared modal scaffold — backdrop, glass card, close button. */
 function DialogShell({
@@ -327,11 +339,18 @@ export function ContactPickerDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  onPick: (contacts: { name: string; username: string; avatar?: string }[]) => void;
+  onPick: (
+    contacts: { id?: string; name: string; username: string; avatar?: string }[]
+  ) => void;
 }) {
   const t = useT();
+  const router = useRouter();
+  const me = useAuthStore((s) => s.user);
+  const startDM = useChatStore((s) => s.startDM);
   const [q, setQ] = React.useState("");
   const [selected, setSelected] = React.useState<Set<string>>(new Set());
+  const [people, setPeople] = React.useState<PickerProfile[]>([]);
+  const [loading, setLoading] = React.useState(false);
 
   React.useEffect(() => {
     if (!open) {
@@ -340,17 +359,51 @@ export function ContactPickerDialog({
     }
   }, [open]);
 
+  // Fetch real profiles from Supabase the moment the dialog opens. Excludes
+  // the signed-in user so you can never share your own card to yourself.
+  React.useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      const supabase = createClient();
+      let builder = supabase
+        .from("profiles")
+        .select("id, name, username, avatar")
+        .order("name", { ascending: true })
+        .limit(100);
+      if (me?.id) builder = builder.neq("id", me.id);
+      const { data } = await builder;
+      if (cancelled) return;
+      setPeople(
+        ((data ?? []) as Array<{
+          id: string;
+          name?: string | null;
+          username?: string | null;
+          avatar?: string | null;
+        }>).map((p) => ({
+          id: p.id,
+          name: p.name || p.username || "User",
+          username: p.username || "user",
+          avatar: p.avatar ?? undefined
+        }))
+      );
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, me?.id]);
+
   const filtered = React.useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return users
-      .filter((u) => u.id !== "me")
-      .filter(
-        (u) =>
-          !needle ||
-          u.name.toLowerCase().includes(needle) ||
-          u.username.toLowerCase().includes(needle)
-      );
-  }, [q]);
+    return people.filter(
+      (u) =>
+        !needle ||
+        u.name.toLowerCase().includes(needle) ||
+        u.username.toLowerCase().includes(needle)
+    );
+  }, [people, q]);
 
   const toggle = (id: string) =>
     setSelected((s) => {
@@ -360,13 +413,36 @@ export function ContactPickerDialog({
       return next;
     });
 
-  const send = () => {
+  const send = async () => {
     if (selected.size === 0) return;
-    const picked = users
+    const picked = people
       .filter((u) => selected.has(u.id))
-      .map((u) => ({ name: u.name, username: u.username, avatar: u.avatar }));
+      .map((u) => ({
+        id: u.id,
+        name: u.name,
+        username: u.username,
+        avatar: u.avatar
+      }));
     onPick(picked);
     onClose();
+
+    // Single-pick → open (or create) a DM with that contact and route into
+    // it. Multi-pick stays on the current chat so the user can keep
+    // referencing what they just shared.
+    if (picked.length === 1) {
+      const target = picked[0];
+      try {
+        const res = await startDM({
+          id: target.id!,
+          name: target.name,
+          avatar: target.avatar
+        });
+        const chatId = (res as { data?: { id?: string } })?.data?.id;
+        if (chatId) router.push(`/chats/${chatId}`);
+      } catch (err) {
+        console.warn("[contact-picker] startDM failed:", err);
+      }
+    }
   };
 
   return (
@@ -391,9 +467,15 @@ export function ContactPickerDialog({
         />
       </div>
       <div className="space-y-1">
-        {filtered.length === 0 ? (
+        {loading ? (
           <p className="text-center text-sm text-muted-foreground py-8">
-            {t("No matches")} · &quot;{q}&quot;
+            {t("Loading contacts…")}
+          </p>
+        ) : filtered.length === 0 ? (
+          <p className="text-center text-sm text-muted-foreground py-8">
+            {q.trim()
+              ? `${t("No matches")} · "${q}"`
+              : t("No contacts yet")}
           </p>
         ) : (
           filtered.map((u) => {

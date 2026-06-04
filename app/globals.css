@@ -15,7 +15,11 @@
     --secondary: 240 10% 95%;
     --secondary-foreground: 240 24% 12%;
     --muted: 240 10% 94%;
-    --muted-foreground: 240 5% 45%;
+    /* Light-mode muted text was 240 5% 45% — that's a medium gray that drops
+       below WCAG AA against glass surfaces (semi-transparent white). Bumped
+       to 30% lightness so labels, usernames, and subtitles stay legible
+       without losing their "secondary" appearance. */
+    --muted-foreground: 240 8% 30%;
     --accent: 188 91% 53%;
     --accent-foreground: 240 24% 8%;
     --destructive: 0 84% 60%;

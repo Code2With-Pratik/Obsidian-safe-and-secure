@@ -191,19 +191,35 @@ export default function ProfilePage() {
                   <h3 className="font-semibold text-sm mb-3">{t("Links")}</h3>
                   <div className="space-y-2">
                     {user?.links?.website && (
-                      <LinkRow icon={<Globe />} label={t("Personal site")} sub={user.links.website} />
+                      <LinkRow
+                        icon={<Globe />}
+                        label={t("Personal site")}
+                        sub={user.links.website}
+                        url={user.links.website}
+                      />
                     )}
                     {user?.links?.github && (
-                      <LinkRow icon={<Github />} label="GitHub" sub={`@${user.links.github}`} />
+                      <LinkRow
+                        icon={<Github />}
+                        label="GitHub"
+                        sub={`@${user.links.github}`}
+                        url={user.links.github}
+                      />
                     )}
                     {user?.links?.twitter && (
-                      <LinkRow icon={<Twitter />} label="X" sub={`@${user.links.twitter}`} />
+                      <LinkRow
+                        icon={<Twitter />}
+                        label="X"
+                        sub={`@${user.links.twitter}`}
+                        url={user.links.twitter}
+                      />
                     )}
                     {user?.links?.spotify && (
                       <LinkRow
                         icon={<Music />}
                         label="Spotify"
                         sub={`${t("Now playing:")} ${user.links.spotify}`}
+                        url={user.links.spotify}
                         pulse
                       />
                     )}
@@ -280,21 +296,49 @@ function LinkRow({
   icon,
   label,
   sub,
+  url,
   pulse
 }: {
   icon: React.ReactNode;
   label: string;
   sub: string;
+  /** Target URL — rendered as an `<a>` so the whole row opens it in a new
+   *  tab. When missing the row falls back to a plain non-interactive div. */
+  url?: string;
   pulse?: boolean;
 }) {
-  return (
-    <div className="flex items-center gap-3 p-2 rounded-xl glass-subtle hover:bg-foreground/5 transition cursor-pointer">
-      <div className="size-9 rounded-lg bg-foreground/10 grid place-items-center [&_svg]:size-4">{icon}</div>
+  const content = (
+    <>
+      <div className="size-9 rounded-lg bg-foreground/10 grid place-items-center [&_svg]:size-4">
+        {icon}
+      </div>
       <div className="flex-1 min-w-0">
         <div className="text-sm font-medium">{label}</div>
         <div className="text-[11px] text-muted-foreground truncate">{sub}</div>
       </div>
       {pulse && <span className="size-2 rounded-full bg-emerald-400 animate-pulse" />}
+    </>
+  );
+
+  if (url) {
+    // Normalize bare handles like "github.com/foo" into full URLs so the
+    // browser doesn't treat them as same-origin paths.
+    const href = /^https?:\/\//i.test(url) ? url : `https://${url}`;
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="flex items-center gap-3 p-2 rounded-xl glass-subtle hover:bg-foreground/5 transition cursor-pointer"
+      >
+        {content}
+      </a>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-3 p-2 rounded-xl glass-subtle">
+      {content}
     </div>
   );
 }

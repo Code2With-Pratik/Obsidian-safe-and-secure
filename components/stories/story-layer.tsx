@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { createPortal } from "react-dom";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   X,
@@ -29,6 +30,7 @@ import { users, currentUser } from "@/lib/mock-data";
 import { initials, formatRelative } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { useAuthStore } from "@/store/use-auth-store";
+import { useChatStore } from "@/store/use-chat-store";
 import { createClient } from "@/lib/supabase/client";
 
 const supabase = createClient();
@@ -213,11 +215,36 @@ function PhotoViewer({ userId }: { userId: string }) {
 /* ───────── Full-screen story viewer (swipes across people, IG-style) ───────── */
 function Viewer({ userId }: { userId: string }) {
   const t = useT();
+  const router = useRouter();
   const byUser = useStoriesStore((s) => s.byUser);
   const close = useStoriesStore((s) => s.closeViewer);
   const markViewed = useStoriesStore((s) => s.markViewed);
+  const startDM = useChatStore((s) => s.startDM);
   const userLookup = useUserLookup();
   const meId = useAuthStore((s) => s.user?.id);
+
+  /** Header name tap → open (or create) a DM with this story's author and
+   *  navigate into it. Closes the viewer first so the chat is the only
+   *  surface visible after the transition. No-op if I'm tapping my own
+   *  story header. */
+  const openDmWithAuthor = React.useCallback(
+    async (authorId: string, authorName?: string, authorAvatar?: string) => {
+      if (!meId || authorId === meId) return;
+      close();
+      try {
+        const res = await startDM({
+          id: authorId,
+          name: authorName,
+          avatar: authorAvatar
+        });
+        const chatId = (res as { data?: { id?: string } })?.data?.id;
+        if (chatId) router.push(`/chats/${chatId}`);
+      } catch (err) {
+        console.warn("[story-viewer] startDM failed:", err);
+      }
+    },
+    [meId, close, startDM, router]
+  );
 
   // Ordered reels — your own first, then everyone else (matches the rail).
   const reels = React.useMemo(
@@ -394,30 +421,47 @@ function Viewer({ userId }: { userId: string }) {
           ))}
         </div>
 
-        {/* header — name + time on one line, animated song name below (IG-style) */}
+        {/* header — name + time on one line, animated song name below (IG-style).
+            Avatar + name are a single tap target that opens a DM with the
+            author (skipped on my own reel — you can't DM yourself). */}
         <div className="absolute top-5 left-3 right-3 flex items-center gap-2.5 z-10">
-          <Avatar className="size-9 ring-2 ring-white/40">
-            <AvatarImage src={u?.avatar} />
-            <AvatarFallback>{initials(u?.name ?? "")}</AvatarFallback>
-          </Avatar>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="text-sm font-semibold text-white truncate">{u?.name}</span>
-              <span className="text-white/50 shrink-0">·</span>
-              <span className="text-[11px] text-white/70 shrink-0" suppressHydrationWarning>
-                {formatRelative(new Date(slide.postedAt).toISOString())}
-              </span>
-            </div>
-            {slide.music && (
-              <div className="flex items-center gap-1 mt-0.5 text-white/85">
-                <Music className="size-3 shrink-0" />
-                <Marquee
-                  text={`${slide.music.title} · ${slide.music.artist}`}
-                  className="text-[11px] font-medium"
-                />
+          <button
+            type="button"
+            onClick={() =>
+              reel?.userId && openDmWithAuthor(reel.userId, u?.name, u?.avatar)
+            }
+            disabled={!reel?.userId || reel.userId === meId}
+            aria-label={t("Open conversation")}
+            className="flex items-center gap-2.5 min-w-0 flex-1 rounded-full hover:bg-white/5 disabled:cursor-default transition pr-1"
+          >
+            <Avatar className="size-9 ring-2 ring-white/40 shrink-0">
+              <AvatarImage src={u?.avatar} />
+              <AvatarFallback>{initials(u?.name ?? "")}</AvatarFallback>
+            </Avatar>
+            <div className="min-w-0 flex-1 text-left leading-tight">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-sm font-semibold text-white truncate">
+                  {u?.name}
+                </span>
+                <span className="text-white/50 shrink-0">·</span>
+                <span
+                  className="text-[11px] text-white/70 shrink-0"
+                  suppressHydrationWarning
+                >
+                  {formatRelative(new Date(slide.postedAt).toISOString())}
+                </span>
               </div>
-            )}
-          </div>
+              {slide.music && (
+                <div className="flex items-center gap-1 text-white/85">
+                  <Music className="size-3 shrink-0" />
+                  <Marquee
+                    text={`${slide.music.title} · ${slide.music.artist}`}
+                    className="text-[11px] font-medium"
+                  />
+                </div>
+              )}
+            </div>
+          </button>
           <button
             onClick={togglePaused}
             aria-label={paused ? t("Play") : t("Pause")}

@@ -182,7 +182,10 @@ export function ChatDetailsPanel({ chat }: { chat: Chat }) {
   }, [chat.muted]);
   const [viewerIndex, setViewerIndex] = React.useState<number | null>(null);
   const [shareOpen, setShareOpen] = React.useState(false);
-  const isDesktop = useMediaQuery("(min-width: 1280px)");
+  // 1024px (lg) so the docked panel kicks in on standard laptops too —
+  // the previous 1280 threshold made the panel overlay the thread at any
+  // common 1366/1440 window that wasn't fullscreen.
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
   const meId = useAuthStore((s) => s.user?.id);
 
   // Resolve the DM partner — for groups/channels we render the chat's own
@@ -409,7 +412,10 @@ export function ChatDetailsPanel({ chat }: { chat: Chat }) {
               <Button
                 variant="glass"
                 size="sm"
-                className="!h-12 flex-col gap-1"
+                // Theme-adaptive ring to match the Pin (cyan) + Favorite
+                // (amber) accent rings on the neighbouring buttons. Black in
+                // light mode, white in dark mode via `ring-foreground`.
+                className="!h-12 flex-col gap-1 ring-1 ring-foreground/40"
                 onClick={() => setShareOpen(true)}
               >
                 <Share2 className="size-4" />
@@ -619,14 +625,14 @@ export function ChatDetailsPanel({ chat }: { chat: Chat }) {
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
           onClick={() => setRight(null)}
-          className="fixed inset-0 z-[90] bg-black/40 backdrop-blur-sm xl:hidden"
+          className="fixed inset-0 z-[90] bg-black/40 backdrop-blur-sm lg:hidden"
         />
         <motion.aside
           initial={{ x: "100%" }}
           animate={{ x: 0 }}
           exit={{ x: "100%" }}
           transition={{ type: "spring", stiffness: 320, damping: 34 }}
-          className="fixed inset-0 z-[91] w-full border-l border-border/40 bg-card/95 backdrop-blur-2xl xl:hidden"
+          className="fixed inset-0 z-[91] w-full border-l border-border/40 bg-card/95 backdrop-blur-2xl lg:hidden"
         >
           <div className="w-full h-full flex flex-col">{body}</div>
         </motion.aside>
@@ -658,7 +664,7 @@ export function ChatDetailsPanel({ chat }: { chat: Chat }) {
         animate={{ width: 380, opacity: 1 }}
         exit={{ width: 0, opacity: 0 }}
         transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
-        className="hidden xl:block shrink-0 overflow-hidden border-l border-border/40 bg-card/40 backdrop-blur-2xl"
+        className="hidden lg:block shrink-0 overflow-hidden border-l border-border/40 bg-card/40 backdrop-blur-2xl"
       >
         <div className="w-[380px] h-full flex flex-col">{body}</div>
       </motion.aside>

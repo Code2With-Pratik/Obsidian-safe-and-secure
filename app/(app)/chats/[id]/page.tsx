@@ -24,9 +24,11 @@ export default function ChatRoom() {
   }, [id, setActive]);
 
   // ... (keep the details panel effect)
+  // 1024px so the docked panel auto-opens on standard laptops, matching the
+  // breakpoint inside ChatDetailsPanel that decides docked vs overlay.
   React.useEffect(() => {
     if (typeof window === "undefined") return;
-    if (window.matchMedia("(min-width: 1280px)").matches) setRight("details");
+    if (window.matchMedia("(min-width: 1024px)").matches) setRight("details");
     else setRight(null);
   }, [id, setRight]);
 
