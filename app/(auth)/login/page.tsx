@@ -16,6 +16,7 @@ import { NovaMascot } from "@/components/nova-mascot";
 import { useT } from "@/lib/i18n";
 import { login as supabaseLogin } from "@/lib/supabase/actions";
 import { useToast } from "@/components/ui/toaster";
+import { createClient } from "@/lib/supabase/client";
 
 const schema = z.object({
   email: z.string().email("Enter a valid email"),
@@ -36,10 +37,27 @@ export default function LoginPage() {
     resolver: zodResolver(schema),
     defaultValues: { email: "", password: "" }
   });
+  // Tracks which OAuth provider's button is currently mid-redirect so
+  // we can render the inline spinner. Only one is active at a time.
+  const [oauthBusy, setOauthBusy] = React.useState<"github" | null>(null);
+
+  // Show whatever error the /auth/callback handler bounced back with —
+  // e.g. user clicked cancel on the consent screen, or Supabase rejected
+  // the code. Reads `?error=...` off the URL once on mount.
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const err = params.get("error");
+    if (err) {
+      toast({ title: "Sign-in failed", description: err });
+      // Strip the param so a refresh doesn't re-fire the toast.
+      window.history.replaceState({}, "", window.location.pathname);
+    }
+  }, [toast]);
 
   const onSubmit = async (data: FormValues) => {
     const result = await supabaseLogin(data);
-    
+
     if (result?.error) {
       toast({
         title: "Login Failed",
@@ -49,6 +67,36 @@ export default function LoginPage() {
     }
 
     router.push("/");
+  };
+
+  /** Kick off the GitHub OAuth flow. The provider must be enabled in the
+   *  Supabase dashboard (Authentication → Providers → GitHub) with the
+   *  GitHub OAuth app's client id + secret. Our `/auth/callback` route
+   *  picks up the redirect, exchanges the code for a session cookie,
+   *  and bounces to '/'. */
+  const signInWithGithub = async () => {
+    if (oauthBusy) return;
+    setOauthBusy("github");
+    try {
+      const supabase = createClient();
+      const redirectTo = `${window.location.origin}/auth/callback`;
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "github",
+        options: { redirectTo }
+      });
+      if (error) {
+        toast({ title: "GitHub sign-in failed", description: error.message });
+        setOauthBusy(null);
+      }
+      // On success the browser navigates to GitHub — no further action
+      // here. The button remains in its busy state until the redirect.
+    } catch (err) {
+      toast({
+        title: "GitHub sign-in failed",
+        description: err instanceof Error ? err.message : "Unknown error"
+      });
+      setOauthBusy(null);
+    }
   };
 
   return (
@@ -66,13 +114,39 @@ export default function LoginPage() {
         </div>
 
         <div className="grid grid-cols-3 gap-2 mb-6">
-          <Button variant="glass" size="lg" className="!h-11">
+          <Button
+            variant="glass"
+            size="lg"
+            className="!h-11"
+            type="button"
+            disabled
+            title={t("Apple sign-in not configured")}
+          >
             <Apple className="size-5" />
           </Button>
-          <Button variant="glass" size="lg" className="!h-11">
-            <Github className="size-5" />
+          <Button
+            variant="glass"
+            size="lg"
+            className="!h-11"
+            type="button"
+            onClick={signInWithGithub}
+            disabled={oauthBusy === "github"}
+            aria-label={t("Continue with GitHub")}
+          >
+            {oauthBusy === "github" ? (
+              <Loader2 className="size-5 animate-spin" />
+            ) : (
+              <Github className="size-5" />
+            )}
           </Button>
-          <Button variant="glass" size="lg" className="!h-11">
+          <Button
+            variant="glass"
+            size="lg"
+            className="!h-11"
+            type="button"
+            disabled
+            title={t("Google sign-in not configured")}
+          >
             <svg viewBox="0 0 24 24" className="size-5">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
               <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.99.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z"/>

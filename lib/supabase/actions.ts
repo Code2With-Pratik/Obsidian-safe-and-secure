@@ -25,10 +25,25 @@ export async function login(formData: any) {
 export async function signup(formData: any) {
   const supabase = await createClient()
 
+  // Where Supabase should point the confirmation-email link. Without this
+  // the link uses whatever Site URL is configured in the Supabase
+  // dashboard — which defaults to http://localhost:3000 and breaks every
+  // production deployment that forgets to update it. We set
+  // NEXT_PUBLIC_SITE_URL in production (Render env vars) so the link
+  // routes back to the live origin's /auth/callback, which exchanges
+  // the code for a session and lands the user on the home page signed
+  // in.
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXT_PUBLIC_VERCEL_URL ||
+    'http://localhost:3000'
+  const emailRedirectTo = `${siteUrl.replace(/\/$/, '')}/auth/callback`
+
   const data = {
     email: formData.email,
     password: formData.password,
     options: {
+      emailRedirectTo,
       data: {
         name: formData.name,
         // We'll handle username in a separate onboarding step as per the app flow
@@ -60,8 +75,12 @@ export async function logout() {
 
 export async function resetPassword(email: string) {
   const supabase = await createClient()
+  const siteUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXT_PUBLIC_VERCEL_URL ||
+    'http://localhost:3000'
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/reset-password`,
+    redirectTo: `${siteUrl.replace(/\/$/, '')}/reset-password`,
   })
 
   if (error) {
