@@ -11,6 +11,12 @@
     "supabase:gen": "supabase gen types typescript --local > types/supabase.ts"
   },
   "dependencies": {
+    "@capacitor/android": "^8.4.0",
+    "@capacitor/camera": "^8.2.0",
+    "@capacitor/core": "^8.4.0",
+    "@capacitor/filesystem": "^8.1.2",
+    "@capacitor/push-notifications": "^8.1.1",
+    "@capacitor/share": "^8.0.1",
     "@hookform/resolvers": "^3.9.0",
     "@iconify/react": "^6.0.2",
     "@livekit/components-react": "^2.9.21",
@@ -53,6 +59,8 @@
     "zustand": "^5.0.1"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
+    "@capacitor/cli": "^8.4.0",
     "@types/node": "^22.8.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
