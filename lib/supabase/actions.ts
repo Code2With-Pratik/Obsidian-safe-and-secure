@@ -3,6 +3,7 @@
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/admin'
 
 export async function login(formData: any) {
   const supabase = await createClient()
@@ -23,38 +24,38 @@ export async function login(formData: any) {
 }
 
 export async function signup(formData: any) {
-  const supabase = await createClient()
+  // Create the user via the Admin API with `email_confirm: true` so the
+  // account is pre-confirmed and Supabase never sends a verification
+  // email. We then immediately call signInWithPassword on the regular
+  // (cookie-bound) client to establish a session — same outcome as a
+  // normal signup with email confirmations disabled in the dashboard,
+  // but independent of that toggle.
+  const admin = createAdminClient()
 
-  // Where Supabase should point the confirmation-email link. Without this
-  // the link uses whatever Site URL is configured in the Supabase
-  // dashboard — which defaults to http://localhost:3000 and breaks every
-  // production deployment that forgets to update it. We set
-  // NEXT_PUBLIC_SITE_URL in production (Render env vars) so the link
-  // routes back to the live origin's /auth/callback, which exchanges
-  // the code for a session and lands the user on the home page signed
-  // in.
-  const siteUrl =
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    process.env.NEXT_PUBLIC_VERCEL_URL ||
-    'http://localhost:3000'
-  const emailRedirectTo = `${siteUrl.replace(/\/$/, '')}/auth/callback`
-
-  const data = {
+  const { error: createError } = await admin.auth.admin.createUser({
     email: formData.email,
     password: formData.password,
-    options: {
-      emailRedirectTo,
-      data: {
-        name: formData.name,
-        // We'll handle username in a separate onboarding step as per the app flow
-      },
+    email_confirm: true,
+    user_metadata: {
+      name: formData.name,
+      // Username is claimed in a separate onboarding step (/username).
     },
+  })
+
+  if (createError) {
+    return { error: createError.message }
   }
 
-  const { error } = await supabase.auth.signUp(data)
+  // Drop the new user straight into a session so the register page can
+  // route them on to /username with auth cookies already set.
+  const supabase = await createClient()
+  const { error: signInError } = await supabase.auth.signInWithPassword({
+    email: formData.email,
+    password: formData.password,
+  })
 
-  if (error) {
-    return { error: error.message }
+  if (signInError) {
+    return { error: signInError.message }
   }
 
   revalidatePath('/', 'layout')

@@ -43,6 +43,12 @@ export type NotificationDraft = Omit<Notification, "id" | "time"> & {
 
 interface NotificationsState {
   items: Notification[];
+  /** Auth user who owns `items`. Persisted alongside the feed so that
+   *  when a different user signs in on the same browser (e.g. fresh
+   *  registration on a shared device), we can detect the mismatch and
+   *  wipe the previous account's notifications instead of showing them
+   *  to the new user. `null` before any user has signed in. */
+  userId: string | null;
   /** True once persist's rehydrate cycle has settled. UI doesn't need
    *  this today — exposed so future selectors can avoid a flash. */
   hydrated: boolean;
@@ -60,7 +66,11 @@ interface NotificationsState {
    *  already covered by another store (call_sessions, community_members).
    *  Idempotent. Other surfaces (chat messages, whiteboard members,
    *  auth events) are tapped in their existing stores via direct calls
-   *  to `useNotificationsStore.getState().add(...)`. */
+   *  to `useNotificationsStore.getState().add(...)`.
+   *
+   *  Also handles the per-user reset: if the persisted `userId` belongs
+   *  to a different account, the existing feed is dropped before any
+   *  realtime channels are opened. */
   initRealtime: (meId: string) => void;
   teardown: () => void;
 }
@@ -148,6 +158,7 @@ export const useNotificationsStore = create<NotificationsState>()(
   persist(
     (set, get) => ({
       items: [],
+      userId: null,
       hydrated: false,
 
       add: (n) => {
@@ -219,6 +230,16 @@ export const useNotificationsStore = create<NotificationsState>()(
           get().teardown();
         }
         _currentUserId = meId;
+
+        // Per-user feed reset. The notifications array is persisted to
+        // localStorage under a single key, so if a different account
+        // signed in last (or a brand-new user just registered on a
+        // shared device), their feed would leak into this user's
+        // notification center. Wipe it whenever the owning userId
+        // doesn't match the current signed-in user.
+        if (get().userId !== meId) {
+          set({ items: [], userId: meId });
+        }
 
         const supabase = createClient();
 
@@ -364,13 +385,21 @@ export const useNotificationsStore = create<NotificationsState>()(
         }
         _hostedCommunityIds.clear();
         _currentUserId = null;
+        // Drop the signed-out user's feed so the next account (or the
+        // signed-out shell) doesn't render their notifications. The
+        // owning userId is cleared too, which arms the per-user reset
+        // guard in initRealtime() to wipe again if anything sneaks in
+        // between teardown and the next sign-in.
+        set({ items: [], userId: null });
       }
     }),
     {
       name: "nova-notifications",
-      // Persist only the feed; channels + transient flags live at
-      // module scope and don't belong in localStorage.
-      partialize: (s) => ({ items: s.items }),
+      // Persist the feed plus the owning userId so the next page load
+      // can detect a stale (previous-user) feed and wipe it before
+      // rendering. Channels + transient flags live at module scope and
+      // don't belong in localStorage.
+      partialize: (s) => ({ items: s.items, userId: s.userId }),
       onRehydrateStorage: () => (state) => {
         if (state) state.hydrated = true;
       }
