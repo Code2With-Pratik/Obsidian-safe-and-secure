@@ -54,7 +54,8 @@
       "Bash(curl -s -o /dev/null -w \"/profile: HTTP %{http_code}\\\\n\" http://localhost:3000/profile)",
       "Bash(findstr /i auth)",
       "Bash(npm run *)",
-      "Bash(findstr /i mp3)"
+      "Bash(findstr /i mp3)",
+      "Bash(npm ls *)"
     ]
   }
 }
