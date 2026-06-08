@@ -8,7 +8,7 @@ import { z } from "zod";
 import { motion } from "framer-motion";
 import { Loader2, LockKeyhole, ShieldCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { updatePassword } from "@/lib/supabase/actions";
 import { useToast } from "@/components/ui/toaster";
@@ -74,8 +74,8 @@ export default function ResetPasswordPage() {
           <div className="space-y-1.5">
             <Label htmlFor="password">New password</Label>
             <div className="relative">
-              <LockKeyhole className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-              <Input id="password" type="password" placeholder="••••••••" className="pl-9" {...register("password")} />
+              <LockKeyhole className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground z-10" />
+              <PasswordInput id="password" placeholder="••••••••" className="pl-9" {...register("password")} />
             </div>
             {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
           </div>
@@ -83,8 +83,8 @@ export default function ResetPasswordPage() {
           <div className="space-y-1.5">
             <Label htmlFor="confirm">Confirm new password</Label>
             <div className="relative">
-              <LockKeyhole className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-              <Input id="confirm" type="password" placeholder="••••••••" className="pl-9" {...register("confirm")} />
+              <LockKeyhole className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground z-10" />
+              <PasswordInput id="confirm" placeholder="••••••••" className="pl-9" {...register("confirm")} />
             </div>
             {errors.confirm && <p className="text-xs text-destructive">{errors.confirm.message}</p>}
           </div>

@@ -10,6 +10,7 @@ import { motion } from "framer-motion";
 import { Apple, Github, Loader2, LockKeyhole, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { useAuthStore } from "@/store/use-auth-store";
 import { NovaMascot } from "@/components/nova-mascot";
@@ -183,10 +184,9 @@ export default function LoginPage() {
               </Link>
             </div>
             <div className="relative">
-              <LockKeyhole className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-              <Input
+              <LockKeyhole className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground z-10" />
+              <PasswordInput
                 id="password"
-                type="password"
                 placeholder="••••••••"
                 className="pl-9"
                 {...register("password")}
