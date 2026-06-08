@@ -32,7 +32,7 @@ export async function signup(formData: any) {
   // but independent of that toggle.
   const admin = createAdminClient()
 
-  const { error: createError } = await admin.auth.admin.createUser({
+  const { data: created, error: createError } = await admin.auth.admin.createUser({
     email: formData.email,
     password: formData.password,
     email_confirm: true,
@@ -44,6 +44,29 @@ export async function signup(formData: any) {
 
   if (createError) {
     return { error: createError.message }
+  }
+
+  // Defensive profile bootstrap — guarantees a profiles row exists for
+  // the brand-new auth user regardless of whether a handle_new_user
+  // trigger is wired up on the database. Without this, every page that
+  // reads `profiles.*` for the current user (chat list, /username,
+  // /profile, the AI assistant's context) returns nothing until the
+  // user manually fills the profile out. Upsert on `id` so re-running
+  // signup with the same email is harmless.
+  if (created?.user) {
+    const dicebear = `https://api.dicebear.com/9.x/notionists/svg?seed=${created.user.id}`
+    await admin.from('profiles').upsert(
+      {
+        id: created.user.id,
+        name: formData.name || formData.email?.split('@')[0] || 'User',
+        username: (formData.email?.split('@')[0] || 'user')
+          .toLowerCase()
+          .replace(/[^a-z0-9._]/g, ''),
+        avatar: dicebear,
+        status: 'online',
+      },
+      { onConflict: 'id', ignoreDuplicates: false }
+    )
   }
 
   // Drop the new user straight into a session so the register page can
@@ -80,8 +103,16 @@ export async function resetPassword(email: string) {
     process.env.NEXT_PUBLIC_SITE_URL ||
     process.env.NEXT_PUBLIC_VERCEL_URL ||
     'http://localhost:3000'
+  // Route through /auth/callback so the recovery `?code=...` is
+  // exchanged for a real (recovery-grade) Supabase session BEFORE the
+  // user lands on the new-password form. Without this round-trip the
+  // /reset-password page would mount with no auth context, and
+  // `updateUser({ password })` would fail with "Auth session missing".
+  // The `?next=` hint tells the callback handler to bounce the user to
+  // the reset form once the code exchange succeeds.
+  const base = siteUrl.replace(/\/$/, '')
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${siteUrl.replace(/\/$/, '')}/reset-password`,
+    redirectTo: `${base}/auth/callback?next=${encodeURIComponent('/reset-password')}`,
   })
 
   if (error) {

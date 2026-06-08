@@ -10,6 +10,7 @@ import { motion } from "framer-motion";
 import { Loader2, LockKeyhole, Mail, User2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { NovaMascot } from "@/components/nova-mascot";
 import { signup as supabaseSignup } from "@/lib/supabase/actions";
@@ -95,14 +96,14 @@ export default function RegisterPage() {
             <div className="space-y-1.5">
               <Label htmlFor="password">Password</Label>
               <div className="relative">
-                <LockKeyhole className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
-                <Input id="password" type="password" className="pl-9" {...register("password")} />
+                <LockKeyhole className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground z-10" />
+                <PasswordInput id="password" className="pl-9" {...register("password")} />
               </div>
               {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="confirm">Confirm</Label>
-              <Input id="confirm" type="password" {...register("confirm")} />
+              <PasswordInput id="confirm" {...register("confirm")} />
               {errors.confirm && <p className="text-xs text-destructive">{errors.confirm.message}</p>}
             </div>
           </div>
