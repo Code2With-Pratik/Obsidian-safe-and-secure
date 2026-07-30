@@ -24,61 +24,103 @@ export async function login(formData: any) {
 }
 
 export async function signup(formData: any) {
-  // Create the user via the Admin API with `email_confirm: true` so the
-  // account is pre-confirmed and Supabase never sends a verification
-  // email. We then immediately call signInWithPassword on the regular
-  // (cookie-bound) client to establish a session — same outcome as a
-  // normal signup with email confirmations disabled in the dashboard,
-  // but independent of that toggle.
+  // Create the user via the Admin API with `email_confirm: true` if admin client is configured.
+  // Otherwise, fall back to standard `supabase.auth.signUp()`.
   const admin = createAdminClient()
 
-  const { data: created, error: createError } = await admin.auth.admin.createUser({
-    email: formData.email,
-    password: formData.password,
-    email_confirm: true,
-    user_metadata: {
-      name: formData.name,
-      // Username is claimed in a separate onboarding step (/username).
-    },
-  })
-
-  if (createError) {
-    return { error: createError.message }
-  }
-
-  // Defensive profile bootstrap — guarantees a profiles row exists for
-  // the brand-new auth user regardless of whether a handle_new_user
-  // trigger is wired up on the database. Without this, every page that
-  // reads `profiles.*` for the current user (chat list, /username,
-  // /profile, the AI assistant's context) returns nothing until the
-  // user manually fills the profile out. Upsert on `id` so re-running
-  // signup with the same email is harmless.
-  if (created?.user) {
-    const dicebear = `https://api.dicebear.com/9.x/notionists/svg?seed=${created.user.id}`
-    await admin.from('profiles').upsert(
-      {
-        id: created.user.id,
-        name: formData.name || formData.email?.split('@')[0] || 'User',
-        username: (formData.email?.split('@')[0] || 'user')
-          .toLowerCase()
-          .replace(/[^a-z0-9._]/g, ''),
-        avatar: dicebear,
-        status: 'online',
+  if (admin) {
+    const { data: created, error: createError } = await admin.auth.admin.createUser({
+      email: formData.email,
+      password: formData.password,
+      email_confirm: true,
+      user_metadata: {
+        name: formData.name,
       },
-      { onConflict: 'id', ignoreDuplicates: false }
-    )
-  }
+    })
 
-  // Drop the new user straight into a session so the register page can
-  // route them on to /username with auth cookies already set.
-  const supabase = await createClient()
-  const { error: signInError } = await supabase.auth.signInWithPassword({
-    email: formData.email,
-    password: formData.password,
-  })
+    if (createError) {
+      return { error: createError.message }
+    }
 
-  if (signInError) {
-    return { error: signInError.message }
+    if (created?.user) {
+      const dicebear = `https://api.dicebear.com/9.x/notionists/svg?seed=${created.user.id}`
+      await admin.from('profiles').upsert(
+        {
+          id: created.user.id,
+          name: formData.name || formData.email?.split('@')[0] || 'User',
+          username: (formData.email?.split('@')[0] || 'user')
+            .toLowerCase()
+            .replace(/[^a-z0-9._]/g, ''),
+          avatar: dicebear,
+          status: 'online',
+        },
+        { onConflict: 'id', ignoreDuplicates: false }
+      )
+    }
+
+    const supabase = await createClient()
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: formData.email,
+      password: formData.password,
+    })
+
+    if (signInError) {
+      return { error: signInError.message }
+    }
+  } else {
+    // Fallback: Standard client signup when SUPABASE_SECRET_KEY is not configured in .env.local
+    const supabase = await createClient()
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+      email: formData.email,
+      password: formData.password,
+      options: {
+        data: {
+          name: formData.name,
+        },
+      },
+    })
+
+    if (signUpError) {
+      return { error: signUpError.message }
+    }
+
+    if (!signUpData.session) {
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email: formData.email,
+        password: formData.password,
+      })
+
+      if (signInError) {
+        if (signInError.message?.toLowerCase().includes('email not confirmed')) {
+          return {
+            requiresConfirmation: true,
+            message:
+              'Account created! Please check your email inbox to confirm your account before logging in.',
+          }
+        }
+        return { error: signInError.message }
+      }
+    }
+
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (user) {
+      const dicebear = `https://api.dicebear.com/9.x/notionists/svg?seed=${user.id}`
+      await supabase.from('profiles').upsert(
+        {
+          id: user.id,
+          name: formData.name || formData.email?.split('@')[0] || 'User',
+          username: (formData.email?.split('@')[0] || 'user')
+            .toLowerCase()
+            .replace(/[^a-z0-9._]/g, ''),
+          avatar: dicebear,
+          status: 'online',
+        },
+        { onConflict: 'id', ignoreDuplicates: false }
+      )
+    }
   }
 
   revalidatePath('/', 'layout')

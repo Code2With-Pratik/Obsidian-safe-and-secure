@@ -50,6 +50,14 @@ export default function RegisterPage() {
       return;
     }
 
+    if (result?.requiresConfirmation) {
+      toast({
+        title: "Account Created!",
+        description: result.message || "Please check your email inbox to confirm your email before signing in.",
+      });
+      return;
+    }
+
     toast({
       title: "Success",
       description: "Account created! Now pick your username.",
