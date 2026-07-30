@@ -2,6 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import { headers } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { createAdminClient } from '@/lib/supabase/admin'
 
@@ -141,20 +142,35 @@ export async function logout() {
 
 export async function resetPassword(email: string) {
   const supabase = await createClient()
+  const reqHeaders = await headers()
+  const host = reqHeaders.get('host')
+  const proto = reqHeaders.get('x-forwarded-proto') || 'http'
+  const currentOrigin = host ? `${proto}://${host}` : null
+
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL ||
     process.env.NEXT_PUBLIC_VERCEL_URL ||
+    currentOrigin ||
     'http://localhost:3000'
-  // Route through /auth/callback so the recovery `?code=...` is
-  // exchanged for a real (recovery-grade) Supabase session BEFORE the
-  // user lands on the new-password form. Without this round-trip the
-  // /reset-password page would mount with no auth context, and
-  // `updateUser({ password })` would fail with "Auth session missing".
-  // The `?next=` hint tells the callback handler to bounce the user to
-  // the reset form once the code exchange succeeds.
+
   const base = siteUrl.replace(/\/$/, '')
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${base}/auth/callback?next=${encodeURIComponent('/reset-password')}`,
+  })
+
+  if (error) {
+    return { error: error.message }
+  }
+
+  return { success: true }
+}
+
+export async function verifyRecoveryOtp(email: string, token: string) {
+  const supabase = await createClient()
+  const { error } = await supabase.auth.verifyOtp({
+    email,
+    token,
+    type: 'recovery',
   })
 
   if (error) {

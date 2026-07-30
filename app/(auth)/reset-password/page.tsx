@@ -12,6 +12,7 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { updatePassword } from "@/lib/supabase/actions";
 import { useToast } from "@/components/ui/toaster";
+import { useNotificationsStore } from "@/store/use-notifications-store";
 
 const schema = z
   .object({
@@ -45,11 +46,19 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    toast({
-      title: "Success",
-      description: "Your password has been updated. You can now login with your new password.",
+    useNotificationsStore.getState().add({
+      kind: "system",
+      title: "Password Changed",
+      body: "Your account password was updated successfully.",
+      targetHref: "/settings"
     });
-    router.push("/login");
+
+    toast({
+      title: "Password Reset Successful",
+      description: "Your password has been updated and you are now signed in.",
+    });
+
+    router.push("/chats");
   };
 
   return (
