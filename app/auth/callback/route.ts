@@ -10,7 +10,7 @@ export async function GET(request: Request) {
   const code = url.searchParams.get("code");
   const token_hash = url.searchParams.get("token_hash");
   const type = url.searchParams.get("type") as EmailOtpType | null;
-  const next = url.searchParams.get("next") ?? "/";
+  const next = url.searchParams.get("next") ?? "/chats";
 
   const providerError =
     url.searchParams.get("error_description") || url.searchParams.get("error");
