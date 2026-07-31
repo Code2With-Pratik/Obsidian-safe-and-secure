@@ -40,7 +40,7 @@ export default function LoginPage() {
   });
   // Tracks which OAuth provider's button is currently mid-redirect so
   // we can render the inline spinner. Only one is active at a time.
-  const [oauthBusy, setOauthBusy] = React.useState<"github" | null>(null);
+  const [oauthBusy, setOauthBusy] = React.useState<"github" | "google" | null>(null);
 
   // Show whatever error the /auth/callback handler bounced back with —
   // e.g. user clicked cancel on the consent screen, or Supabase rejected
@@ -100,6 +100,31 @@ export default function LoginPage() {
     }
   };
 
+  const signInWithGoogle = async () => {
+    if (oauthBusy) return;
+    setOauthBusy("google");
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      if (error) {
+        toast({ title: "Google sign-in failed", description: error.message });
+        setOauthBusy(null);
+      }
+      // On success browser navigates to Google — button stays busy.
+    } catch (err) {
+      toast({
+        title: "Google sign-in failed",
+        description: err instanceof Error ? err.message : "Unknown error"
+      });
+      setOauthBusy(null);
+    }
+  };
+
   return (
     <div className="grid min-h-dvh place-items-center px-6 py-10">
       <motion.div
@@ -145,15 +170,20 @@ export default function LoginPage() {
             size="lg"
             className="!h-11"
             type="button"
-            disabled
-            title={t("Google sign-in not configured")}
+            onClick={signInWithGoogle}
+            disabled={!!oauthBusy}
+            aria-label={t("Continue with Google")}
           >
-            <svg viewBox="0 0 24 24" className="size-5">
-              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
-              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.99.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z"/>
-              <path fill="#FBBC05" d="M5.84 14.09a6.6 6.6 0 0 1 0-4.18V7.07H2.18a11 11 0 0 0 0 9.86l3.66-2.84z"/>
-              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.07l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z"/>
-            </svg>
+            {oauthBusy === "google" ? (
+              <Loader2 className="size-5 animate-spin" />
+            ) : (
+              <svg viewBox="0 0 24 24" className="size-5">
+                <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+                <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.99.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84A11 11 0 0 0 12 23z"/>
+                <path fill="#FBBC05" d="M5.84 14.09a6.6 6.6 0 0 1 0-4.18V7.07H2.18a11 11 0 0 0 0 9.86l3.66-2.84z"/>
+                <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1A11 11 0 0 0 2.18 7.07l3.66 2.84C6.71 7.31 9.14 5.38 12 5.38z"/>
+              </svg>
+            )}
           </Button>
         </div>
 
