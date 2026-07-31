@@ -6,7 +6,10 @@ import { createClient } from "@/lib/supabase/server";
  *  /auth/callback — destination of every Supabase OAuth redirect & email magic link / recovery link.
  */
 export async function GET(request: Request) {
+  console.log("request.url =", request.url);
   const url = new URL(request.url);
+  console.log("origin =", url.origin);
+
   const code = url.searchParams.get("code");
   const token_hash = url.searchParams.get("token_hash");
   const type = url.searchParams.get("type") as EmailOtpType | null;
