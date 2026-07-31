@@ -118,8 +118,9 @@ export default function RegisterPage() {
 
           <p className="text-xs text-muted-foreground">
             By signing up you agree to our{" "}
-            <span className="text-foreground/80 underline-offset-2 hover:underline">terms</span> and{" "}
-            <span className="text-foreground/80 underline-offset-2 hover:underline">privacy</span>.
+            <Link href="/terms" className="text-foreground/80 underline underline-offset-2 hover:text-primary">Terms of Service</Link>
+            {" "}and{" "}
+            <Link href="/privacy" className="text-foreground/80 underline underline-offset-2 hover:text-primary">Privacy Policy</Link>.
           </p>
 
           <Button type="submit" variant="gradient" size="lg" className="w-full !h-12" disabled={isSubmitting}>

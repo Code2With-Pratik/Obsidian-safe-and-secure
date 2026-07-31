@@ -236,6 +236,16 @@ export default function LoginPage() {
             {t("Create an account")}
           </Link>
         </p>
+
+        <p className="text-center text-xs text-muted-foreground mt-4">
+          <Link href="/terms" className="hover:text-primary underline underline-offset-2 transition-colors">
+            Terms of Service
+          </Link>
+          {" · "}
+          <Link href="/privacy" className="hover:text-primary underline underline-offset-2 transition-colors">
+            Privacy Policy
+          </Link>
+        </p>
       </motion.div>
     </div>
   );
