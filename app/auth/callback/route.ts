@@ -3,12 +3,11 @@ import { type EmailOtpType } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/server";
 
 /**
- *  /auth/callback — destination of every Supabase OAuth redirect & email magic link / recovery link.
+ * /auth/callback — destination of every Supabase OAuth redirect
+ * and email magic/recovery link.
  */
 export async function GET(request: Request) {
-  console.log("request.url =", request.url);
   const url = new URL(request.url);
-  console.log("origin =", url.origin);
 
   const code = url.searchParams.get("code");
   const token_hash = url.searchParams.get("token_hash");
@@ -16,11 +15,20 @@ export async function GET(request: Request) {
   const next = url.searchParams.get("next") ?? "/chats";
 
   const providerError =
-    url.searchParams.get("error_description") || url.searchParams.get("error");
+    url.searchParams.get("error_description") ??
+    url.searchParams.get("error");
+
+  // Use the public URL instead of request.url.origin
+  const baseUrl =
+    process.env.NEXT_PUBLIC_SITE_URL ??
+    "https://obsidian-safe-and-secure.onrender.com";
 
   if (providerError) {
     return NextResponse.redirect(
-      new URL(`/login?error=${encodeURIComponent(providerError)}`, url.origin)
+      new URL(
+        `/login?error=${encodeURIComponent(providerError)}`,
+        baseUrl
+      )
     );
   }
 
@@ -28,11 +36,16 @@ export async function GET(request: Request) {
 
   if (code) {
     const { error } = await supabase.auth.exchangeCodeForSession(code);
+
     if (!error) {
-      return NextResponse.redirect(new URL(next, url.origin));
+      return NextResponse.redirect(new URL(next, baseUrl));
     }
+
     return NextResponse.redirect(
-      new URL(`/login?error=${encodeURIComponent(error.message)}`, url.origin)
+      new URL(
+        `/login?error=${encodeURIComponent(error.message)}`,
+        baseUrl
+      )
     );
   }
 
@@ -41,21 +54,29 @@ export async function GET(request: Request) {
       type,
       token_hash,
     });
+
     if (!error) {
-      return NextResponse.redirect(new URL(next, url.origin));
+      return NextResponse.redirect(new URL(next, baseUrl));
     }
+
     return NextResponse.redirect(
-      new URL(`/login?error=${encodeURIComponent(error.message)}`, url.origin)
+      new URL(
+        `/login?error=${encodeURIComponent(error.message)}`,
+        baseUrl
+      )
     );
   }
 
-  // If no server-side token was present, bounce to the next target if provided (e.g. /reset-password)
-  // so client-side hash processing (#access_token=...) can complete, or default to /login.
   if (next && next !== "/" && next.startsWith("/")) {
-    return NextResponse.redirect(new URL(next, url.origin));
+    return NextResponse.redirect(new URL(next, baseUrl));
   }
 
   return NextResponse.redirect(
-    new URL(`/login?error=${encodeURIComponent("Invalid or missing recovery token")}`, url.origin)
+    new URL(
+      `/login?error=${encodeURIComponent(
+        "Invalid or missing recovery token"
+      )}`,
+      baseUrl
+    )
   );
 }
