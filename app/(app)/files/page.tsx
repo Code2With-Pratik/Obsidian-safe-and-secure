@@ -97,6 +97,7 @@ export default function FilesPage() {
   const toggleStar = useVaultStore((s) => s.toggleStar);
   const toggleVault = useVaultStore((s) => s.toggleVault);
   const remove = useVaultStore((s) => s.remove);
+  const signedUrlFor = useVaultStore((s) => s.signedUrlFor);
   // `hasPassword` is a boolean — true once the user has set a vault PIN.
   // The actual hash lives only on the server (vault_secrets); we never
   // expose it client-side.
@@ -288,6 +289,56 @@ export default function FilesPage() {
     const idx = files.findIndex((n) => n.id === node.id);
     setPreview({ items: files, startIndex: Math.max(0, idx) });
   }, []);
+
+  const collectDescendants = React.useCallback((folderId: string | null, all: VaultNode[]) => {
+    const queue = [folderId].filter(Boolean) as string[];
+    const out: VaultNode[] = [];
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      const children = all.filter((n) => n.parentId === id);
+      for (const child of children) {
+        out.push(child);
+        if (child.kind === "folder") queue.push(child.id);
+      }
+    }
+    return out;
+  }, []);
+
+  const downloadVaultNode = React.useCallback(
+    async (node: VaultNode) => {
+      if (node.kind === "folder") {
+        const descendants = collectDescendants(node.id, nodes).filter((n) => n.kind === "file");
+        const urls = await Promise.all(descendants.map((n) => signedUrlFor(n.id)));
+        const valid = descendants.filter((_, idx) => !!urls[idx]);
+        for (const [idx, file] of valid.entries()) {
+          const url = urls[descendants.findIndex((n) => n.id === file.id)];
+          if (!url) continue;
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = file.name;
+          a.rel = "noopener noreferrer";
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+        }
+        return;
+      }
+
+      const url = await signedUrlFor(node.id);
+      if (!url) {
+        toast({ title: t("Download unavailable"), description: t("This file could not be downloaded right now.") });
+        return;
+      }
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = node.name;
+      a.rel = "noopener noreferrer";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    },
+    [collectDescendants, nodes, signedUrlFor, t, toast]
+  );
 
   /* ---- derived ---- */
   const breadcrumb = pathTo(currentFolderId);
@@ -713,6 +764,7 @@ export default function FilesPage() {
                   else openPreview(n, visibleNodes);
                 })
               }
+              onDownload={(n) => accessNode(n, () => void downloadVaultNode(n))}
               onStar={toggleStar}
               onVault={(id) => {
                 if (!hasPassword) {
@@ -743,6 +795,7 @@ export default function FilesPage() {
                   else openPreview(n, visibleNodes);
                 })
               }
+              onDownload={(n) => accessNode(n, () => void downloadVaultNode(n))}
               onStar={toggleStar}
               onVault={(id) =>
                 hasPassword ? void toggleVault(id) : requirePassword(() => toggleVault(id))
@@ -791,6 +844,7 @@ export default function FilesPage() {
                     if (n.kind === "folder") setCurrentFolderId(n.id);
                     else openPreview(n, visibleNodes);
                   }}
+                  onDownload={(n) => accessNode(n, () => void downloadVaultNode(n))}
                   onStar={toggleStar}
                   onVault={toggleVault}
                   onDelete={requestDeleteOne}
@@ -901,6 +955,7 @@ function VaultLockedState({
 function NodeGrid({
   nodes,
   onActivate,
+  onDownload,
   onStar,
   onVault,
   onDelete,
@@ -913,6 +968,7 @@ function NodeGrid({
   nodes: VaultNode[];
   /** Fired on double-click — page wraps it in the password gate for vault items. */
   onActivate: (node: VaultNode) => void;
+  onDownload: (node: VaultNode) => void;
   onStar: (id: string) => void;
   onVault: (id: string) => void;
   onDelete: (id: string) => void;
@@ -1056,6 +1112,7 @@ function NodeGrid({
               selected={selectedIds.has(n.id)}
               onSelect={() => onToggleSelect(n.id)}
               onOpen={() => onActivate(n)}
+              onDownload={() => onDownload(n)}
               onStar={() => onStar(n.id)}
               onVault={() => onVault(n.id)}
               onDelete={() => onDelete(n.id)}
@@ -1087,6 +1144,7 @@ function NodeItem({
   selected,
   onSelect,
   onOpen,
+  onDownload,
   onStar,
   onVault,
   onDelete
@@ -1096,6 +1154,7 @@ function NodeItem({
   selected: boolean;
   onSelect: () => void;
   onOpen: () => void;
+  onDownload: () => void;
   onStar: () => void;
   onVault: () => void;
   onDelete: () => void;
@@ -1145,6 +1204,7 @@ function NodeItem({
         onVault={onVault}
         isVault={!!node.vault}
         onDelete={onDelete}
+        onDownload={locked ? undefined : onDownload}
         downloadHref={locked ? undefined : node.url}
         downloadName={node.name}
       />
@@ -1318,12 +1378,14 @@ function CardMoreMenu({
   onVault,
   isVault,
   onDelete,
+  onDownload,
   downloadHref,
   downloadName
 }: {
   onVault: () => void;
   isVault: boolean;
   onDelete: () => void;
+  onDownload?: () => void;
   downloadHref?: string;
   downloadName?: string;
 }) {
@@ -1351,11 +1413,23 @@ function CardMoreMenu({
             </>
           )}
         </DropdownMenuItem>
-        {downloadHref && (
-          <DropdownMenuItem asChild>
-            <a href={downloadHref} download={downloadName} target="_blank" rel="noopener noreferrer">
-              <Share2 /> {t("Download / share")}
-            </a>
+        {(onDownload || downloadHref) && (
+          <DropdownMenuItem
+            onSelect={(e) => {
+              e.preventDefault();
+              onDownload?.();
+            }}
+            asChild={!!downloadHref && !onDownload}
+          >
+            {downloadHref && !onDownload ? (
+              <a href={downloadHref} download={downloadName} target="_blank" rel="noopener noreferrer">
+                <Share2 /> {t("Download / share")}
+              </a>
+            ) : (
+              <span>
+                <Share2 /> {t("Download")}
+              </span>
+            )}
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />

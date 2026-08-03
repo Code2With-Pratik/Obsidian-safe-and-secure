@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ChatList } from "@/features/chat/chat-list";
 import { motion } from "framer-motion";
 import { Lock } from "lucide-react";
@@ -10,12 +11,25 @@ import { useT } from "@/lib/i18n";
 
 export default function ChatsIndex() {
   const t = useT();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const startDM = useChatStore((s) => s.startDM);
   // Live counts pulled straight from the chat store so the empty-state
   // surface reflects the real state of the user's inbox.
   const onlineCount = useChatStore((s) => s.onlineUsers.length);
   const unreadThreads = useChatStore(
     (s) => s.chats.filter((c) => (c.unread ?? 0) > 0).length
   );
+
+  React.useEffect(() => {
+    const dmId = searchParams.get("dm");
+    if (!dmId) return;
+    void (async () => {
+      const result = await startDM(dmId);
+      const chatId = (result as { data?: { id?: string } }).data?.id;
+      if (chatId) router.replace(`/chats/${chatId}`);
+    })();
+  }, [searchParams, router, startDM]);
 
   return (
     <div className="flex h-[calc(100dvh-4rem)]">

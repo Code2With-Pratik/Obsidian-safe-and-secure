@@ -1622,6 +1622,10 @@ function ProfileCardBubble({
   };
 
   const openProfile = () => {
+    if (contact.id) {
+      void startChat();
+      return;
+    }
     if (contact.url) {
       window.open(contact.url, "_blank", "noopener,noreferrer");
     } else if (contact.username) {

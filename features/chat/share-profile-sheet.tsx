@@ -101,10 +101,9 @@ export function ShareProfileSheet({
   }, [open]);
 
   const profileUrl = React.useMemo(() => {
-    const handle = profile.username || profile.id;
-    if (typeof window === "undefined") return `/profile/${handle}`;
-    return `${window.location.origin}/profile/${handle}`;
-  }, [profile.username, profile.id]);
+    if (typeof window === "undefined") return `/chats?dm=${profile.id}`;
+    return `${window.location.origin}/chats?dm=${encodeURIComponent(profile.id)}`;
+  }, [profile.id]);
 
   // Debounced Supabase profile search. Empty query lists the most-recently
   // active people so the picker doesn't look empty when first opened.

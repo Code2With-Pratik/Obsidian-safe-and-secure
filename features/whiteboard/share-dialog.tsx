@@ -32,7 +32,7 @@ export function ShareDialog({ open, onOpenChange }: Props) {
   const [copied, setCopied] = React.useState(false);
 
   const link = board
-    ? `https://nova.app/whiteboard/${encodeURIComponent(board.id)}`
+    ? `${typeof window !== "undefined" ? window.location.origin : ""}/whiteboard/${encodeURIComponent(board.id)}`
     : "";
 
   const handleCopy = async () => {

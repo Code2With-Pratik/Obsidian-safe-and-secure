@@ -97,7 +97,7 @@ export function QrProfileDialog({ profile, open, onOpenChange }: Props) {
   // in production it resolves against the real domain via metadataBase.
   const profileUrl = React.useMemo(() => {
     if (typeof window === "undefined") return `/profile`;
-    return `${window.location.origin}/u/${profile.username}`;
+    return `${window.location.origin}/profile/${profile.username}`;
   }, [profile.username]);
 
   const onDownload = async () => {
