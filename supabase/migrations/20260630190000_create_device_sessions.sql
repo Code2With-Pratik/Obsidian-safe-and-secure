@@ -16,23 +16,23 @@ create index if not exists device_sessions_user_id_idx
 
 alter table public.device_sessions enable row level security;
 
-create policy if not exists "Users can read own device sessions"
+create policy "Users can read own device sessions"
   on public.device_sessions
   for select
   using (auth.uid() = user_id);
 
-create policy if not exists "Users can upsert own device sessions"
+create policy "Users can upsert own device sessions"
   on public.device_sessions
   for insert
   with check (auth.uid() = user_id);
 
-create policy if not exists "Users can update own device sessions"
+create policy "Users can update own device sessions"
   on public.device_sessions
   for update
   using (auth.uid() = user_id)
   with check (auth.uid() = user_id);
 
-create policy if not exists "Users can delete own device sessions"
+create policy "Users can delete own device sessions"
   on public.device_sessions
   for delete
   using (auth.uid() = user_id);
