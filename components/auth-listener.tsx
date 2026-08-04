@@ -76,6 +76,21 @@ function deviceLabel(): string {
   return platform ? `${browser} · ${platform}` : browser
 }
 
+async function upsertDeviceSession(accessToken?: string) {
+  if (!accessToken) return
+
+  try {
+    await fetch('/api/device-sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'upsert', accessToken }),
+    })
+  } catch {
+    // Ignore client-side session bookkeeping failures; the settings page
+    // can still render once the user opens the Devices tab.
+  }
+}
+
 export default function AuthListener() {
   const supabase = createClient()
   const router = useRouter()
@@ -184,6 +199,7 @@ export default function AuthListener() {
           })
         }
         fetchProfile(session.user.id)
+        void upsertDeviceSession(session.access_token)
         fetchChats()
         fetchBlocked()
         initializeRealtime()

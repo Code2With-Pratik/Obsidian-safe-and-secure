@@ -47,6 +47,7 @@ import {
   ACCENTS,
   LANGUAGES,
   useSettingsStore,
+  type Device,
   type DeviceKind
 } from "@/store/use-settings-store";
 import { useVaultStore } from "@/store/use-vault-store";
@@ -124,6 +125,36 @@ function SettingsContent() {
   React.useEffect(() => setMounted(true), []);
 
   const s = useSettingsStore();
+
+  const refreshDevices = React.useCallback(async () => {
+    try {
+      const res = await fetch("/api/device-sessions", { cache: "no-store" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        s.setDevices([]);
+        return;
+      }
+      s.setDevices((json.sessions ?? []) as Device[]);
+    } catch {
+      s.setDevices([]);
+    }
+  }, [s]);
+
+  React.useEffect(() => {
+    if (section !== "devices") return;
+    let cancelled = false;
+
+    const load = async () => {
+      if (cancelled) return;
+      await refreshDevices();
+    };
+
+    void load();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshDevices, section]);
 
   const globalTheme = useChatThemeStore((st) => st.globalTheme);
   const globalCustomBg = useChatThemeStore((st) => st.globalCustomBg);
@@ -431,8 +462,13 @@ function SettingsContent() {
                           )}
                         </p>
                         <p className="text-[11px] text-muted-foreground">
-                          {d.location} · {d.lastActive}
+                          {d.location} · {d.browser || "Browser"} · {d.lastActive}
                         </p>
+                        {d.platform && (
+                          <p className="text-[10px] text-muted-foreground mt-0.5">
+                            {d.platform}
+                          </p>
+                        )}
                       </div>
                       {d.current ? (
                         <Badge variant="success" className="shrink-0">
@@ -442,7 +478,14 @@ function SettingsContent() {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => s.signOutDevice(d.id)}
+                          onClick={async () => {
+                            await fetch("/api/device-sessions", {
+                              method: "POST",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ action: "signout", sessionId: d.id })
+                            });
+                            await refreshDevices();
+                          }}
                         >
                           {t("Sign out")}
                         </Button>

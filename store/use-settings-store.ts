@@ -58,16 +58,11 @@ export interface Device {
   name: string;
   location: string;
   lastActive: string;
-  /** The current device can't be signed out from here. */
+  browser?: string;
+  platform?: string;
   current?: boolean;
+  deviceFingerprint?: string;
 }
-
-const SEED_DEVICES: Device[] = [
-  { id: "d-mac", kind: "laptop", name: "MacBook Pro", location: "Lisbon, PT", lastActive: "Active now", current: true },
-  { id: "d-iphone", kind: "phone", name: "iPhone 17 Pro", location: "Lisbon, PT", lastActive: "2 min ago" },
-  { id: "d-ipad", kind: "tablet", name: "iPad Air", location: "Lisbon, PT", lastActive: "Yesterday" },
-  { id: "d-display", kind: "monitor", name: "Studio Display", location: "Office", lastActive: "3 days ago" }
-];
 
 /* -------------------------------------------------------- */
 /* Toggle groups                                            */
@@ -137,7 +132,7 @@ interface SettingsState {
   setLanguage: (code: string) => void;
   setAutoTranslate: (v: boolean) => void;
   setSpellCheck: (v: boolean) => void;
-  signOutDevice: (id: string) => void;
+  setDevices: (devices: Device[]) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -179,7 +174,7 @@ export const useSettingsStore = create<SettingsState>()(
       autoTranslate: true,
       spellCheck: true,
 
-      devices: SEED_DEVICES,
+      devices: [],
 
       setAccent: (id) => set({ accent: id }),
       setFont: (id) => set({ font: id }),
@@ -195,8 +190,7 @@ export const useSettingsStore = create<SettingsState>()(
       setLanguage: (code) => set({ language: code }),
       setAutoTranslate: (v) => set({ autoTranslate: v }),
       setSpellCheck: (v) => set({ spellCheck: v }),
-      signOutDevice: (id) =>
-        set((s) => ({ devices: s.devices.filter((d) => d.id !== id || d.current) }))
+      setDevices: (devices) => set({ devices })
     }),
     { name: "nova-settings" }
   )
