@@ -118,26 +118,25 @@ export function Sidebar() {
             pinned at a fixed left offset that reads as centered in the 64px
             rail, so it doesn't drift/shake while the panel width animates. */}
         <div className="flex items-center gap-2.5 px-3 py-3">
-          <Link href="/chats" className="flex items-center gap-2.5 shrink-0">
+          <Link href="/chats" className="flex items-center gap-2.5 shrink-0 h-[56px]">
             <NovaMascot size={40} className="shrink-0" animated={false} />
-            <AnimatePresence initial={false}>
-              {expanded && (
-                <motion.div
-                  initial={{ opacity: 0, x: -6 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -6 }}
-                  transition={{ duration: 0.18 }}
-                  className="flex flex-col whitespace-nowrap"
-                >
-                  <span className="font-display text-2xl font-semibold leading-tight tracking-tight">
-                    Obsidian
-                  </span>
-                  <span className="text-[11px] text-muted-foreground -mt-0.5">
-                    secure and safe
-                  </span>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            <motion.div
+              initial={false}
+              animate={{
+                opacity: expanded ? 1 : 0,
+                x: expanded ? 0 : -6,
+                width: expanded ? 156 : 0
+              }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="flex flex-col justify-center whitespace-nowrap overflow-hidden"
+            >
+              <span className="font-display text-[1.6rem] font-semibold leading-[1.05] tracking-tight">
+                Obsidian
+              </span>
+              <span className="text-[11px] text-muted-foreground leading-none">
+                secure and safe
+              </span>
+            </motion.div>
           </Link>
         </div>
 
@@ -174,19 +173,18 @@ export function Sidebar() {
                   />
                 )}
                 <item.icon className="size-[22px] shrink-0 text-foreground" />
-                <AnimatePresence initial={false}>
-                  {expanded && (
-                    <motion.span
-                      initial={{ opacity: 0, x: -4 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      exit={{ opacity: 0, x: -4 }}
-                      transition={{ duration: 0.18 }}
-                      className="text-[15px] font-medium whitespace-nowrap leading-none"
-                    >
-                      {t(item.label)}
-                    </motion.span>
-                  )}
-                </AnimatePresence>
+                <motion.span
+                  initial={false}
+                  animate={{
+                    opacity: expanded ? 1 : 0,
+                    x: expanded ? 0 : -4,
+                    width: expanded ? "auto" : 0
+                  }}
+                  transition={{ duration: 0.18, ease: "easeOut" }}
+                  className="text-[15px] font-medium whitespace-nowrap leading-none overflow-hidden"
+                >
+                  {t(item.label)}
+                </motion.span>
                 {expanded && effectiveBadge > 0 && (
                   <Badge variant="default" className="ml-auto tabular-nums">
                     {formatUnread(effectiveBadge)}
@@ -229,19 +227,18 @@ export function Sidebar() {
               />
             )}
             <Settings className="size-[22px] shrink-0 text-foreground" />
-            <AnimatePresence initial={false}>
-              {expanded && (
-                <motion.span
-                  initial={{ opacity: 0, x: -4 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -4 }}
-                  transition={{ duration: 0.18 }}
-                  className="text-[15px] whitespace-nowrap leading-none"
-                >
-                  {t("Settings")}
-                </motion.span>
-              )}
-            </AnimatePresence>
+            <motion.span
+              initial={false}
+              animate={{
+                opacity: expanded ? 1 : 0,
+                x: expanded ? 0 : -4,
+                width: expanded ? "auto" : 0
+              }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="text-[15px] whitespace-nowrap leading-none overflow-hidden"
+            >
+              {t("Settings")}
+            </motion.span>
           </Link>
 
           <Link
@@ -267,27 +264,26 @@ export function Sidebar() {
                 </Avatar>
               )}
             </button>
-            <AnimatePresence initial={false}>
-              {expanded && (
-                <motion.div
-                  initial={{ opacity: 0, x: -4 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  exit={{ opacity: 0, x: -4 }}
-                  transition={{ duration: 0.18 }}
-                  className="flex-1 min-w-0 flex items-center gap-2 whitespace-nowrap"
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[15px] font-medium truncate leading-tight">
-                      {user?.name ?? "Aria Vance"}
-                    </div>
-                    <div className="text-xs text-muted-foreground flex items-center gap-1">
-                      <span className="size-1.5 rounded-full bg-emerald-400" />
-                      {t("Online")} · @{user?.username ?? "aria"}
-                    </div>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            <motion.div
+              initial={false}
+              animate={{
+                opacity: expanded ? 1 : 0,
+                x: expanded ? 0 : -4,
+                width: expanded ? "auto" : 0
+              }}
+              transition={{ duration: 0.18, ease: "easeOut" }}
+              className="flex-1 min-w-0 flex items-center gap-2 whitespace-nowrap overflow-hidden"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="text-[15px] font-medium truncate leading-tight">
+                  {user?.name ?? "Aria Vance"}
+                </div>
+                <div className="text-xs text-muted-foreground flex items-center gap-1">
+                  <span className="size-1.5 rounded-full bg-emerald-400" />
+                  {t("Online")} · @{user?.username ?? "aria"}
+                </div>
+              </div>
+            </motion.div>
           </Link>
         </div>
       </motion.div>
