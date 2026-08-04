@@ -119,7 +119,7 @@ export function Sidebar() {
             rail, so it doesn't drift/shake while the panel width animates. */}
         <div className="flex items-center gap-2.5 px-3 py-3">
           <Link href="/chats" className="flex items-center gap-2.5 shrink-0">
-            <NovaMascot size={40} className="shrink-0" />
+            <NovaMascot size={40} className="shrink-0" animated={false} />
             <AnimatePresence initial={false}>
               {expanded && (
                 <motion.div

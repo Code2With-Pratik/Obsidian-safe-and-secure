@@ -10,18 +10,21 @@ interface Props {
   className?: string;
   size?: number;
   mood?: Mood;
+  animated?: boolean;
 }
 
 /**
  * A cute soft-gradient blob with eyes + mouth that randomly idles between micro-animations.
  * The face also randomly blinks and shifts mood (left eye / right eye / mouth shapes).
  */
-export function NovaMascot({ className, size = 160, mood }: Props) {
+export function NovaMascot({ className, size = 160, mood, animated = true }: Props) {
   const [auto, setAuto] = React.useState<Mood>(mood ?? "smile");
   const bodyCtrl = useAnimation();
 
   // Random micro-actions — squish, hop, sway, idle.
   React.useEffect(() => {
+    if (!animated) return;
+
     let alive = true;
     const loop = async () => {
       // Wait a frame so the motion component has subscribed to these controls
@@ -60,7 +63,7 @@ export function NovaMascot({ className, size = 160, mood }: Props) {
     return () => {
       alive = false;
     };
-  }, [bodyCtrl]);
+  }, [animated, bodyCtrl]);
 
   // Random mood shifts every few seconds
   React.useEffect(() => {
@@ -68,16 +71,22 @@ export function NovaMascot({ className, size = 160, mood }: Props) {
       setAuto(mood);
       return;
     }
+
+    if (!animated) {
+      setAuto("smile");
+      return;
+    }
+
     const moods: Mood[] = ["happy", "smile", "wink", "shy", "curious", "excited", "meh"];
     const id = setInterval(() => {
       setAuto(moods[Math.floor(Math.random() * moods.length)]);
     }, 3200 + Math.random() * 1800);
     return () => clearInterval(id);
-  }, [mood]);
+  }, [animated, mood]);
 
   return (
     <motion.div
-      animate={bodyCtrl}
+      animate={animated ? bodyCtrl : undefined}
       className={cn("relative inline-block", className)}
       style={{ width: size, height: size }}
     >
@@ -120,15 +129,20 @@ export function NovaMascot({ className, size = 160, mood }: Props) {
         />
 
         {/* face */}
-        <Face mood={auto} />
+        <Face mood={auto} animated={animated} />
       </div>
     </motion.div>
   );
 }
 
-function Face({ mood }: { mood: Mood }) {
+function Face({ mood, animated }: { mood: Mood; animated: boolean }) {
   const [blink, setBlink] = React.useState(false);
   React.useEffect(() => {
+    if (!animated) {
+      setBlink(false);
+      return;
+    }
+
     let alive = true;
     const loop = async () => {
       while (alive) {
@@ -142,7 +156,7 @@ function Face({ mood }: { mood: Mood }) {
     return () => {
       alive = false;
     };
-  }, []);
+  }, [animated]);
 
   // Eye descriptors: w, h, cy offset from baseline. Different moods reshape them.
   const leftEye = eyeFor(mood, "left");
@@ -163,8 +177,8 @@ function Face({ mood }: { mood: Mood }) {
         ry="3.5"
         fill="#FB7185"
         opacity={mood === "shy" ? 0.7 : 0.45}
-        animate={{ opacity: mood === "shy" ? [0.5, 0.85, 0.5] : 0.45 }}
-        transition={{ duration: 2, repeat: Infinity }}
+        animate={animated ? { opacity: mood === "shy" ? [0.5, 0.85, 0.5] : 0.45 } : undefined}
+        transition={animated ? { duration: 2, repeat: Infinity } : undefined}
       />
       <motion.ellipse
         cx="70"
@@ -173,8 +187,8 @@ function Face({ mood }: { mood: Mood }) {
         ry="3.5"
         fill="#FB7185"
         opacity={mood === "shy" ? 0.7 : 0.45}
-        animate={{ opacity: mood === "shy" ? [0.5, 0.85, 0.5] : 0.45 }}
-        transition={{ duration: 2, repeat: Infinity }}
+        animate={animated ? { opacity: mood === "shy" ? [0.5, 0.85, 0.5] : 0.45 } : undefined}
+        transition={animated ? { duration: 2, repeat: Infinity } : undefined}
       />
 
       {/* eyes */}
@@ -184,8 +198,8 @@ function Face({ mood }: { mood: Mood }) {
         rx={leftEye.rx}
         ry={blink ? 0.6 : leftEye.ry}
         fill="#1f2937"
-        animate={{ y: [0, -0.5, 0] }}
-        transition={{ duration: 1.8, repeat: Infinity }}
+        animate={animated ? { y: [0, -0.5, 0] } : undefined}
+        transition={animated ? { duration: 1.8, repeat: Infinity } : undefined}
       />
       <motion.ellipse
         cx={rightEye.cx}
@@ -193,8 +207,8 @@ function Face({ mood }: { mood: Mood }) {
         rx={rightEye.rx}
         ry={blink ? 0.6 : rightEye.ry}
         fill="#1f2937"
-        animate={{ y: [0, -0.5, 0] }}
-        transition={{ duration: 1.8, repeat: Infinity }}
+        animate={animated ? { y: [0, -0.5, 0] } : undefined}
+        transition={animated ? { duration: 1.8, repeat: Infinity } : undefined}
       />
 
       {/* mouth */}
@@ -205,8 +219,8 @@ function Face({ mood }: { mood: Mood }) {
         strokeLinecap="round"
         fill={mood === "happy" || mood === "excited" ? "#1f2937" : "none"}
         initial={false}
-        animate={{ d: mouth }}
-        transition={{ duration: 0.35 }}
+        animate={animated ? { d: mouth } : undefined}
+        transition={animated ? { duration: 0.35 } : undefined}
       />
     </svg>
   );
