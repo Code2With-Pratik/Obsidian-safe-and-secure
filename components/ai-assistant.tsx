@@ -656,8 +656,8 @@ function Composer({
             className={cn(
               "size-9 rounded-full grid place-items-center text-white shadow-[0_6px_22px_-4px_rgba(34,211,238,0.7)] transition",
               hasText
-                ? "bg-gradient-to-br from-cyan-400 via-sky-500 to-blue-600"
-                : "bg-gradient-to-br from-sky-400/60 to-blue-500/60"
+                ? "bg-gradient-to-br from-pink-400 via-pink-500 to-pink-600"
+                : "bg-gradient-to-br from-pink-400/60 to-pink-500/60"
             )}
             aria-label={t("Send")}
           >
