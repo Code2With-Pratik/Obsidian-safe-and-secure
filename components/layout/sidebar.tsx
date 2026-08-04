@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
   MessageCircle,
   Ghost,
@@ -104,7 +104,7 @@ export function Sidebar() {
         onMouseLeave={close}
         initial={false}
         animate={{ width: expanded ? EXPANDED : COLLAPSED }}
-        transition={{ duration: 0.42, ease: [0.22, 1, 0.36, 1] }}
+        transition={{ duration: 0.34, ease: [0.16, 1, 0.3, 1] }}
         className={cn(
           "absolute top-0 left-0 h-dvh z-40 flex flex-col border-r border-border/40 overflow-hidden will-change-[width] transition-shadow duration-300",
           // Lighter backdrop blur (xl, not 2xl) — a 40px blur is re-sampled
@@ -119,7 +119,7 @@ export function Sidebar() {
             rail, so it doesn't drift/shake while the panel width animates. */}
         <div className="flex items-center gap-2.5 px-3 py-3">
           <Link href="/chats" className="flex items-center gap-2.5 shrink-0 h-[56px]">
-            <NovaMascot size={40} className="shrink-0" animated={false} />
+            <NovaMascot size={40} className="shrink-0" />
             <motion.div
               initial={false}
               animate={{
@@ -127,7 +127,7 @@ export function Sidebar() {
                 x: expanded ? 0 : -6,
                 width: expanded ? 156 : 0
               }}
-              transition={{ duration: 0.18, ease: "easeOut" }}
+              transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
               className="flex flex-col justify-center whitespace-nowrap overflow-hidden"
             >
               <span className="font-display text-[1.6rem] font-semibold leading-[1.05] tracking-tight">
@@ -180,7 +180,7 @@ export function Sidebar() {
                     x: expanded ? 0 : -4,
                     width: expanded ? "auto" : 0
                   }}
-                  transition={{ duration: 0.18, ease: "easeOut" }}
+                  transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
                   className="text-[15px] font-medium whitespace-nowrap leading-none overflow-hidden"
                 >
                   {t(item.label)}
@@ -234,7 +234,7 @@ export function Sidebar() {
                 x: expanded ? 0 : -4,
                 width: expanded ? "auto" : 0
               }}
-              transition={{ duration: 0.18, ease: "easeOut" }}
+              transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
               className="text-[15px] whitespace-nowrap leading-none overflow-hidden"
             >
               {t("Settings")}
@@ -271,7 +271,7 @@ export function Sidebar() {
                 x: expanded ? 0 : -4,
                 width: expanded ? "auto" : 0
               }}
-              transition={{ duration: 0.18, ease: "easeOut" }}
+              transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
               className="flex-1 min-w-0 flex items-center gap-2 whitespace-nowrap overflow-hidden"
             >
               <div className="flex-1 min-w-0">

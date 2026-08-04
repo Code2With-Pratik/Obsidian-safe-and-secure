@@ -42,12 +42,12 @@ export function NovaMascot({ className, size = 160, mood, animated = true }: Pro
           });
         } else if (r < 0.5) {
           await bodyCtrl.start({
-            y: [0, -8, 0, -3, 0],
+            rotate: [0, 4, -4, 2, 0],
             transition: { duration: 1.6, ease: "easeInOut" }
           });
         } else if (r < 0.75) {
           await bodyCtrl.start({
-            rotate: [0, 6, -6, 3, 0],
+            scale: [1, 1.03, 1],
             transition: { duration: 1.6, ease: "easeInOut" }
           });
         } else {
