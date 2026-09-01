@@ -58,7 +58,7 @@ function CreateTile() {
         className="absolute inset-0"
         style={{
           background:
-            "linear-gradient(180deg, hsl(240 18% 14%) 0%, hsl(240 22% 8%) 100%)"
+            "linear-gradient(180deg, hsl(0 0% 2%) 0%, hsl(0 0% 4%) 100%)"
         }}
       />
       <div className="absolute inset-0 grid-fade opacity-15" />
@@ -71,7 +71,7 @@ function CreateTile() {
           <Avatar className="size-12 ring-2 ring-white/20">
             <AvatarImage src={meAvatar} />
           </Avatar>
-          <div className="absolute -bottom-1 -right-1 size-[22px] rounded-full bg-gradient-to-br from-cyan-400 to-blue-500 grid place-items-center ring-[3px] ring-[hsl(240_22%_8%)] shadow-[0_4px_12px_rgba(34,211,238,0.55)]">
+          <div className="absolute -bottom-1 -right-1 size-[22px] rounded-full bg-gradient-to-br from-cyan-400 to-blue-500 grid place-items-center ring-[3px] ring-[hsl(0_0%_4%)] shadow-[0_4px_12px_rgba(34,211,238,0.55)]">
             <Plus className="size-3 text-white" strokeWidth={3} />
           </div>
         </div>

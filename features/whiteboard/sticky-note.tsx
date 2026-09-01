@@ -262,7 +262,7 @@ export function StickyNote({ note }: { note: NoteElement }) {
             setShowFont(false);
             setShowColor(false);
           }}
-          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full bg-slate-900/90 text-white text-xs font-medium shadow-floating border border-white/10 hover:bg-slate-900 transition tabular-nums"
+          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full bg-black/90 text-white text-xs font-medium shadow-floating border border-white/10 hover:bg-black transition tabular-nums"
           aria-label={t("Font size")}
         >
           <Type className="size-3.5" /> {fontSize}
@@ -274,7 +274,7 @@ export function StickyNote({ note }: { note: NoteElement }) {
             setShowSize(false);
           }}
           style={{ fontFamily }}
-          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full bg-slate-900/90 text-white text-xs font-medium shadow-floating border border-white/10 hover:bg-slate-900 transition"
+          className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full bg-black/90 text-white text-xs font-medium shadow-floating border border-white/10 hover:bg-black transition"
           aria-label={t("Change font")}
         >
           Aa
@@ -285,7 +285,7 @@ export function StickyNote({ note }: { note: NoteElement }) {
             setShowFont(false);
             setShowSize(false);
           }}
-          className="inline-flex items-center justify-center size-8 rounded-full bg-slate-900/90 text-white shadow-floating border border-white/10 hover:bg-slate-900 transition"
+          className="inline-flex items-center justify-center size-8 rounded-full bg-black/90 text-white shadow-floating border border-white/10 hover:bg-black transition"
           aria-label={t("Change color")}
         >
           <Palette className="size-4" />
@@ -303,7 +303,7 @@ export function StickyNote({ note }: { note: NoteElement }) {
       </div>
 
       {showFont && (
-        <div className="absolute -top-[5.5rem] left-0 flex flex-wrap gap-1.5 bg-slate-900/95 backdrop-blur rounded-2xl border border-white/10 shadow-floating p-2 z-30 max-w-[320px] pointer-events-auto"
+        <div className="absolute -top-[5.5rem] left-0 flex flex-wrap gap-1.5 bg-black/95 backdrop-blur rounded-2xl border border-white/10 shadow-floating p-2 z-30 max-w-[320px] pointer-events-auto"
           onMouseEnter={() => setHoverDeferred(true)}
           onMouseLeave={() => setHoverDeferred(false)}>
           {NOTE_FONTS.map((f) => (
@@ -328,7 +328,7 @@ export function StickyNote({ note }: { note: NoteElement }) {
       )}
 
       {showSize && (
-        <div className="absolute -top-[5.5rem] right-0 flex gap-1 bg-slate-900/95 backdrop-blur rounded-2xl border border-white/10 shadow-floating p-2 z-30 pointer-events-auto">
+        <div className="absolute -top-[5.5rem] right-0 flex gap-1 bg-black/95 backdrop-blur rounded-2xl border border-white/10 shadow-floating p-2 z-30 pointer-events-auto">
           {FONT_SIZES.map((s) => (
             <button
               key={s}
@@ -349,7 +349,7 @@ export function StickyNote({ note }: { note: NoteElement }) {
       )}
 
       {showColor && (
-        <div className="absolute -top-[5.5rem] right-0 flex gap-1.5 bg-slate-900/95 backdrop-blur rounded-2xl border border-white/10 shadow-floating p-2 z-30 pointer-events-auto">
+        <div className="absolute -top-[5.5rem] right-0 flex gap-1.5 bg-black/95 backdrop-blur rounded-2xl border border-white/10 shadow-floating p-2 z-30 pointer-events-auto">
           {NOTE_COLORS.map((c) => (
             <button
               key={c}
