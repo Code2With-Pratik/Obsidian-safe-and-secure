@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { motion } from "framer-motion";
-import { Apple, Github, Loader2, LockKeyhole, Mail } from "lucide-react";
+import { Github, Loader2, LockKeyhole, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -40,7 +40,7 @@ export default function LoginPage() {
   });
   // Tracks which OAuth provider's button is currently mid-redirect so
   // we can render the inline spinner. Only one is active at a time.
-  const [oauthBusy, setOauthBusy] = React.useState<"github" | "google" | null>(null);
+  const [oauthBusy, setOauthBusy] = React.useState<"discord" | "github" | "google" | null>(null);
 
   // Show whatever error the /auth/callback handler bounced back with —
   // e.g. user clicked cancel on the consent screen, or Supabase rejected
@@ -125,6 +125,31 @@ export default function LoginPage() {
     }
   };
 
+  const signInWithDiscord = async () => {
+    if (oauthBusy) return;
+    setOauthBusy("discord");
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "discord",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      if (error) {
+        toast({ title: "Discord sign-in failed", description: error.message });
+        setOauthBusy(null);
+      }
+      // On success browser navigates to Discord — button stays busy.
+    } catch (err) {
+      toast({
+        title: "Discord sign-in failed",
+        description: err instanceof Error ? err.message : "Unknown error"
+      });
+      setOauthBusy(null);
+    }
+  };
+
   return (
     <div className="grid min-h-dvh place-items-center px-6 py-10">
       <motion.div
@@ -145,10 +170,17 @@ export default function LoginPage() {
             size="lg"
             className="!h-11"
             type="button"
-            disabled
-            title={t("Apple sign-in not configured")}
+            onClick={signInWithDiscord}
+            disabled={oauthBusy === "discord"}
+            aria-label={t("Continue with Discord")}
           >
-            <Apple className="size-5" />
+            {oauthBusy === "discord" ? (
+              <Loader2 className="size-5 animate-spin" />
+            ) : (
+              <svg viewBox="0 0 24 24" className="size-5" aria-hidden="true">
+                <path fill="currentColor" d="M19.54 5.32A16.45 16.45 0 0 0 15.5 4l-.5 1.02a14.6 14.6 0 0 0-6 0L8.5 4a16.4 16.4 0 0 0-4.04 1.32C1.9 9.2 1.2 13 1.55 16.74a16.2 16.2 0 0 0 4.96 2.51l1.2-1.64c-.66-.25-1.3-.57-1.9-.95l.46-.35c3.67 1.72 7.74 1.72 11.36 0l.47.35c-.6.38-1.24.7-1.9.95l1.2 1.64a16.2 16.2 0 0 0 4.96-2.51c.4-4.34-.68-8.1-2.82-11.42ZM8.35 15.1c-1.1 0-2-.99-2-2.2s.88-2.2 2-2.2 2 .99 2 2.2-.9 2.2-2 2.2Zm7.3 0c-1.1 0-2-.99-2-2.2s.88-2.2 2-2.2 2 .99 2 2.2-.9 2.2-2 2.2Z" />
+              </svg>
+            )}
           </Button>
           <Button
             variant="glass"
