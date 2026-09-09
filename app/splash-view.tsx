@@ -11,7 +11,7 @@ import { useT } from "@/lib/i18n";
 export default function SplashPage() {
   const t = useT();
   return (
-    <div className="relative grid min-h-dvh place-items-center px-6">
+    <div className="relative grid min-h-dvh place-items-center bg-black px-6">
       <div className="text-center max-w-3xl">
         <motion.div
           initial={{ opacity: 0, y: 20, scale: 0.9 }}

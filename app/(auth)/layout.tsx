@@ -2,11 +2,8 @@ import * as React from "react";
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="relative min-h-dvh overflow-hidden">
-      <div className="pointer-events-none absolute inset-0 -z-10">
-        <div className="absolute inset-0 aurora-bg" />
-        <div className="absolute inset-0 grid-fade opacity-50" />
-      </div>
+    <div className="relative min-h-dvh overflow-hidden bg-black">
+      <div className="pointer-events-none absolute inset-0 -z-10 bg-black" />
       {children}
     </div>
   );

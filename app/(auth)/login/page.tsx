@@ -25,6 +25,8 @@ const schema = z.object({
 });
 
 type FormValues = z.infer<typeof schema>;
+type ConsentChoice = "accepted" | "declined";
+const CONSENT_STORAGE_KEY = "obsidian-login-terms-consent";
 
 export default function LoginPage() {
   const t = useT();
@@ -41,6 +43,27 @@ export default function LoginPage() {
   // Tracks which OAuth provider's button is currently mid-redirect so
   // we can render the inline spinner. Only one is active at a time.
   const [oauthBusy, setOauthBusy] = React.useState<"discord" | "github" | "google" | null>(null);
+  const [consentChoice, setConsentChoice] = React.useState<ConsentChoice | null>(null);
+
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const savedConsent = window.localStorage.getItem(CONSENT_STORAGE_KEY);
+    if (savedConsent === "accepted" || savedConsent === "declined") {
+      setConsentChoice(savedConsent);
+      return;
+    }
+
+    setConsentChoice(null);
+  }, []);
+
+  const handleConsentChoice = (choice: ConsentChoice) => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(CONSENT_STORAGE_KEY, choice);
+    }
+
+    setConsentChoice(choice);
+  };
 
   // Show whatever error the /auth/callback handler bounced back with —
   // e.g. user clicked cancel on the consent screen, or Supabase rejected
@@ -152,6 +175,54 @@ export default function LoginPage() {
 
   return (
     <div className="grid min-h-dvh place-items-center px-6 py-10">
+      {consentChoice === null && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35 }}
+          className="fixed bottom-4 right-4 z-50 max-w-sm w-[calc(100%-2rem)] rounded-2xl border border-border/70 bg-background/95 p-4 shadow-2xl backdrop-blur-xl"
+        >
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <LockKeyhole className="size-4" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold">Please review our Terms & Privacy Policy</p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                By continuing, you agree to our Terms of Service and Privacy Policy.
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-primary">
+                <Link href="/terms" className="hover:underline underline-offset-2">
+                  Terms of Service
+                </Link>
+                <span className="text-muted-foreground">•</span>
+                <Link href="/privacy" className="hover:underline underline-offset-2">
+                  Privacy Policy
+                </Link>
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 flex items-center justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => handleConsentChoice("declined")}
+            >
+              Decline
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => handleConsentChoice("accepted")}
+            >
+              Accept
+            </Button>
+          </div>
+        </motion.div>
+      )}
+
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}

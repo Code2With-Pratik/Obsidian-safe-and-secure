@@ -60,13 +60,13 @@
     --accent-foreground: 240 20% 4%;
     --destructive: 0 84% 65%;
     --destructive-foreground: 240 10% 96%;
-    --border: 240 14% 16%;
-    --input: 240 14% 16%;
+    --border: 240 14% 22%;
+    --input: 240 14% 22%;
     --ring: 262 90% 68%;
 
-    --glass-bg: 240 18% 12% / 0.58;
-    --glass-border: 240 18% 30% / 0.55;
-    --glass-stroke: 240 14% 22% / 0.7;
+    --glass-bg: 240 18% 10% / 0.68;
+    --glass-border: 240 18% 38% / 0.76;
+    --glass-stroke: 240 14% 30% / 0.9;
   }
 
   * {
