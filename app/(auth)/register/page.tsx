@@ -71,7 +71,7 @@ export default function RegisterPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="w-full max-w-md glass rounded-3xl p-8"
+        className="w-full max-w-md glass rounded-3xl border border-black/50 dark:border-white/70 p-8"
       >
         <div className="flex flex-col items-center text-center mb-7">
           <NovaMascot size={56} />

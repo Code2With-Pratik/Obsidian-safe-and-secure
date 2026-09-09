@@ -31,8 +31,8 @@
 
     /* Glass tokens */
     --glass-bg: 0 0% 100% / 0.62;
-    --glass-border: 0 0% 0% / 0.45;
-    --glass-stroke: 0 0% 0% / 0.35;
+    --glass-border: 0 0% 100% / 0.75;
+    --glass-stroke: 240 10% 92% / 0.7;
 
     --font-sans: "Inter", "Segoe UI", system-ui, sans-serif;
     --font-display: "Inter", "Segoe UI", system-ui, sans-serif;
@@ -64,9 +64,9 @@
     --input: 240 14% 22%;
     --ring: 262 90% 68%;
 
-    --glass-bg: 0 0% 100% / 0.60;
-    --glass-border: 0 0% 100% / 0.78;
-    --glass-stroke: 0 0% 100% / 0.85;
+    --glass-bg: 240 18% 12% / 0.58;
+    --glass-border: 240 18% 30% / 0.55;
+    --glass-stroke: 240 14% 22% / 0.7;
   }
 
   * {

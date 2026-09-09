@@ -83,7 +83,7 @@ export default function OnboardingPage() {
               animate={{ opacity: 1, x: 0, scale: 1 }}
               exit={{ opacity: 0, x: -40, scale: 0.96 }}
               transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-              className="absolute inset-0 glass rounded-3xl p-10 flex flex-col"
+              className="absolute inset-0 glass rounded-3xl border border-black/50 dark:border-white/70 p-10 flex flex-col"
             >
               <div
                 className={`size-20 rounded-3xl bg-gradient-to-br ${slide.color} grid place-items-center text-white shadow-glow mb-8`}

@@ -163,7 +163,7 @@ export default function LoginPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35 }}
-          className="fixed bottom-4 right-4 z-50 max-w-sm w-[calc(100%-2rem)] rounded-2xl border border-black/50 bg-white/80 p-4 shadow-2xl backdrop-blur-xl dark:border-white/70 dark:bg-white/60"
+          className="fixed bottom-4 right-4 z-50 max-w-sm w-[calc(100%-2rem)] rounded-2xl border border-black/50 bg-background/95 p-4 shadow-2xl backdrop-blur-xl dark:border-white/70 dark:bg-background/95"
         >
           <div className="flex items-start gap-3">
             <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
@@ -210,7 +210,7 @@ export default function LoginPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
-        className="w-full max-w-md glass rounded-3xl p-8"
+        className="w-full max-w-md glass rounded-3xl border border-black/50 dark:border-white/70 p-8"
       >
         <div className="flex flex-col items-center text-center mb-8">
           <NovaMascot size={56} />
