@@ -159,7 +159,7 @@ export default function LoginPage() {
   return (
     <div className="grid min-h-dvh place-items-center px-6 py-10">
       {consentChoice === null && (
-        <div className="fixed inset-0 z-50 bg-black/10 backdrop-blur-[2px]">
+        <div className="fixed inset-0 z-50 bg-black/10">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
