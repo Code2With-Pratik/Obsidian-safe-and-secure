@@ -67,12 +67,14 @@ export default function RegisterPage() {
 
   return (
     <div className="grid min-h-dvh place-items-center px-6 py-10">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="w-full max-w-md glass rounded-3xl border border-black/50 dark:border-white/70 p-8"
-      >
+      <div className="relative w-full max-w-md">
+        <div className="absolute inset-2 rounded-[2rem] bg-gradient-to-br from-violet-500/35 via-fuchsia-500/25 to-cyan-400/25 blur-3xl" />
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="relative w-full glass rounded-3xl border border-black/50 dark:border-white/70 p-8"
+        >
         <div className="flex flex-col items-center text-center mb-7">
           <NovaMascot size={56} />
           <h1 className="mt-5 text-2xl font-semibold tracking-tight">Create your Obsidian</h1>
@@ -134,7 +136,8 @@ export default function RegisterPage() {
             Sign in
           </Link>
         </p>
-      </motion.div>
+        </motion.div>
+      </div>
     </div>
   );
 }

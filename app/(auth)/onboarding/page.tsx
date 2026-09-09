@@ -77,49 +77,52 @@ export default function OnboardingPage() {
 
         <div className="relative h-[420px]">
           <AnimatePresence mode="wait">
-            <motion.div
-              key={step}
-              initial={{ opacity: 0, x: 40, scale: 0.96 }}
-              animate={{ opacity: 1, x: 0, scale: 1 }}
-              exit={{ opacity: 0, x: -40, scale: 0.96 }}
-              transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
-              className="absolute inset-0 glass rounded-3xl border border-black/50 dark:border-white/70 p-10 flex flex-col"
-            >
-              <div
-                className={`size-20 rounded-3xl bg-gradient-to-br ${slide.color} grid place-items-center text-white shadow-glow mb-8`}
+            <div className="absolute inset-0">
+              <div className="absolute inset-1 rounded-[2rem] bg-gradient-to-br from-violet-500/35 via-fuchsia-500/25 to-cyan-400/25 blur-3xl" />
+              <motion.div
+                key={step}
+                initial={{ opacity: 0, x: 40, scale: 0.96 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: -40, scale: 0.96 }}
+                transition={{ duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+                className="absolute inset-0 glass rounded-3xl border border-black/50 dark:border-white/70 p-10 flex flex-col"
               >
-                {slide.icon}
-              </div>
-              <h2 className="text-3xl md:text-4xl font-display font-semibold tracking-tight text-balance">
-                {slide.title}
-              </h2>
-              <p className="mt-4 text-muted-foreground text-lg text-balance">{slide.body}</p>
-
-              <div className="mt-auto flex justify-between items-center">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={step === 0}
-                  onClick={() => setStep((s) => s - 1)}
+                <div
+                  className={`size-20 rounded-3xl bg-gradient-to-br ${slide.color} grid place-items-center text-white shadow-glow mb-8`}
                 >
-                  <ArrowLeft />
-                  Back
-                </Button>
-                {last ? (
-                  <Button asChild variant="gradient">
-                    <Link href="/register">
-                      <Sparkles />
-                      Create an account
-                    </Link>
+                  {slide.icon}
+                </div>
+                <h2 className="text-3xl md:text-4xl font-display font-semibold tracking-tight text-balance">
+                  {slide.title}
+                </h2>
+                <p className="mt-4 text-muted-foreground text-lg text-balance">{slide.body}</p>
+
+                <div className="mt-auto flex justify-between items-center">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={step === 0}
+                    onClick={() => setStep((s) => s - 1)}
+                  >
+                    <ArrowLeft />
+                    Back
                   </Button>
-                ) : (
-                  <Button variant="default" onClick={() => setStep((s) => s + 1)}>
-                    Next
-                    <ArrowRight />
-                  </Button>
-                )}
-              </div>
-            </motion.div>
+                  {last ? (
+                    <Button asChild variant="gradient">
+                      <Link href="/register">
+                        <Sparkles />
+                        Create an account
+                      </Link>
+                    </Button>
+                  ) : (
+                    <Button variant="default" onClick={() => setStep((s) => s + 1)}>
+                      Next
+                      <ArrowRight />
+                    </Button>
+                  )}
+                </div>
+              </motion.div>
+            </div>
           </AnimatePresence>
         </div>
       </div>

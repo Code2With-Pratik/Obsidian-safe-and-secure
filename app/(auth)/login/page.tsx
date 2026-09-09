@@ -159,59 +159,63 @@ export default function LoginPage() {
   return (
     <div className="grid min-h-dvh place-items-center px-6 py-10">
       {consentChoice === null && (
+        <div className="fixed inset-0 z-50 bg-black/10 backdrop-blur-[2px]">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35 }}
+            className="absolute bottom-4 right-4 max-w-sm w-[calc(100%-2rem)] rounded-2xl border border-black/50 bg-background/95 p-4 shadow-2xl backdrop-blur-xl dark:border-white/70 dark:bg-background/95"
+          >
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <LockKeyhole className="size-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold">Please review our Terms & Privacy Policy</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  By continuing, you agree to our Terms of Service and Privacy Policy.
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-primary">
+                  <Link href="/terms" className="hover:underline underline-offset-2">
+                    Terms of Service
+                  </Link>
+                  <span className="text-muted-foreground">•</span>
+                  <Link href="/privacy" className="hover:underline underline-offset-2">
+                    Privacy Policy
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => handleConsentChoice("declined")}
+              >
+                Decline
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => handleConsentChoice("accepted")}
+              >
+                Accept
+              </Button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      <div className="relative w-full max-w-md">
+        <div className="absolute inset-2 rounded-[2rem] bg-gradient-to-br from-violet-500/35 via-fuchsia-500/25 to-cyan-400/25 blur-3xl" />
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.35 }}
-          className="fixed bottom-4 right-4 z-50 max-w-sm w-[calc(100%-2rem)] rounded-2xl border border-black/50 bg-background/95 p-4 shadow-2xl backdrop-blur-xl dark:border-white/70 dark:bg-background/95"
+          transition={{ duration: 0.5 }}
+          className="relative w-full glass rounded-3xl border border-black/50 dark:border-white/70 p-8"
         >
-          <div className="flex items-start gap-3">
-            <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
-              <LockKeyhole className="size-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold">Please review our Terms & Privacy Policy</p>
-              <p className="mt-1 text-xs text-muted-foreground">
-                By continuing, you agree to our Terms of Service and Privacy Policy.
-              </p>
-              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-primary">
-                <Link href="/terms" className="hover:underline underline-offset-2">
-                  Terms of Service
-                </Link>
-                <span className="text-muted-foreground">•</span>
-                <Link href="/privacy" className="hover:underline underline-offset-2">
-                  Privacy Policy
-                </Link>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-4 flex items-center justify-end gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => handleConsentChoice("declined")}
-            >
-              Decline
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              onClick={() => handleConsentChoice("accepted")}
-            >
-              Accept
-            </Button>
-          </div>
-        </motion.div>
-      )}
-
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="w-full max-w-md glass rounded-3xl border border-black/50 dark:border-white/70 p-8"
-      >
         <div className="flex flex-col items-center text-center mb-8">
           <NovaMascot size={56} />
           <h1 className="mt-5 text-2xl font-semibold tracking-tight">{t("Welcome back")}</h1>
@@ -332,7 +336,8 @@ export default function LoginPage() {
             Privacy Policy
           </Link>
         </p>
-      </motion.div>
+        </motion.div>
+      </div>
     </div>
   );
 }
