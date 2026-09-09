@@ -163,7 +163,7 @@ export default function LoginPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35 }}
-          className="fixed bottom-4 right-4 z-50 max-w-sm w-[calc(100%-2rem)] rounded-2xl border border-white/70 bg-white/60 p-4 shadow-2xl backdrop-blur-xl"
+          className="fixed bottom-4 right-4 z-50 max-w-sm w-[calc(100%-2rem)] rounded-2xl border border-black/50 bg-white/80 p-4 shadow-2xl backdrop-blur-xl dark:border-white/70 dark:bg-white/60"
         >
           <div className="flex items-start gap-3">
             <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
