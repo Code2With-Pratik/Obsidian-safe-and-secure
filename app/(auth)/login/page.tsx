@@ -26,7 +26,6 @@ const schema = z.object({
 
 type FormValues = z.infer<typeof schema>;
 type ConsentChoice = "accepted" | "declined";
-const CONSENT_STORAGE_KEY = "obsidian-login-terms-consent";
 
 export default function LoginPage() {
   const t = useT();
@@ -45,23 +44,7 @@ export default function LoginPage() {
   const [oauthBusy, setOauthBusy] = React.useState<"discord" | "github" | "google" | null>(null);
   const [consentChoice, setConsentChoice] = React.useState<ConsentChoice | null>(null);
 
-  React.useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const savedConsent = window.localStorage.getItem(CONSENT_STORAGE_KEY);
-    if (savedConsent === "accepted" || savedConsent === "declined") {
-      setConsentChoice(savedConsent);
-      return;
-    }
-
-    setConsentChoice(null);
-  }, []);
-
   const handleConsentChoice = (choice: ConsentChoice) => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(CONSENT_STORAGE_KEY, choice);
-    }
-
     setConsentChoice(choice);
   };
 
@@ -180,7 +163,7 @@ export default function LoginPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.35 }}
-          className="fixed bottom-4 right-4 z-50 max-w-sm w-[calc(100%-2rem)] rounded-2xl border border-border/70 bg-background/95 p-4 shadow-2xl backdrop-blur-xl"
+          className="fixed bottom-4 right-4 z-50 max-w-sm w-[calc(100%-2rem)] rounded-2xl border border-white/70 bg-white/60 p-4 shadow-2xl backdrop-blur-xl"
         >
           <div className="flex items-start gap-3">
             <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
