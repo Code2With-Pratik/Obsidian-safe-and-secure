@@ -71,7 +71,7 @@ export function GhostVoicePanel({ channel }: { channel: GhostChannel }) {
                 animate={{ opacity: 1, scale: 1 }}
                 className="relative aspect-video rounded-2xl border border-white/10 overflow-hidden grid place-items-center"
                 style={{
-                  background: `radial-gradient(120% 80% at 50% 30%, hsl(${p.hue} 70% 25%), #0b0e1c 70%)`
+                  background: `radial-gradient(120% 80% at 50% 30%, hsl(${p.hue} 70% 25%), #000000 70%)`
                 }}
               >
                 <div

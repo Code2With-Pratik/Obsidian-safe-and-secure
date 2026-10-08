@@ -81,8 +81,8 @@ export function GhostCallTile({
         className="absolute inset-0"
         style={{
           background: state.cameraOn
-            ? `radial-gradient(120% 90% at 30% 20%, hsl(${identity.hue} 75% 35%), hsl(${(identity.hue + 60) % 360} 60% 18%) 60%, #05060e)`
-            : "linear-gradient(135deg,#0f172a,#020617)"
+            ? `radial-gradient(120% 90% at 30% 20%, hsl(${identity.hue} 75% 35%), hsl(${(identity.hue + 60) % 360} 60% 18%) 60%, #000000)`
+            : "linear-gradient(135deg,#000000,#000000)"
         }}
       />
 
