@@ -108,7 +108,7 @@ export default function AuthListener() {
   const disconnectCallRealtime = useCallStore((s) => s.disconnectRealtime)
 
   useEffect(() => {
-    const fetchProfile = async (userId: string) => {
+    const fetchProfile = async (userId: string, createdAt?: string) => {
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -118,6 +118,7 @@ export default function AuthListener() {
       if (data && !error) {
         setUser({
           id: data.id,
+          createdAt,
           name: data.name || 'Anonymous',
           username: data.username || 'user',
           avatar: data.avatar || `https://api.dicebear.com/9.x/notionists/svg?seed=${data.id}`,
@@ -147,13 +148,14 @@ export default function AuthListener() {
         if (!existing || existing.id !== session.user.id) {
           setUser({
             id: session.user.id,
+            createdAt: session.user.created_at,
             name: session.user.email?.split('@')[0] || 'You',
             username: session.user.email?.split('@')[0] || 'you',
             avatar: `https://api.dicebear.com/9.x/notionists/svg?seed=${session.user.id}`,
             status: 'online',
           })
         }
-        fetchProfile(session.user.id)
+        fetchProfile(session.user.id, session.user.created_at)
         fetchChats()
         fetchBlocked()
         initializeRealtime()

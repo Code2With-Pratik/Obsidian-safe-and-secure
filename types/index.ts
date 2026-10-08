@@ -9,6 +9,7 @@ export interface UserLinks {
 
 export interface User {
   id: ID;
+  createdAt?: string;
   name: string;
   username: string;
   avatar: string;

@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { motion } from "framer-motion";
-import { Apple, Github, Loader2, LockKeyhole, Mail } from "lucide-react";
+import { Github, Loader2, LockKeyhole, Mail } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
@@ -25,6 +25,7 @@ const schema = z.object({
 });
 
 type FormValues = z.infer<typeof schema>;
+type ConsentChoice = "accepted" | "declined";
 
 export default function LoginPage() {
   const t = useT();
@@ -40,7 +41,12 @@ export default function LoginPage() {
   });
   // Tracks which OAuth provider's button is currently mid-redirect so
   // we can render the inline spinner. Only one is active at a time.
-  const [oauthBusy, setOauthBusy] = React.useState<"github" | "google" | null>(null);
+  const [oauthBusy, setOauthBusy] = React.useState<"discord" | "github" | "google" | null>(null);
+  const [consentChoice, setConsentChoice] = React.useState<ConsentChoice | null>(null);
+
+  const handleConsentChoice = (choice: ConsentChoice) => {
+    setConsentChoice(choice);
+  };
 
   // Show whatever error the /auth/callback handler bounced back with —
   // e.g. user clicked cancel on the consent screen, or Supabase rejected
@@ -125,14 +131,91 @@ export default function LoginPage() {
     }
   };
 
+  const signInWithDiscord = async () => {
+    if (oauthBusy) return;
+    setOauthBusy("discord");
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: "discord",
+        options: {
+          redirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      if (error) {
+        toast({ title: "Discord sign-in failed", description: error.message });
+        setOauthBusy(null);
+      }
+      // On success browser navigates to Discord — button stays busy.
+    } catch (err) {
+      toast({
+        title: "Discord sign-in failed",
+        description: err instanceof Error ? err.message : "Unknown error"
+      });
+      setOauthBusy(null);
+    }
+  };
+
   return (
     <div className="grid min-h-dvh place-items-center px-6 py-10">
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5 }}
-        className="w-full max-w-md glass rounded-3xl p-8"
-      >
+      {consentChoice === null && (
+        <div className="fixed inset-0 z-50 bg-black/10">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35 }}
+            className="absolute bottom-4 right-4 max-w-sm w-[calc(100%-2rem)] rounded-2xl border border-black/50 bg-background/95 p-4 shadow-2xl backdrop-blur-xl dark:border-white/70 dark:bg-background/95"
+          >
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <LockKeyhole className="size-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold">Please review our Terms & Privacy Policy</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  By continuing, you agree to our Terms of Service and Privacy Policy.
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-primary">
+                  <Link href="/terms" className="hover:underline underline-offset-2">
+                    Terms of Service
+                  </Link>
+                  <span className="text-muted-foreground">•</span>
+                  <Link href="/privacy" className="hover:underline underline-offset-2">
+                    Privacy Policy
+                  </Link>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 flex items-center justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => handleConsentChoice("declined")}
+              >
+                Decline
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => handleConsentChoice("accepted")}
+              >
+                Accept
+              </Button>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      <div className="relative w-full max-w-md">
+        <div className="absolute inset-2 rounded-[2rem] bg-gradient-to-br from-violet-500/35 via-fuchsia-500/25 to-cyan-400/25 blur-3xl" />
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.5 }}
+          className="relative w-full glass rounded-3xl border border-black/50 dark:border-white/70 p-8"
+        >
         <div className="flex flex-col items-center text-center mb-8">
           <NovaMascot size={56} />
           <h1 className="mt-5 text-2xl font-semibold tracking-tight">{t("Welcome back")}</h1>
@@ -145,10 +228,17 @@ export default function LoginPage() {
             size="lg"
             className="!h-11"
             type="button"
-            disabled
-            title={t("Apple sign-in not configured")}
+            onClick={signInWithDiscord}
+            disabled={oauthBusy === "discord"}
+            aria-label={t("Continue with Discord")}
           >
-            <Apple className="size-5" />
+            {oauthBusy === "discord" ? (
+              <Loader2 className="size-5 animate-spin" />
+            ) : (
+              <svg viewBox="0 0 24 24" className="size-5" aria-hidden="true">
+                <path fill="currentColor" d="M19.54 5.32A16.45 16.45 0 0 0 15.5 4l-.5 1.02a14.6 14.6 0 0 0-6 0L8.5 4a16.4 16.4 0 0 0-4.04 1.32C1.9 9.2 1.2 13 1.55 16.74a16.2 16.2 0 0 0 4.96 2.51l1.2-1.64c-.66-.25-1.3-.57-1.9-.95l.46-.35c3.67 1.72 7.74 1.72 11.36 0l.47.35c-.6.38-1.24.7-1.9.95l1.2 1.64a16.2 16.2 0 0 0 4.96-2.51c.4-4.34-.68-8.1-2.82-11.42ZM8.35 15.1c-1.1 0-2-.99-2-2.2s.88-2.2 2-2.2 2 .99 2 2.2-.9 2.2-2 2.2Zm7.3 0c-1.1 0-2-.99-2-2.2s.88-2.2 2-2.2 2 .99 2 2.2-.9 2.2-2 2.2Z" />
+              </svg>
+            )}
           </Button>
           <Button
             variant="glass"
@@ -246,7 +336,8 @@ export default function LoginPage() {
             Privacy Policy
           </Link>
         </p>
-      </motion.div>
+        </motion.div>
+      </div>
     </div>
   );
 }

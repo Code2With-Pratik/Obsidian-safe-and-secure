@@ -44,29 +44,29 @@
   }
 
   .dark {
-    --background: 240 20% 4%;
-    --foreground: 240 10% 96%;
-    --card: 240 18% 8%;
-    --card-foreground: 240 10% 96%;
-    --popover: 240 18% 8%;
-    --popover-foreground: 240 10% 96%;
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+    --card: 0 0% 8%;
+    --card-foreground: 0 0% 100%;
+    --popover: 0 0% 8%;
+    --popover-foreground: 0 0% 100%;
     --primary: 262 90% 68%;
-    --primary-foreground: 240 20% 4%;
-    --secondary: 240 14% 14%;
-    --secondary-foreground: 240 10% 96%;
-    --muted: 240 14% 12%;
-    --muted-foreground: 240 6% 65%;
+    --primary-foreground: 0 0% 0%;
+    --secondary: 0 0% 14%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 65%;
     --accent: 188 91% 60%;
-    --accent-foreground: 240 20% 4%;
+    --accent-foreground: 0 0% 0%;
     --destructive: 0 84% 65%;
     --destructive-foreground: 240 10% 96%;
-    --border: 240 14% 16%;
-    --input: 240 14% 16%;
+    --border: 240 14% 22%;
+    --input: 240 14% 22%;
     --ring: 262 90% 68%;
 
-    --glass-bg: 240 18% 12% / 0.58;
-    --glass-border: 240 18% 30% / 0.55;
-    --glass-stroke: 240 14% 22% / 0.7;
+    --glass-bg: 0 0% 8% / 0.58;
+    --glass-border: 0 0% 30% / 0.55;
+    --glass-stroke: 0 0% 22% / 0.7;
   }
 
   * {
@@ -114,6 +114,12 @@
       0 1px 0 0 rgba(255, 255, 255, 0.04),
       inset 0 1px 0 0 rgba(255, 255, 255, 0.10),
       inset 0 -1px 0 0 rgba(0, 0, 0, 0.06);
+  }
+
+  .dark .glass,
+  .dark .glass-strong,
+  .dark .glass-subtle {
+    border-color: hsl(var(--glass-border));
   }
 
   .glass-strong {

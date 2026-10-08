@@ -1510,7 +1510,7 @@ function TextLabel({ el }: { el: import("@/store/use-whiteboard-store").TextElem
               setShowSize((v) => !v);
               setShowFont(false);
             }}
-            className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full bg-slate-900/90 text-white text-xs font-medium shadow-floating border border-white/10 hover:bg-slate-900 transition tabular-nums"
+            className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full bg-black/90 text-white text-xs font-medium shadow-floating border border-white/10 hover:bg-black transition tabular-nums"
             aria-label={t("Font size")}
           >
             <Type className="size-3.5" /> {fontSize}
@@ -1522,7 +1522,7 @@ function TextLabel({ el }: { el: import("@/store/use-whiteboard-store").TextElem
               setShowSize(false);
             }}
             style={{ fontFamily }}
-            className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full bg-slate-900/90 text-white text-xs font-medium shadow-floating border border-white/10 hover:bg-slate-900 transition"
+            className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-full bg-black/90 text-white text-xs font-medium shadow-floating border border-white/10 hover:bg-black transition"
             aria-label={t("Change font")}
           >
             Aa
@@ -1545,7 +1545,7 @@ function TextLabel({ el }: { el: import("@/store/use-whiteboard-store").TextElem
       {/* Font picker popover — taller chips that preview each font. */}
       {showFont && (
         <div
-          className="absolute -top-[5.5rem] left-0 flex flex-wrap gap-1.5 bg-slate-900/95 backdrop-blur rounded-2xl border border-white/10 shadow-floating p-2 z-30 max-w-[320px]"
+          className="absolute -top-[5.5rem] left-0 flex flex-wrap gap-1.5 bg-black/95 backdrop-blur rounded-2xl border border-white/10 shadow-floating p-2 z-30 max-w-[320px]"
           onMouseEnter={() => setHoverDeferred(true)}
           onMouseLeave={() => setHoverDeferred(false)}
           onPointerDown={(e) => e.stopPropagation()}
@@ -1573,7 +1573,7 @@ function TextLabel({ el }: { el: import("@/store/use-whiteboard-store").TextElem
       {/* Font-size picker popover */}
       {showSize && (
         <div
-          className="absolute -top-[5.5rem] right-0 flex gap-1 bg-slate-900/95 backdrop-blur rounded-2xl border border-white/10 shadow-floating p-2 z-30"
+          className="absolute -top-[5.5rem] right-0 flex gap-1 bg-black/95 backdrop-blur rounded-2xl border border-white/10 shadow-floating p-2 z-30"
           onMouseEnter={() => setHoverDeferred(true)}
           onMouseLeave={() => setHoverDeferred(false)}
           onPointerDown={(e) => e.stopPropagation()}
