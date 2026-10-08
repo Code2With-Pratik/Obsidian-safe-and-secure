@@ -4,8 +4,6 @@ import * as React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import {
-  MessageCircle,
-  Sparkles,
   Pencil,
   Settings,
   Github,
@@ -21,11 +19,11 @@ import {
 } from "lucide-react";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Switch } from "@/components/ui/switch";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useAuthStore } from "@/store/use-auth-store";
+import { useSettingsStore } from "@/store/use-settings-store";
 import { initials, cn } from "@/lib/utils";
 import { EditProfileDialog } from "@/features/profile/edit-profile-dialog";
 import { ShareProfileDialog } from "@/features/profile/share-profile-dialog";
@@ -37,6 +35,22 @@ export default function ProfilePage() {
   const t = useT();
   const user = useAuthStore((s) => s.user);
   const name = user?.name || "New User";
+  const privacy = useSettingsStore((s) => s.privacy);
+  const togglePrivacy = useSettingsStore((s) => s.togglePrivacy);
+  const statusLabels = {
+    online: t("Online"),
+    away: t("Away"),
+    busy: t("Busy"),
+    offline: t("Offline")
+  };
+  const status = user?.status || "offline";
+  const joinedDate = user?.createdAt
+    ? new Date(user.createdAt).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric"
+      })
+    : null;
   const [editOpen, setEditOpen] = React.useState(false);
   const [shareOpen, setShareOpen] = React.useState(false);
   const [qrOpen, setQrOpen] = React.useState(false);
@@ -116,9 +130,6 @@ export default function ProfilePage() {
             <div className="flex-1">
               <div className="flex items-center gap-2 flex-wrap">
                 <h1 className="text-4xl md:text-5xl font-display font-semibold tracking-tight">{name}</h1>
-                <Badge variant="cyan">
-                  <Sparkles className="size-3" /> Obsidian Plus
-                </Badge>
               </div>
               {/* `text-muted-foreground` was disappearing against the
                   banner gradient. Using the theme's `--foreground` token at
@@ -128,9 +139,7 @@ export default function ProfilePage() {
                 @{user?.username || "user"}
                 {user?.pronouns ? ` · ${user.pronouns}` : ""}
               </p>
-              <p className="mt-2 max-w-xl">
-                {user?.profession ?? t("Designing the future, one pixel at a time.")}
-              </p>
+              {user?.profession && <p className="mt-2 max-w-xl">{user.profession}</p>}
               <div className="mt-3 flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
                 {user?.location && (
                   <span className="inline-flex items-center gap-1.5">
@@ -138,10 +147,16 @@ export default function ProfilePage() {
                   </span>
                 )}
                 <span className="inline-flex items-center gap-1.5">
-                  <Calendar className="size-3.5" /> {t("Joined")} Mar 2024
+                  <Calendar className="size-3.5" /> {t("Joined")} {joinedDate || t("Recently")}
                 </span>
-                <span className="inline-flex items-center gap-1.5 text-emerald-400">
-                  <span className="size-1.5 rounded-full bg-emerald-400" /> {t("Online")} · {t("designing")}
+                <span className="inline-flex items-center gap-1.5">
+                  <span className={cn(
+                    "size-1.5 rounded-full",
+                    status === "online" && "bg-emerald-400",
+                    status === "away" && "bg-amber-400",
+                    status === "busy" && "bg-red-400",
+                    status === "offline" && "bg-muted-foreground"
+                  )} /> {statusLabels[status]}
                 </span>
               </div>
             </div>
@@ -182,8 +197,7 @@ export default function ProfilePage() {
                 <div className="glass rounded-2xl p-5">
                   <h3 className="font-semibold text-sm mb-3">{t("Bio card")}</h3>
                   <p className="text-sm text-muted-foreground whitespace-pre-line">
-                    {user?.bio ??
-                      t("Senior product designer, ex-Linear, ex-Arc. I care deeply about the texture of digital experiences. Currently architecting Obsidian — a futuristic OS for communication.")}
+                    {user?.bio || t("No bio yet.")}
                   </p>
                 </div>
 
@@ -238,26 +252,26 @@ export default function ProfilePage() {
 
             <TabsContent value="activity" className="mt-5">
               <div className="glass rounded-2xl p-5 space-y-3">
-                {[
-                  { msg: "Joined ghost room 'Designers Unfiltered'", at: "5 min ago" },
-                  { msg: "Pinned a message in Aurora Design Lab", at: "1 hr ago" },
-                  { msg: "Posted a new story", at: "3 hr ago" },
-                  { msg: "Started a video meeting with 4 people", at: "Yesterday" }
-                ].map((a) => (
-                  <div key={a.msg} className="flex items-center gap-3 text-sm">
-                    <div className="size-2 rounded-full bg-primary" />
-                    <span className="flex-1">{t(a.msg)}</span>
-                    <span className="text-xs text-muted-foreground">{t(a.at)}</span>
-                  </div>
-                ))}
+                <p className="text-sm text-muted-foreground">{t("No activity yet.")}</p>
               </div>
             </TabsContent>
 
             <TabsContent value="privacy" className="mt-5">
               <div className="glass rounded-2xl p-5 space-y-2">
-                <PrivacyRow icon={<Lock />} label={t("Last seen")} sub={t("Friends only")} />
-                <PrivacyRow icon={<Shield />} label={t("Profile photo")} sub={t("Everyone")} />
-                <PrivacyRow icon={<MessageCircle />} label={t("Who can message me")} sub={t("People I know")} />
+                <PrivacyRow
+                  icon={<Lock />}
+                  label={t("Last seen")}
+                  sub={privacy.lastSeen ? t("Visible") : t("Hidden")}
+                  checked={privacy.lastSeen}
+                  onCheckedChange={(value) => togglePrivacy("lastSeen", value)}
+                />
+                <PrivacyRow
+                  icon={<Shield />}
+                  label={t("Profile photo")}
+                  sub={privacy.profilePhoto ? t("Everyone") : t("Hidden")}
+                  checked={privacy.profilePhoto}
+                  onCheckedChange={(value) => togglePrivacy("profilePhoto", value)}
+                />
               </div>
             </TabsContent>
           </Tabs>
@@ -346,13 +360,16 @@ function LinkRow({
 function PrivacyRow({
   icon,
   label,
-  sub
+  sub,
+  checked,
+  onCheckedChange
 }: {
   icon: React.ReactNode;
   label: string;
   sub: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
 }) {
-  const [v, setV] = React.useState(true);
   return (
     <div className="flex items-center gap-3 p-2 rounded-xl glass-subtle">
       <div className="size-9 rounded-lg bg-foreground/10 grid place-items-center [&_svg]:size-4">{icon}</div>
@@ -360,7 +377,7 @@ function PrivacyRow({
         <div className="text-sm font-medium">{label}</div>
         <div className="text-[11px] text-muted-foreground">{sub}</div>
       </div>
-      <Switch checked={v} onCheckedChange={setV} />
+      <Switch checked={checked} onCheckedChange={onCheckedChange} />
     </div>
   );
 }

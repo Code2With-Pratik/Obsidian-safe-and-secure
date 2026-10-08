@@ -59,9 +59,9 @@
     --accent: 188 91% 60%;
     --accent-foreground: 0 0% 0%;
     --destructive: 0 84% 65%;
-    --destructive-foreground: 0 0% 100%;
-    --border: 0 0% 16%;
-    --input: 0 0% 16%;
+    --destructive-foreground: 240 10% 96%;
+    --border: 240 14% 22%;
+    --input: 240 14% 22%;
     --ring: 262 90% 68%;
 
     --glass-bg: 0 0% 8% / 0.58;
@@ -114,6 +114,12 @@
       0 1px 0 0 rgba(255, 255, 255, 0.04),
       inset 0 1px 0 0 rgba(255, 255, 255, 0.10),
       inset 0 -1px 0 0 rgba(0, 0, 0, 0.06);
+  }
+
+  .dark .glass,
+  .dark .glass-strong,
+  .dark .glass-subtle {
+    border-color: hsl(var(--glass-border));
   }
 
   .glass-strong {
