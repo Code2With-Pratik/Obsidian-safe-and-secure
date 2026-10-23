@@ -1,3 +1,15 @@
+## 🏗️ System Architecture
+
+Obsidian's architecture connects authentication, real-time messaging, social spaces, collaboration tools, and external services.
+
+```mermaid
+flowchart TD
+
+...your entire existing Mermaid diagram...
+
+class node_authstate,node_chatstate,node_callstate,node_settingsstate,node_supabaseclient,node_supabaseserver,node_supabase,node_livekit,node_klipy toneIndigo
+```
+
 <p align="center">
   <img src="public/og-default.jpg" alt="Obsidian — The Future of Communication" width="100%" />
 </p>
