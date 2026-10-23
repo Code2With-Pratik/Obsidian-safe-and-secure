@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
+    "test:agent": "node --test tests/agent-readiness.test.mjs",
     "supabase:gen": "supabase gen types typescript --local > types/supabase.ts"
   },
   "dependencies": {

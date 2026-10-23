@@ -450,6 +450,13 @@ Copy `.env.example` to `.env.local` and configure the services you want to enabl
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Yes | Public | Supabase publishable key used for authenticated client access |
 | `SUPABASE_SECRET_KEY` | For full auth flows | Server only | Supabase Admin API access, including pre-confirmed signup |
 | `NEXT_PUBLIC_SITE_URL` | Yes in production | Public | Canonical application URL for authentication redirects |
+| `ORGANIZATION_CONTACT_EMAIL` | For complete organization schema | Public output | Support email emitted through homepage JSON-LD |
+| `ORGANIZATION_CONTACT_PHONE` | For complete organization schema | Public output | Support phone number emitted through homepage JSON-LD |
+| `ORGANIZATION_STREET_ADDRESS` | For complete organization schema | Public output | Street address emitted through homepage JSON-LD |
+| `ORGANIZATION_ADDRESS_LOCALITY` | For complete organization schema | Public output | City or locality emitted through homepage JSON-LD |
+| `ORGANIZATION_ADDRESS_REGION` | For complete organization schema | Public output | State or region emitted through homepage JSON-LD |
+| `ORGANIZATION_POSTAL_CODE` | For complete organization schema | Public output | Postal code emitted through homepage JSON-LD |
+| `ORGANIZATION_ADDRESS_COUNTRY` | For complete organization schema | Public output | Country code emitted through homepage JSON-LD |
 | `KLIPY_API_KEY` | No | Server only | GIF, sticker, and meme search |
 | `LIVEKIT_URL` | No | Server only | LiveKit WebSocket endpoint used when issuing call tokens |
 | `LIVEKIT_API_KEY` | No | Server only | LiveKit server API key |

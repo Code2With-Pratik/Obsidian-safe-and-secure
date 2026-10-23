@@ -14,11 +14,18 @@ export default function NotFound() {
           Lost in <span className="neon-text">the static</span>
         </h1>
         <p className="text-muted-foreground mt-3">
-          The room you're looking for vanished. Or maybe it was a ghost.
+          The page or room you requested does not exist, may have moved, or is no longer
+          available. Return home or use one of the public resources below.
         </p>
         <Button asChild size="lg" variant="gradient" className="mt-6">
-          <Link href="/chats">Back to chats</Link>
+          <Link href="/">Return home</Link>
         </Button>
+        <nav aria-label="Error recovery" className="mt-6 flex flex-wrap justify-center gap-4 text-sm">
+          <Link href="/about" className="text-primary hover:underline">About</Link>
+          <Link href="/contact" className="text-primary hover:underline">Contact</Link>
+          <a href="/llms.txt" className="text-primary hover:underline">Agent instructions</a>
+          <a href="/sitemap.xml" className="text-primary hover:underline">Sitemap</a>
+        </nav>
       </div>
     </div>
   );

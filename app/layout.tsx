@@ -12,6 +12,13 @@ import "./globals.css";
 import { fontVariables } from "./fonts";
 import { AppProviders } from "@/providers/app-providers";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import {
+  getStructuredData,
+  SITE_DESCRIPTION,
+  SITE_NAME,
+  SITE_TITLE,
+  SITE_URL
+} from "@/lib/site-config";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -51,12 +58,6 @@ const shadowsIntoLight = Shadows_Into_Light({
   display: "swap"
 });
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
-const SITE_NAME = "Obsidian";
-const SITE_TITLE = "Obsidian · The Future of Communication";
-const SITE_DESCRIPTION =
-  "Obsidian is a next-generation communication ecosystem — chats, ghost rooms, calls, stories, whiteboards and an internal browser, all in one futuristic OS for talking, building and connecting.";
-
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
@@ -69,7 +70,8 @@ export const metadata: Metadata = {
   creator: "Obsidian Labs",
   publisher: "Obsidian Labs",
   keywords: [
-    "Obsidian",
+    "Obsidian Safe & Secure",
+    "Obsidian communication platform",
     "secure messaging",
     "encrypted chat",
     "ghost rooms",
@@ -128,13 +130,23 @@ export const viewport: Viewport = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const structuredData = JSON.stringify(getStructuredData()).replace(/</g, "\\u003c");
+
   return (
     <html
       lang="en"
       suppressHydrationWarning
       className={`${inter.variable} ${jbMono.variable} ${indieFlower.variable} ${merienda.variable} ${caveat.variable} ${permanentMarker.variable} ${shadowsIntoLight.variable} ${fontVariables}`}
     >
+      <head>
+        <link rel="alternate" type="text/markdown" href="/" />
+        <link rel="help" href="/llms.txt" />
+      </head>
       <body className="min-h-dvh font-sans antialiased">
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: structuredData }}
+        />
         <AppProviders>
           <TooltipProvider delayDuration={200}>
             {children}

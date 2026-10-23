@@ -11,8 +11,9 @@ import { useT } from "@/lib/i18n";
 export default function SplashPage() {
   const t = useT();
   return (
-    <div className="relative grid min-h-dvh place-items-center bg-background px-6">
-      <div className="text-center max-w-3xl">
+    <main className="relative bg-background">
+      <section className="grid min-h-dvh place-items-center px-6" aria-labelledby="home-title">
+        <div className="text-center max-w-3xl">
         <motion.div
           initial={{ opacity: 0, y: 20, scale: 0.9 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -23,12 +24,13 @@ export default function SplashPage() {
         </motion.div>
 
         <motion.h1
+          id="home-title"
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.25, duration: 0.7 }}
           className="mt-10 text-5xl md:text-7xl font-display font-semibold tracking-tight text-balance"
         >
-          {t("The future of")} <span className="neon-text">{t("communication")}</span>.
+          <span className="neon-text">Obsidian</span>: {t("the future of secure communication")}.
         </motion.h1>
 
         <motion.p
@@ -37,7 +39,7 @@ export default function SplashPage() {
           transition={{ delay: 0.4, duration: 0.7 }}
           className="mt-6 text-lg md:text-xl text-muted-foreground text-balance"
         >
-          {t("Chats, calls, ghost rooms, stories, whiteboards and an internal browser — one luminous operating system for the people, ideas and stories you carry with you.")}
+          {t("Private chats, voice and video calls, ghost rooms, stories, communities, whiteboards and secure files — one luminous workspace for the people, ideas and conversations that matter.")}
         </motion.p>
 
         <motion.div
@@ -75,7 +77,75 @@ export default function SplashPage() {
           <span>·</span>
           <span>{t("Open standards")}</span>
         </motion.div>
-      </div>
-    </div>
+        </div>
+      </section>
+
+      <section
+        className="border-t border-border/60 bg-card/20 px-6 py-20"
+        aria-labelledby="platform-overview"
+      >
+        <div className="mx-auto max-w-6xl">
+          <div className="mx-auto max-w-3xl text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary">
+              One connected communication platform
+            </p>
+            <h2
+              id="platform-overview"
+              className="mt-4 text-3xl font-display font-semibold tracking-tight md:text-5xl"
+            >
+              Talk, create, and collaborate without changing context.
+            </h2>
+            <p className="mt-5 text-base leading-7 text-muted-foreground md:text-lg">
+              Obsidian Safe &amp; Secure combines everyday communication with creative and
+              collaborative tools. Conversations, live calls, shared media, communities,
+              visual planning, and protected files remain connected through one account and
+              one consistent interface.
+            </p>
+          </div>
+
+          <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <article className="glass rounded-3xl p-6">
+              <h3 className="font-semibold">Real-time conversations</h3>
+              <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                Exchange direct, group, channel, and secret messages with presence, typing
+                indicators, reactions, replies, polls, attachments, and scheduled delivery.
+              </p>
+            </article>
+            <article className="glass rounded-3xl p-6">
+              <h3 className="font-semibold">Calls and shared moments</h3>
+              <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                Move from a conversation into a LiveKit-powered voice or video call, then
+                share stories, media, music, and updates without leaving the platform.
+              </p>
+            </article>
+            <article className="glass rounded-3xl p-6">
+              <h3 className="font-semibold">Spaces for collaboration</h3>
+              <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                Build communities, join ephemeral ghost rooms, and turn ideas into shared
+                diagrams with a collaborative whiteboard designed for active teams.
+              </p>
+            </article>
+            <article className="glass rounded-3xl p-6">
+              <h3 className="font-semibold">Privacy-conscious by design</h3>
+              <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                Authentication, row-level data controls, secure transport, explicit privacy
+                guidance, and a protected file vault help keep personal work organized.
+              </p>
+            </article>
+          </div>
+
+          <nav
+            aria-label="Learn more about Obsidian"
+            className="mt-12 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm"
+          >
+            <Link href="/about" className="text-primary hover:underline">About Obsidian</Link>
+            <Link href="/contact" className="text-primary hover:underline">Contact &amp; support</Link>
+            <Link href="/privacy" className="text-primary hover:underline">Privacy</Link>
+            <Link href="/terms" className="text-primary hover:underline">Terms</Link>
+            <a href="/llms.txt" className="text-primary hover:underline">Agent instructions</a>
+          </nav>
+        </div>
+      </section>
+    </main>
   );
 }
