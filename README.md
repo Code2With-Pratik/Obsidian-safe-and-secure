@@ -1,15 +1,90 @@
+
 ## 🏗️ System Architecture
 
-Obsidian's architecture connects authentication, real-time messaging, social spaces, collaboration tools, and external services.
-
+Obsidian connects authentication, real-time messaging, social spaces, collaboration tools, and external services.
 
 ```mermaid
 flowchart TD
-    A[User] --> B[Obsidian App]
-    B --> C[Supabase Auth]
-    B --> D[Real-time Messaging]
-    B --> E[LiveKit Calls]
+    USER["👤 User"]
+    APP["Obsidian App<br/>Next.js + React"]
+
+    USER --> APP
+
+    subgraph AUTH["Authentication"]
+        LOGIN["Login / Signup"]
+        GOOGLE["Google OAuth"]
+        GITHUB["GitHub OAuth"]
+        AUTH_SERVICE["Supabase Auth"]
+        LOGIN --> AUTH_SERVICE
+        GOOGLE --> AUTH_SERVICE
+        GITHUB --> AUTH_SERVICE
+    end
+
+    subgraph MESSAGING["Messaging"]
+        CHATS["Direct Messages"]
+        GROUPS["Group Chats"]
+        GHOST["Ghost Rooms"]
+        SCHEDULED["Scheduled Messages"]
+    end
+
+    subgraph SOCIAL["Social and Collaboration"]
+        DISCOVER["Discover"]
+        WHITEBOARD["Collaborative Whiteboard"]
+        VAULT["Secure Vault"]
+    end
+
+    subgraph CALLS["Communication"]
+        AUDIO["Audio Calls"]
+        VIDEO["Video Calls"]
+        LIVEKIT["LiveKit"]
+        AUDIO --> LIVEKIT
+        VIDEO --> LIVEKIT
+    end
+
+    subgraph BACKEND["Backend Services"]
+        SUPABASE_AUTH["Supabase Authentication"]
+        DATABASE["Supabase Database"]
+        REALTIME["Supabase Realtime"]
+        STORAGE["Supabase Storage"]
+    end
+
+    APP --> LOGIN
+    APP --> CHATS
+    APP --> GROUPS
+    APP --> GHOST
+    APP --> SCHEDULED
+    APP --> DISCOVER
+    APP --> WHITEBOARD
+    APP --> VAULT
+    APP --> AUDIO
+    APP --> VIDEO
+
+    AUTH_SERVICE --> SUPABASE_AUTH
+
+    CHATS --> DATABASE
+    GROUPS --> DATABASE
+    SCHEDULED --> DATABASE
+    DISCOVER --> DATABASE
+    VAULT --> STORAGE
+    WHITEBOARD --> REALTIME
+
+    CHATS <--> REALTIME
+    GROUPS <--> REALTIME
+    GHOST <--> REALTIME
+
+    classDef app fill:#172554,stroke:#60a5fa,color:#ffffff
+    classDef auth fill:#312e81,stroke:#a5b4fc,color:#ffffff
+    classDef messaging fill:#064e3b,stroke:#34d399,color:#ffffff
+    classDef social fill:#713f12,stroke:#fbbf24,color:#ffffff
+    classDef backend fill:#3f1d2e,stroke:#fb7185,color:#ffffff
+
+    class APP app
+    class LOGIN,GOOGLE,GITHUB,AUTH_SERVICE,SUPABASE_AUTH auth
+    class CHATS,GROUPS,GHOST,SCHEDULED messaging
+    class DISCOVER,WHITEBOARD,VAULT social
+    class DATABASE,REALTIME,STORAGE,LIVEKIT backend
 ```
+
 
 
 <p align="center">
