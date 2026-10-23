@@ -1,7 +1,126 @@
+<p align="center">
+  <img src="public/og-default.jpg" alt="Obsidian — The Future of Communication" width="100%" />
+</p>
 
-## 🏗️ System Architecture
+<h1 align="center">Obsidian</h1>
 
-Obsidian's architecture connects authentication, real-time messaging, social spaces, collaboration tools, and external services.
+<p align="center">
+  <strong>The Future of Communication.</strong><br/>
+  A futuristic communication OS — real-time chats, stories, voice & video calls, ghost rooms, communities, a collaborative whiteboard and an encrypted vault, all wrapped in a luminous glassmorphic interface and backed by Supabase + LiveKit.
+</p>
+
+<img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/3108cfbc-944c-49df-b03b-e7cd3298f530" />
+
+
+<p align="center">
+  <img alt="Next.js" src="https://img.shields.io/badge/Next.js-16-black?logo=next.js" />
+  <img alt="React" src="https://img.shields.io/badge/React-19-149ECA?logo=react" />
+  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript" />
+  <img alt="Tailwind CSS" src="https://img.shields.io/badge/Tailwind-3.4-38BDF8?logo=tailwindcss" />
+  <img alt="Framer Motion" src="https://img.shields.io/badge/Framer_Motion-11-FF2BC2?logo=framer" />
+  <img alt="Supabase" src="https://img.shields.io/badge/Supabase-Realtime-3ECF8E?logo=supabase" />
+  <img alt="LiveKit" src="https://img.shields.io/badge/LiveKit-Cloud-FF3366" />
+</p>
+
+> Think Telegram × Discord × Instagram × WhatsApp × Linear × Arc — distilled into a single secure, animated OS for messages, calls, ghost rooms, stories, files and whiteboards. Built with a real-time Supabase backend and a LiveKit-powered call stack.
+
+> **Complete documentation:** Browse the architecture, codebase, and implementation guides on [DeepWiki](https://deepwiki.com/Code2With-Pratik/Obsidian-safe-and-secure).
+
+<p align="center">
+  <a href="#docker-quick-start"><img alt="Docker quick start" src="https://img.shields.io/badge/Quick_Start-Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" /></a>
+  <a href="#getting-started-from-source"><img alt="Source setup" src="https://img.shields.io/badge/Setup-From_Source-6F42C1?style=for-the-badge&logo=github&logoColor=white" /></a>
+  <a href="https://deepwiki.com/Code2With-Pratik/Obsidian-safe-and-secure"><img alt="Open DeepWiki" src="https://img.shields.io/badge/Docs-DeepWiki-16A34A?style=for-the-badge&logo=readthedocs&logoColor=white" /></a>
+</p>
+
+---
+
+## Table of contents
+
+1. [Overview](#overview)
+2. [Features](#features)
+3. [Architecture](#architecture)
+4. [Tech stack](#tech-stack)
+5. [Docker quick start](#docker-quick-start)
+6. [Getting started from source](#getting-started-from-source)
+7. [Supabase setup](#supabase-setup)
+8. [LiveKit setup](#livekit-setup)
+9. [Environment variables](#environment-variables)
+10. [Scripts](#scripts)
+11. [Project structure](#project-structure)
+12. [Realtime channels](#realtime-channels)
+13. [Internationalization](#internationalization)
+14. [Keyboard shortcuts](#keyboard-shortcuts)
+15. [Notes & caveats](#notes--caveats)
+
+---
+
+## Overview
+
+Obsidian is a premium, production-grade communication platform built on **Next.js 16 (App Router)** with **React 19**. Every surface is fully wired end-to-end to a **Supabase** backend (Postgres + Auth + Realtime + Storage + pg_cron) and a **LiveKit Cloud** call stack — chats, stories, presence, typing, reactions, calls, scheduled messages, blocked users and storage all persist and sync across devices in real time.
+
+The product ships with a theme engine (dark / light / system + accent colors + glass intensity), 9-language internationalization with RTL, a command palette, a **native AI assistant also named Obsidian**, route-level skeleton loaders, and motion polish on every interaction.
+
+---
+
+## Features
+
+### 💬 Chats — full-stack real-time
+- **DMs, groups, channels, and secret chats**, with member add/remove dialogs and "Block contact" / "Clear chat" / "Export chat" actions.
+- **Rich messages**: text, **voice notes** with live waveform, images & videos, stickers, **GIFs** (Klipy), memes, **polls** (with image + voter avatars + slim progress bars), files (PDFs render inline), contacts, location, and **scheduled messages** (clock-only tick on the author side until pg_cron flips them to "sent" at the scheduled time).
+- **Realtime sync**: messages, reactions, pins, edits and deletes propagate over a per-user Postgres-changes channel with `REPLICA IDENTITY FULL` so DELETE events carry full row context.
+- **Presence**: online/offline with `last_seen_at` updates on disconnect.
+- **Typing**: dedicated Supabase Realtime broadcast channel — instant `typing…` on first keystroke, auto-clears 1.2s after the last keystroke (or instantly on blur / send / chat switch / disconnect via a recipient-side 2.5s heartbeat fallback).
+- **Reactions / pin / reply / multi-select / forward**, per-chat shared theme (both participants see the same wallpaper).
+- **Delete for me** (per-user soft-hide via `message_hidden_for`) vs **Delete for everyone** (hard DELETE, recipient sees it disappear live).
+- **Unread badges** computed from `last_read_at` via a single `get_unread_counts()` RPC.
+- Status line shows `typing…` ⇆ `online` ⇆ `last seen at HH:mm`.
+
+### 👻 Ghost Rooms
+- Anonymous, ephemeral spaces — Trending / New / My / Joined tabs.
+- **PIN-protected** private rooms, share-by-PIN flow, capacity enforcement, auto-expiry.
+
+### 📞 Calls — LiveKit-powered
+- **Voice + video** with a real LiveKit Cloud backend (`/api/livekit/token` mints 6-hour access tokens scoped to the room).
+- **Ghost call** (no-identity ring), **Schedule** flow that lands as a call-invite bubble in chat.
+- Active-call grid with mute / camera / share / hangup, screen-share, recent-calls log (all / missed / dialed / rejected), upcoming list, and a **floating mini-call** dock that follows you around the app.
+- Graceful **mock fallback** when LiveKit env vars aren't set — the call UI still renders a placeholder grid so the surface is browsable without provisioning.
+
+### 📸 Stories — Instagram-grade
+- **Editor**: Media (background + overlays, camera & upload, stock backgrounds, gradients), Text (full font stack, color + **EyeDropper**, bg, alignment, bold), Stickers / Emoji / GIF / Meme picker, Draw (brush + eyedropper), **Music** (live iTunes search with trending defaults, four sticker variants including a spinning vinyl, 30-second autoplay preview), Filters, and a draggable **layers** panel + one-tap PNG download.
+- **Story rings** everywhere — chat list, header, profile panel, sidebar, profile page — with rotating gradient (active) / dim (seen) and a WhatsApp-style **"View story / View profile photo"** prompt.
+- **Viewer**: swipes across people, progress bars, 30s music slides, **live animated GIF overlays + spinning music sticker** (kept out of the baked PNG so they truly animate), tap-zone navigation, **like** with flying-heart animation, **reply** (lands as a DM with a small story thumbnail next to the text), your-story **viewers + likers** lists with realtime counts (subscribes to `story_views` + `story_likes` for the visible slide).
+- **Persistence**: composed PNG uploaded to a public `chat-attachments` Storage bucket; music + overlay payload stored in `stories.metadata` JSONB.
+- **24-hour expiry** via pg_cron (`*/5 * * * *` runs `DELETE FROM stories WHERE expires_at <= NOW()`).
+- Upload progress bar in the chat-list header — instant editor close on Share.
+
+### 🧭 Discover & Communities
+- Community cards with AI-assisted search, filters (all / joined / trending / mine).
+- Create-community flow, community detail view with posts, polls, songs, mentions and reactions.
+
+### 🎨 Whiteboard
+- Collaborative canvas with sticky notes, shapes, **arrow connectors** (connect + disconnect), drag-to-arrange, access / share controls.
+
+### 🔒 Vault (Files)
+- Encrypted folders, lock / unlock with a vault password, starring, grid / list views, drag-and-drop upload, storage meter, file preview, password-gated delete for locked items.
+
+### 🙋 Profile & ⚙️ Settings
+- Profile with banner, story-ringed avatar, stats, bio, links, tabs.
+- Settings: Appearance (theme / accent / font / glass intensity / reduce motion / default chat theme), Notifications, Privacy, Security, Devices, Storage, AI, Language.
+
+### ✨ Across the app
+- **Command palette** (`⌘ / Ctrl + K`).
+- **Obsidian AI assistant** dock (`⌘ / Ctrl + J`) — the in-app AI companion shares the product's name.
+- Notification center, global search, route-level skeleton loaders.
+- Animated **aurora** theme, glass surfaces, self-hosted `next/font` + bundled **Noto Color Emoji**, global **reduce-motion** toggle.
+
+---
+
+## Architecture
+
+Obsidian connects authentication, real-time messaging, social spaces, collaboration tools, and external services through a unified application shell.
+
+<details>
+<summary><strong>Explore the complete system architecture</strong></summary>
 
 ```mermaid
 flowchart TD
@@ -89,121 +208,13 @@ class node_calls,node_callapi,node_whiteboard,node_vault,node_ai,node_aichatapi 
 class node_authstate,node_chatstate,node_callstate,node_settingsstate,node_supabaseclient,node_supabaseserver,node_supabase,node_livekit,node_klipy toneIndigo
 ```
 
+</details>
 
-
-<p align="center">
-  <img src="public/og-default.jpg" alt="Obsidian — The Future of Communication" width="100%" />
-</p>
-
-<h1 align="center">Obsidian</h1>
-
-<p align="center">
-  <strong>The Future of Communication.</strong><br/>
-  A futuristic communication OS — real-time chats, stories, voice & video calls, ghost rooms, communities, a collaborative whiteboard and an encrypted vault, all wrapped in a luminous glassmorphic interface and backed by Supabase + LiveKit.
-</p>
-
-<img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/3108cfbc-944c-49df-b03b-e7cd3298f530" />
-
-
-<p align="center">
-  <img alt="Next.js" src="https://img.shields.io/badge/Next.js-15-black?logo=next.js" />
-  <img alt="React" src="https://img.shields.io/badge/React-19-149ECA?logo=react" />
-  <img alt="TypeScript" src="https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript" />
-  <img alt="Tailwind CSS" src="https://img.shields.io/badge/Tailwind-3.4-38BDF8?logo=tailwindcss" />
-  <img alt="Framer Motion" src="https://img.shields.io/badge/Framer_Motion-11-FF2BC2?logo=framer" />
-  <img alt="Supabase" src="https://img.shields.io/badge/Supabase-Realtime-3ECF8E?logo=supabase" />
-  <img alt="LiveKit" src="https://img.shields.io/badge/LiveKit-Cloud-FF3366" />
-</p>
-
-> Think Telegram × Discord × Instagram × WhatsApp × Linear × Arc — distilled into a single secure, animated OS for messages, calls, ghost rooms, stories, files and whiteboards. Built with a real-time Supabase backend and a LiveKit-powered call stack.
-
----
-
-## Table of contents
-
-1. [Overview](#overview)
-2. [Features](#features)
-3. [Architecture](#architecture)
-4. [Tech stack](#tech-stack)
-5. [Getting started](#getting-started)
-6. [Supabase setup](#supabase-setup)
-7. [LiveKit setup](#livekit-setup)
-8. [Environment variables](#environment-variables)
-9. [Scripts](#scripts)
-10. [Project structure](#project-structure)
-11. [Realtime channels](#realtime-channels)
-12. [Internationalization](#internationalization)
-13. [Keyboard shortcuts](#keyboard-shortcuts)
-14. [Notes & caveats](#notes--caveats)
-
----
-
-## Overview
-
-Obsidian is a premium, production-grade communication platform built on **Next.js 15 (App Router)** with **React 19**. Every surface is fully wired end-to-end to a **Supabase** backend (Postgres + Auth + Realtime + Storage + pg_cron) and a **LiveKit Cloud** call stack — chats, stories, presence, typing, reactions, calls, scheduled messages, blocked users and storage all persist and sync across devices in real time.
-
-The product ships with a theme engine (dark / light / system + accent colors + glass intensity), 9-language internationalization with RTL, a command palette, a **native AI assistant also named Obsidian**, route-level skeleton loaders, and motion polish on every interaction.
-
----
-
-## Features
-
-### 💬 Chats — full-stack real-time
-- **DMs, groups, channels, and secret chats**, with member add/remove dialogs and "Block contact" / "Clear chat" / "Export chat" actions.
-- **Rich messages**: text, **voice notes** with live waveform, images & videos, stickers, **GIFs** (Klipy), memes, **polls** (with image + voter avatars + slim progress bars), files (PDFs render inline), contacts, location, and **scheduled messages** (clock-only tick on the author side until pg_cron flips them to "sent" at the scheduled time).
-- **Realtime sync**: messages, reactions, pins, edits and deletes propagate over a per-user Postgres-changes channel with `REPLICA IDENTITY FULL` so DELETE events carry full row context.
-- **Presence**: online/offline with `last_seen_at` updates on disconnect.
-- **Typing**: dedicated Supabase Realtime broadcast channel — instant `typing…` on first keystroke, auto-clears 1.2s after the last keystroke (or instantly on blur / send / chat switch / disconnect via a recipient-side 2.5s heartbeat fallback).
-- **Reactions / pin / reply / multi-select / forward**, per-chat shared theme (both participants see the same wallpaper).
-- **Delete for me** (per-user soft-hide via `message_hidden_for`) vs **Delete for everyone** (hard DELETE, recipient sees it disappear live).
-- **Unread badges** computed from `last_read_at` via a single `get_unread_counts()` RPC.
-- Status line shows `typing…` ⇆ `online` ⇆ `last seen at HH:mm`.
-
-### 👻 Ghost Rooms
-- Anonymous, ephemeral spaces — Trending / New / My / Joined tabs.
-- **PIN-protected** private rooms, share-by-PIN flow, capacity enforcement, auto-expiry.
-
-### 📞 Calls — LiveKit-powered
-- **Voice + video** with a real LiveKit Cloud backend (`/api/livekit/token` mints 6-hour access tokens scoped to the room).
-- **Ghost call** (no-identity ring), **Schedule** flow that lands as a call-invite bubble in chat.
-- Active-call grid with mute / camera / share / hangup, screen-share, recent-calls log (all / missed / dialed / rejected), upcoming list, and a **floating mini-call** dock that follows you around the app.
-- Graceful **mock fallback** when LiveKit env vars aren't set — the call UI still renders a placeholder grid so the surface is browsable without provisioning.
-
-### 📸 Stories — Instagram-grade
-- **Editor**: Media (background + overlays, camera & upload, stock backgrounds, gradients), Text (full font stack, color + **EyeDropper**, bg, alignment, bold), Stickers / Emoji / GIF / Meme picker, Draw (brush + eyedropper), **Music** (live iTunes search with trending defaults, four sticker variants including a spinning vinyl, 30-second autoplay preview), Filters, and a draggable **layers** panel + one-tap PNG download.
-- **Story rings** everywhere — chat list, header, profile panel, sidebar, profile page — with rotating gradient (active) / dim (seen) and a WhatsApp-style **"View story / View profile photo"** prompt.
-- **Viewer**: swipes across people, progress bars, 30s music slides, **live animated GIF overlays + spinning music sticker** (kept out of the baked PNG so they truly animate), tap-zone navigation, **like** with flying-heart animation, **reply** (lands as a DM with a small story thumbnail next to the text), your-story **viewers + likers** lists with realtime counts (subscribes to `story_views` + `story_likes` for the visible slide).
-- **Persistence**: composed PNG uploaded to a public `chat-attachments` Storage bucket; music + overlay payload stored in `stories.metadata` JSONB.
-- **24-hour expiry** via pg_cron (`*/5 * * * *` runs `DELETE FROM stories WHERE expires_at <= NOW()`).
-- Upload progress bar in the chat-list header — instant editor close on Share.
-
-### 🧭 Discover & Communities
-- Community cards with AI-assisted search, filters (all / joined / trending / mine).
-- Create-community flow, community detail view with posts, polls, songs, mentions and reactions.
-
-### 🎨 Whiteboard
-- Collaborative canvas with sticky notes, shapes, **arrow connectors** (connect + disconnect), drag-to-arrange, access / share controls.
-
-### 🔒 Vault (Files)
-- Encrypted folders, lock / unlock with a vault password, starring, grid / list views, drag-and-drop upload, storage meter, file preview, password-gated delete for locked items.
-
-### 🙋 Profile & ⚙️ Settings
-- Profile with banner, story-ringed avatar, stats, bio, links, tabs.
-- Settings: Appearance (theme / accent / font / glass intensity / reduce motion / default chat theme), Notifications, Privacy, Security, Devices, Storage, AI, Language.
-
-### ✨ Across the app
-- **Command palette** (`⌘ / Ctrl + K`).
-- **Obsidian AI assistant** dock (`⌘ / Ctrl + J`) — the in-app AI companion shares the product's name.
-- Notification center, global search, route-level skeleton loaders.
-- Animated **aurora** theme, glass surfaces, self-hosted `next/font` + bundled **Noto Color Emoji**, global **reduce-motion** toggle.
-
----
-
-## Architecture
+### Runtime topology
 
 ```
 ┌────────────────────────────────────────────────────────────────────────┐
-│  Browser (Next.js 15 App Router, React 19)                             │
+│  Browser (Next.js 16 App Router, React 19)                             │
 │  ┌───────────────┐  ┌──────────────────┐  ┌────────────────┐           │
 │  │ Zustand store │  │ Realtime client  │  │ LiveKit client │           │
 │  │ chat / story  │◀▶│ presence / msgs  │  │ /components-   │           │
@@ -236,7 +247,7 @@ Key design choices:
 
 ## Tech stack
 
-- **Framework**: Next.js 15 (App Router), React 19, TypeScript 5
+- **Framework**: Next.js 16 (App Router), React 19, TypeScript 5
 - **Styling**: Tailwind CSS 3.4, custom design tokens & glass utilities, `next-themes`
 - **Motion**: Framer Motion 11
 - **UI primitives**: Radix UI wrapped shadcn-style, `cmdk`, `lucide-react`
@@ -248,12 +259,127 @@ Key design choices:
 
 ---
 
-## Getting started
+## Docker quick start
+
+The prebuilt image is the fastest way to run Obsidian. It includes the optimized Next.js standalone server and does not require Node.js or npm on the host.
+
+**Image:** [`code2withpratik/obsidian-safe-and-secure:latest`](https://hub.docker.com/r/code2withpratik/obsidian-safe-and-secure)
+
+<p align="center">
+  <img alt="Step 1: Install" src="https://img.shields.io/badge/1-Install-2496ED?style=flat-square&logo=docker&logoColor=white" />
+  <strong>→</strong>
+  <img alt="Step 2: Pull" src="https://img.shields.io/badge/2-Pull-6F42C1?style=flat-square&logo=docker&logoColor=white" />
+  <strong>→</strong>
+  <img alt="Step 3: Configure" src="https://img.shields.io/badge/3-Configure-F59E0B?style=flat-square&logo=dotenv&logoColor=white" />
+  <strong>→</strong>
+  <img alt="Step 4: Launch" src="https://img.shields.io/badge/4-Launch-16A34A?style=flat-square&logo=rocket&logoColor=white" />
+  <strong>→</strong>
+  <img alt="Step 5: Verify" src="https://img.shields.io/badge/5-Verify-0891B2?style=flat-square&logo=statuspage&logoColor=white" />
+</p>
+
+> [!TIP]
+> **Recommended path:** Pull the published image for the quickest setup. Build from source only when you need to replace the public Supabase, LiveKit, or site configuration embedded in the browser bundle.
+
+### 1. Install Docker 🐳
+
+Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) on Windows or macOS, or Docker Engine on Linux. Confirm that it is running:
 
 ```bash
-git clone https://github.com/Code2With-Pratik/Obsidian.git
-cd Obsidian
-npm install
+docker --version
+```
+
+### 2. Pull the image 📦
+
+```bash
+docker pull code2withpratik/obsidian-safe-and-secure:latest
+```
+
+### 3. Configure the environment ⚙️
+
+Create a `.env.local` file and add the credentials for the services you use. Start from [.env.example](.env.example) when the repository is available:
+
+```bash
+# Supabase — required for authentication and persisted application data
+NEXT_PUBLIC_SUPABASE_URL=https://<project-ref>.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<publishable-key>
+SUPABASE_SECRET_KEY=<server-side-secret-key>
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
+
+# LiveKit — optional; required for real voice and video calls
+LIVEKIT_URL=wss://<project>.livekit.cloud
+LIVEKIT_API_KEY=<api-key>
+LIVEKIT_API_SECRET=<api-secret>
+NEXT_PUBLIC_LIVEKIT_URL=wss://<project>.livekit.cloud
+
+# Optional integrations
+KLIPY_API_KEY=
+GEMINI_API_KEY=
+NEXT_PUBLIC_AI_MODEL=gemini-2.5-flash-lite
+ELEVENLABS_API_KEY=
+ELEVENLABS_VOICE_ID=21m00Tcm4TlvDq8ikWAM
+ELEVENLABS_MODEL_ID=eleven_turbo_v2_5
+```
+
+> [!IMPORTANT]
+> Variables prefixed with `NEXT_PUBLIC_` are browser-visible and are embedded into the application at build time. They must contain only public service configuration.
+
+> [!WARNING]
+> Never commit `.env.local` or expose server-side keys. Keep `SUPABASE_SECRET_KEY`, `LIVEKIT_API_SECRET`, `GEMINI_API_KEY`, and `ELEVENLABS_API_KEY` private.
+
+### 4. Start the container 🚀
+
+The following command works in PowerShell, Command Prompt, Bash, and other standard shells:
+
+```bash
+docker run -d --name obsidian --restart unless-stopped --env-file .env.local -p 3000:3000 code2withpratik/obsidian-safe-and-secure:latest
+```
+
+### 5. Verify the deployment ✅
+
+Open <http://localhost:3000>, then confirm that the container is healthy:
+
+```bash
+docker ps --filter "name=obsidian"
+docker logs -f obsidian
+```
+
+> [!TIP]
+> If the page is not available immediately, follow the logs for startup or environment errors with `docker logs -f obsidian`.
+
+<details>
+<summary><strong>Container lifecycle commands</strong></summary>
+
+Use these commands to manage the existing container without recreating it:
+
+```bash
+docker stop obsidian
+docker start obsidian
+```
+
+</details>
+
+<details>
+<summary><strong>Advanced: use your own public service configuration</strong></summary>
+
+Next.js embeds `NEXT_PUBLIC_*` variables into the browser bundle at image-build time. The published image therefore uses the public configuration with which it was released. To connect the client to a different Supabase, LiveKit, or public site URL, clone the repository and build your own image:
+
+```bash
+docker build --build-arg NEXT_PUBLIC_SUPABASE_URL="https://<project-ref>.supabase.co" --build-arg NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY="<publishable-key>" --build-arg NEXT_PUBLIC_SITE_URL="https://<your-domain>" --build-arg NEXT_PUBLIC_LIVEKIT_URL="wss://<project>.livekit.cloud" -t obsidian:local .
+docker run -d --name obsidian --restart unless-stopped --env-file .env.local -p 3000:3000 obsidian:local
+```
+
+Only pass public values as build arguments. Keep `SUPABASE_SECRET_KEY`, `LIVEKIT_API_SECRET`, `GEMINI_API_KEY`, and other private credentials in the runtime environment file.
+
+</details>
+
+---
+
+## Getting started from source
+
+```bash
+git clone https://github.com/Code2With-Pratik/Obsidian-safe-and-secure.git
+cd Obsidian-safe-and-secure
+npm ci
 cp .env.example .env.local
 # Fill in Supabase + LiveKit values (see Environment variables below)
 npm run dev
@@ -261,7 +387,8 @@ npm run dev
 
 Open <http://localhost:3000>. You'll land on the animated splash — continue through onboarding / sign in to reach the chat surface.
 
-> **Important**: Before any data flows, you must apply the SQL bundle. See [Supabase setup](#supabase-setup).
+> [!IMPORTANT]
+> Before any data flows, apply the SQL bundle described in [Supabase setup](#supabase-setup).
 
 ---
 
@@ -308,30 +435,34 @@ The script is **idempotent** — re-run it any time you pull schema changes; not
    NEXT_PUBLIC_LIVEKIT_URL=wss://<your-project>.livekit.cloud
    ```
 
-If `NEXT_PUBLIC_LIVEKIT_URL` is unset, the call surface falls back to a mock grid so the rest of the app is still browsable.
+> [!NOTE]
+> If `NEXT_PUBLIC_LIVEKIT_URL` is unset, the call surface falls back to a mock grid so the rest of the app remains browsable.
 
 ---
 
 ## Environment variables
 
-Copy `.env.example` to `.env.local` and fill in:
+Copy `.env.example` to `.env.local` and configure the services you want to enable:
 
-```bash
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=https://<ref>.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=<anon-key>
+| Variable | Required | Visibility | Purpose |
+| --- | :---: | --- | --- |
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes | Public | Supabase project URL used by browser and server clients |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Yes | Public | Supabase publishable key used for authenticated client access |
+| `SUPABASE_SECRET_KEY` | For full auth flows | Server only | Supabase Admin API access, including pre-confirmed signup |
+| `NEXT_PUBLIC_SITE_URL` | Yes in production | Public | Canonical application URL for authentication redirects |
+| `KLIPY_API_KEY` | No | Server only | GIF, sticker, and meme search |
+| `LIVEKIT_URL` | No | Server only | LiveKit WebSocket endpoint used when issuing call tokens |
+| `LIVEKIT_API_KEY` | No | Server only | LiveKit server API key |
+| `LIVEKIT_API_SECRET` | No | Server only | LiveKit server API secret |
+| `NEXT_PUBLIC_LIVEKIT_URL` | No | Public | LiveKit endpoint used by the browser call client |
+| `GEMINI_API_KEY` | No | Server only | AI assistant provider key |
+| `NEXT_PUBLIC_AI_MODEL` | No | Public | Gemini model name; defaults to `gemini-2.5-flash-lite` |
+| `ELEVENLABS_API_KEY` | No | Server only | Voice-response text-to-speech key |
+| `ELEVENLABS_VOICE_ID` | No | Server only | ElevenLabs voice identifier |
+| `ELEVENLABS_MODEL_ID` | No | Server only | ElevenLabs model identifier |
 
-# LiveKit (optional — call surface mocks out without these)
-LIVEKIT_URL=wss://<project>.livekit.cloud
-LIVEKIT_API_KEY=
-LIVEKIT_API_SECRET=
-NEXT_PUBLIC_LIVEKIT_URL=wss://<project>.livekit.cloud
-
-# Klipy GIF/sticker provider (optional — picker falls back to empty)
-NEXT_PUBLIC_KLIPY_API_KEY=
-```
-
-> **Never commit real secrets.** `.env.local` is gitignored; `.env.example` only carries placeholders.
+> [!WARNING]
+> **Security:** Never commit real secrets. `.env.local` is gitignored, while `.env.example` contains placeholders only. Variables marked public are included in browser-delivered code and must never contain privileged credentials.
 
 ---
 
@@ -444,4 +575,4 @@ A lightweight in-house i18n (`lib/i18n.ts`) covers **9 languages** — English, 
 
 ---
 
-<p align="center"><sub>Built with Next.js 15, React 19, Supabase and LiveKit. Design assets live in <code>/public</code>.</sub></p>
+<p align="center"><sub>Built with Next.js 16, React 19, Supabase and LiveKit. Design assets live in <code>/public</code>.</sub></p>
