@@ -66,6 +66,40 @@ function absolutize(maybeRelative: string, base: string): string {
   }
 }
 
+function isBlockedHost(hostname: string): boolean {
+  const h = hostname.trim().toLowerCase();
+
+  // Common local hostnames
+  if (h === "localhost" || h.endsWith(".localhost")) return true;
+  if (h.endsWith(".local") || h.endsWith(".internal")) return true;
+
+  // Bracketed IPv6 literals from URL.hostname, e.g. [::1]
+  if (h.startsWith("[") && h.endsWith("]")) {
+    const v6 = h.slice(1, -1);
+    if (v6 === "::1" || v6 === "::") return true; // loopback/unspecified
+    if (v6.toLowerCase().startsWith("fe80:")) return true; // link-local
+    const lower = v6.toLowerCase();
+    if (lower.startsWith("fc") || lower.startsWith("fd")) return true; // ULA
+    return false;
+  }
+
+  // IPv4 literals
+  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (m) {
+    const octets = m.slice(1).map((x) => Number(x));
+    if (octets.some((n) => Number.isNaN(n) || n < 0 || n > 255)) return true;
+    const [a, b] = octets;
+    if (a === 10) return true;
+    if (a === 127) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 0) return true;
+  }
+
+  return false;
+}
+
 export async function GET(req: Request) {
   const incoming = new URL(req.url);
   const target = incoming.searchParams.get("url");
@@ -80,6 +114,9 @@ export async function GET(req: Request) {
   }
   if (urlObj.protocol !== "http:" && urlObj.protocol !== "https:") {
     return NextResponse.json({ error: "unsupported protocol" }, { status: 400 });
+  }
+  if (isBlockedHost(urlObj.hostname)) {
+    return NextResponse.json({ error: "blocked host" }, { status: 400 });
   }
 
   try {
