@@ -867,7 +867,7 @@ function MentionLink({
       if (!userId) {
         const supabase = createClient();
         const { data } = await supabase
-          .from("profiles")
+          .from("public_profiles")
           .select("id, name, username, avatar")
           .ilike("username", username)
           .limit(1)

@@ -156,9 +156,20 @@ export default function AuthListener() {
           })
         }
         fetchProfile(session.user.id, session.user.created_at)
+        // Privacy is account-scoped and server-backed. Hydrate it before
+        // presence starts so a hidden last-seen value is never published by
+        // the default realtime bootstrap during an account switch.
+        void useSettingsStore.getState().hydratePrivacy(session.user.id).finally(() => {
+          const privacy = useSettingsStore.getState()
+          if (
+            privacy.privacyUserId === session.user.id &&
+            privacy.privacyStatus !== 'loading'
+          ) {
+            initializeRealtime()
+          }
+        })
         fetchChats()
         fetchBlocked()
-        initializeRealtime()
         fetchStories()
         initStoryRealtime()
         initCallRealtime()
@@ -178,6 +189,7 @@ export default function AuthListener() {
         disconnectCallRealtime()
         useNotificationsStore.getState().teardown()
         clearAll()
+        useSettingsStore.getState().resetPrivacy()
         logout()
         router.refresh()
         router.push('/')
@@ -201,10 +213,18 @@ export default function AuthListener() {
           })
         }
         fetchProfile(session.user.id)
+        void useSettingsStore.getState().hydratePrivacy(session.user.id).finally(() => {
+          const privacy = useSettingsStore.getState()
+          if (
+            privacy.privacyUserId === session.user.id &&
+            privacy.privacyStatus !== 'loading'
+          ) {
+            initializeRealtime()
+          }
+        })
         void upsertDeviceSession(session.access_token)
         fetchChats()
         fetchBlocked()
-        initializeRealtime()
         fetchStories()
         initStoryRealtime()
         initCallRealtime()

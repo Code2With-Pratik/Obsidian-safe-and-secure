@@ -18,6 +18,7 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test:agent": "node --test tests/agent-readiness.test.mjs",
+    "test:privacy": "node --test tests/privacy-features.test.mjs",
     "supabase:gen": "supabase gen types typescript --local > types/supabase.ts"
   },
   "dependencies": {

@@ -166,7 +166,7 @@ export const useCallStore = create<CallState>((set, get) => ({
     let profiles: Record<string, { name: string; username: string | null; avatar: string | null }> = {};
     if (counterIds.size > 0) {
       const { data: profs } = await supabase
-        .from("profiles")
+        .from("public_profiles")
         .select("id, name, username, avatar")
         .in("id", Array.from(counterIds));
       profiles = Object.fromEntries(

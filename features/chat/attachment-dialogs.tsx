@@ -368,7 +368,7 @@ export function ContactPickerDialog({
     (async () => {
       const supabase = createClient();
       let builder = supabase
-        .from("profiles")
+        .from("public_profiles")
         .select("id, name, username, avatar")
         .order("name", { ascending: true })
         .limit(100);

@@ -76,7 +76,7 @@ export async function POST(req: Request) {
 
   // Caller identity for the ring payload.
   const { data: callerProfile } = await supabase
-    .from("profiles")
+    .from("public_profiles")
     .select("name, username, avatar")
     .eq("id", user.id)
     .maybeSingle();

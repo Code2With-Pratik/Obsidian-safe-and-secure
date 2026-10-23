@@ -113,7 +113,7 @@ export function ShareProfileSheet({
     const supabase = createClient();
     const timer = setTimeout(async () => {
       let query = supabase
-        .from("profiles")
+        .from("public_profiles")
         .select("id, name, username, avatar")
         .limit(20);
       const q = search.trim();

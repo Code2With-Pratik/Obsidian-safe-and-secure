@@ -106,7 +106,7 @@ export async function POST(req: Request) {
   // Hydrate the ring payload with caller identity so the recipient modal can
   // render the right avatar + name without a roundtrip.
   const { data: callerProfile } = await supabase
-    .from("profiles")
+    .from("public_profiles")
     .select("name, username, avatar")
     .eq("id", user.id)
     .maybeSingle();

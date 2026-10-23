@@ -36,6 +36,8 @@ export default function ProfilePage() {
   const user = useAuthStore((s) => s.user);
   const name = user?.name || "New User";
   const privacy = useSettingsStore((s) => s.privacy);
+  const privacyStatus = useSettingsStore((s) => s.privacyStatus);
+  const privacyError = useSettingsStore((s) => s.privacyError);
   const togglePrivacy = useSettingsStore((s) => s.togglePrivacy);
   const statusLabels = {
     online: t("Online"),
@@ -261,17 +263,32 @@ export default function ProfilePage() {
                 <PrivacyRow
                   icon={<Lock />}
                   label={t("Last seen")}
-                  sub={privacy.lastSeen ? t("Visible") : t("Hidden")}
+                  sub={privacy.lastSeen ? t("Visible to people you chat with") : t("Hidden")}
                   checked={privacy.lastSeen}
+                  disabled={privacyStatus !== "ready" && privacyStatus !== "error"}
                   onCheckedChange={(value) => togglePrivacy("lastSeen", value)}
                 />
                 <PrivacyRow
                   icon={<Shield />}
                   label={t("Profile photo")}
-                  sub={privacy.profilePhoto ? t("Everyone") : t("Hidden")}
+                  sub={privacy.profilePhoto ? t("Visible to people you chat with") : t("Hidden")}
                   checked={privacy.profilePhoto}
+                  disabled={privacyStatus !== "ready" && privacyStatus !== "error"}
                   onCheckedChange={(value) => togglePrivacy("profilePhoto", value)}
                 />
+                <p
+                  role={privacyStatus === "error" ? "alert" : "status"}
+                  className={cn(
+                    "px-1 pt-1 text-[11px]",
+                    privacyStatus === "error" ? "text-rose-400" : "text-muted-foreground"
+                  )}
+                >
+                  {privacyStatus === "idle" && t("Waiting for your account…")}
+                  {privacyStatus === "loading" && t("Loading private account settings…")}
+                  {privacyStatus === "saving" && t("Saving securely…")}
+                  {privacyStatus === "ready" && t("Synced to your account")}
+                  {privacyStatus === "error" && t(privacyError ?? "Privacy settings could not be synced.")}
+                </p>
               </div>
             </TabsContent>
           </Tabs>
@@ -362,12 +379,14 @@ function PrivacyRow({
   label,
   sub,
   checked,
+  disabled = false,
   onCheckedChange
 }: {
   icon: React.ReactNode;
   label: string;
   sub: string;
   checked: boolean;
+  disabled?: boolean;
   onCheckedChange: (checked: boolean) => void;
 }) {
   return (
@@ -377,7 +396,12 @@ function PrivacyRow({
         <div className="text-sm font-medium">{label}</div>
         <div className="text-[11px] text-muted-foreground">{sub}</div>
       </div>
-      <Switch checked={checked} onCheckedChange={onCheckedChange} />
+      <Switch
+        aria-label={label}
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={onCheckedChange}
+      />
     </div>
   );
 }

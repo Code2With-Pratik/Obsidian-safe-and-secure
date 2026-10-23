@@ -194,7 +194,7 @@ const handlers: Record<string, AIToolHandler> = {
     if (!q) return { results: [] };
     const meId = useAuthStore.getState().user?.id ?? "";
     const { data, error } = await supabase
-      .from("profiles")
+      .from("public_profiles")
       .select("id, name, username, avatar, status")
       .or(`name.ilike.%${q}%,username.ilike.%${q}%`)
       .neq("id", meId)
@@ -538,9 +538,13 @@ const handlers: Record<string, AIToolHandler> = {
     if (!valid.includes(key)) {
       return { error: `Unknown privacy key "${key}". Valid: ${valid.join(", ")}.` };
     }
-    useSettingsStore
+    await useSettingsStore
       .getState()
       .togglePrivacy(key as keyof ReturnType<typeof useSettingsStore.getState>["privacy"], !!args.enabled);
+    const privacyState = useSettingsStore.getState();
+    if (privacyState.privacyStatus === "error") {
+      return { error: privacyState.privacyError ?? "Privacy setting could not be saved." };
+    }
     return { ok: true, key, enabled: !!args.enabled };
   },
 

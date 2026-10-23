@@ -11,6 +11,7 @@ import { NotificationToasts } from "@/components/notifications/notification-toas
 import { AIThemeBridge } from "@/features/ai/theme-bridge";
 import { ImageLightboxProvider } from "@/features/chat/image-lightbox";
 import { cn } from "@/lib/utils";
+import { ScreenProtection } from "@/components/privacy/screen-protection";
 
 const FOCUSED_PATTERNS = [
   /^\/chats\/[^/]+/, // open chat
@@ -55,6 +56,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {/* Invisible — caches next-themes' setTheme in a module slot so AI
               tool handlers can switch the theme without going through React. */}
           <AIThemeBridge />
+          <ScreenProtection />
         </div>
       </ImageLightboxProvider>
     </CallSessionProvider>

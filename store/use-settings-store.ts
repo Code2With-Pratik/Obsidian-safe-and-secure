@@ -2,6 +2,11 @@
 
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { createClient } from "@/lib/supabase/client";
+import {
+  isCurrentPrivacyRequest,
+  rollbackPrivacyValue
+} from "@/lib/privacy-behavior";
 
 /* -------------------------------------------------------- */
 /* Accent palette                                           */
@@ -83,6 +88,45 @@ export interface PrivacyPrefs {
   allowScreenshots: boolean;
 }
 
+export const DEFAULT_PRIVACY_PREFS: PrivacyPrefs = {
+  readReceipts: true,
+  typingIndicator: true,
+  lastSeen: false,
+  profilePhoto: true,
+  allowScreenshots: false
+};
+
+export type PrivacySyncStatus = "idle" | "loading" | "ready" | "saving" | "error";
+
+const PRIVACY_COLUMNS: Record<keyof PrivacyPrefs, string> = {
+  readReceipts: "read_receipts",
+  typingIndicator: "typing_indicator",
+  lastSeen: "last_seen",
+  profilePhoto: "profile_photo",
+  allowScreenshots: "allow_screenshots"
+};
+
+const supabase = createClient();
+let privacyHydrationToken = 0;
+let privacyPendingWrites = 0;
+
+function privacyFromRow(row: Record<string, unknown>): PrivacyPrefs {
+  return {
+    readReceipts: row.read_receipts !== false,
+    typingIndicator: row.typing_indicator !== false,
+    lastSeen: row.last_seen === true,
+    profilePhoto: row.profile_photo !== false,
+    allowScreenshots: row.allow_screenshots === true
+  };
+}
+
+function announcePrivacyChange(key: keyof PrivacyPrefs, value: boolean) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent("obsidian:privacy-change", { detail: { key, value } })
+  );
+}
+
 export interface SecurityPrefs {
   twoFactor: boolean;
   biometric: boolean;
@@ -109,6 +153,10 @@ interface SettingsState {
   /* ---- toggle groups ---- */
   notifications: NotificationPrefs;
   privacy: PrivacyPrefs;
+  privacyUserId: string | null;
+  privacyHydrated: boolean;
+  privacyStatus: PrivacySyncStatus;
+  privacyError: string | null;
   security: SecurityPrefs;
   ai: AiPrefs;
 
@@ -126,7 +174,9 @@ interface SettingsState {
   setGlass: (v: number) => void;
   setReduceMotion: (v: boolean) => void;
   toggleNotification: (key: keyof NotificationPrefs, v: boolean) => void;
-  togglePrivacy: (key: keyof PrivacyPrefs, v: boolean) => void;
+  hydratePrivacy: (userId: string) => Promise<void>;
+  resetPrivacy: () => void;
+  togglePrivacy: (key: keyof PrivacyPrefs, v: boolean) => Promise<void>;
   toggleSecurity: (key: keyof SecurityPrefs, v: boolean) => void;
   toggleAi: (key: keyof AiPrefs, v: boolean) => void;
   setLanguage: (code: string) => void;
@@ -150,13 +200,11 @@ export const useSettingsStore = create<SettingsState>()(
         callInvites: true,
         sounds: true
       },
-      privacy: {
-        readReceipts: true,
-        typingIndicator: true,
-        lastSeen: false,
-        profilePhoto: true,
-        allowScreenshots: false
-      },
+      privacy: { ...DEFAULT_PRIVACY_PREFS },
+      privacyUserId: null,
+      privacyHydrated: false,
+      privacyStatus: "idle",
+      privacyError: null,
       security: {
         twoFactor: true,
         biometric: true,
@@ -182,8 +230,113 @@ export const useSettingsStore = create<SettingsState>()(
       setReduceMotion: (v) => set({ reduceMotion: v }),
       toggleNotification: (key, v) =>
         set((s) => ({ notifications: { ...s.notifications, [key]: v } })),
-      togglePrivacy: (key, v) =>
-        set((s) => ({ privacy: { ...s.privacy, [key]: v } })),
+      hydratePrivacy: async (userId) => {
+        const token = ++privacyHydrationToken;
+        privacyPendingWrites = 0;
+        set({
+          privacy: { ...DEFAULT_PRIVACY_PREFS },
+          privacyUserId: userId,
+          privacyHydrated: false,
+          privacyStatus: "loading",
+          privacyError: null
+        });
+
+        const { data, error } = await supabase
+          .from("user_privacy_settings")
+          .upsert({ user_id: userId }, { onConflict: "user_id" })
+          .select("read_receipts, typing_indicator, last_seen, profile_photo, allow_screenshots")
+          .single();
+
+        if (token !== privacyHydrationToken) return;
+        if (error || !data) {
+          set({
+            privacyStatus: "error",
+            privacyHydrated: false,
+            privacyError: error?.message ?? "Privacy settings could not be loaded."
+          });
+          return;
+        }
+        set({
+          privacy: privacyFromRow(data as Record<string, unknown>),
+          privacyHydrated: true,
+          privacyStatus: "ready",
+          privacyError: null
+        });
+      },
+      resetPrivacy: () => {
+        privacyHydrationToken++;
+        privacyPendingWrites = 0;
+        set({
+          privacy: { ...DEFAULT_PRIVACY_PREFS },
+          privacyUserId: null,
+          privacyHydrated: false,
+          privacyStatus: "idle",
+          privacyError: null
+        });
+      },
+      togglePrivacy: async (key, v) => {
+        const state = useSettingsStore.getState();
+        const userId = state.privacyUserId;
+        const wasHydrated = state.privacyHydrated;
+        const previous = state.privacy[key];
+        if (previous === v) return;
+
+        privacyPendingWrites++;
+        set((s) => ({
+          privacy: { ...s.privacy, [key]: v },
+          privacyStatus: "saving",
+          privacyError: null
+        }));
+        announcePrivacyChange(key, v);
+
+        if (!userId) {
+          privacyPendingWrites--;
+          set((s) => ({
+            privacy: { ...s.privacy, [key]: previous },
+            privacyStatus: "error",
+            privacyError: "Sign in again to save privacy settings."
+          }));
+          announcePrivacyChange(key, previous);
+          return;
+        }
+
+        const update = {
+          user_id: userId,
+          [PRIVACY_COLUMNS[key]]: v
+        };
+        const { error } = await supabase
+          .from("user_privacy_settings")
+          .upsert(update, { onConflict: "user_id" });
+
+        // Disabling last-seen also erases the previously published value.
+        // The masked public profile view protects peers immediately even if
+        // this best-effort cleanup request is delayed.
+        if (!error && key === "lastSeen" && !v) {
+          await supabase.from("profiles").update({ last_seen_at: null }).eq("id", userId);
+        }
+
+        if (!isCurrentPrivacyRequest(useSettingsStore.getState().privacyUserId, userId)) return;
+        privacyPendingWrites--;
+        if (error) {
+          set((s) => ({
+            privacy: rollbackPrivacyValue(s.privacy, key, v, previous),
+            privacyStatus: "error",
+            privacyError: "Privacy change was not saved. Please try again."
+          }));
+          announcePrivacyChange(key, previous);
+          return;
+        }
+        if (!wasHydrated) {
+          // A toggle can be the successful retry after initial hydration
+          // failed. Reload the full row before enabling any disclosures.
+          await useSettingsStore.getState().hydratePrivacy(userId);
+          return;
+        }
+        set({
+          privacyStatus: privacyPendingWrites > 0 ? "saving" : "ready",
+          privacyError: null
+        });
+      },
       toggleSecurity: (key, v) =>
         set((s) => ({ security: { ...s.security, [key]: v } })),
       toggleAi: (key, v) => set((s) => ({ ai: { ...s.ai, [key]: v } })),
@@ -192,6 +345,34 @@ export const useSettingsStore = create<SettingsState>()(
       setSpellCheck: (v) => set({ spellCheck: v }),
       setDevices: (devices) => set({ devices })
     }),
-    { name: "nova-settings" }
+    {
+      name: "nova-settings",
+      version: 2,
+      migrate: (persisted) => {
+        const value = (persisted ?? {}) as Record<string, unknown>;
+        const {
+          privacy: _privacy,
+          privacyUserId: _privacyUserId,
+          privacyStatus: _privacyStatus,
+          privacyHydrated: _privacyHydrated,
+          privacyError: _privacyError,
+          ...safeSettings
+        } = value;
+        return safeSettings;
+      },
+      partialize: (state) => ({
+        accent: state.accent,
+        font: state.font,
+        glass: state.glass,
+        reduceMotion: state.reduceMotion,
+        notifications: state.notifications,
+        security: state.security,
+        ai: state.ai,
+        language: state.language,
+        autoTranslate: state.autoTranslate,
+        spellCheck: state.spellCheck,
+        devices: state.devices
+      })
+    }
   )
 );

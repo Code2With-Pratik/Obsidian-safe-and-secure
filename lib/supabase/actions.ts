@@ -196,8 +196,8 @@ export async function searchUsers(query: string) {
   const { data: { user: me } } = await supabase.auth.getUser()
   
   let builder = supabase
-    .from('profiles')
-    .select('*')
+    .from('public_profiles')
+    .select('id, name, username, avatar, banner, status, profession, bio, pronouns, location, links, created_at, last_seen_at')
     .or(`name.ilike.%${query}%,username.ilike.%${query}%`)
     .limit(10)
 

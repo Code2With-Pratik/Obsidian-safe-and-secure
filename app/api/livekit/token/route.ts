@@ -92,7 +92,7 @@ export async function POST(req: Request) {
   } else {
     // Normal call path — surface real name + avatar so peers see who's who.
     const { data: profile } = await supabase
-      .from("profiles")
+      .from("public_profiles")
       .select("name, username, avatar")
       .eq("id", user.id)
       .maybeSingle();

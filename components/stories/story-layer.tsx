@@ -69,9 +69,9 @@ function useUserLookup() {
           id: cached.id,
           name: cached.name || cached.username || "Someone",
           username: cached.username || "user",
-          avatar:
-            cached.avatar ||
-            `https://api.dicebear.com/9.x/notionists/svg?seed=${cached.id}`
+          // A null avatar can be an intentional privacy mask. Let the
+          // existing initials fallback render instead of inventing an image.
+          avatar: cached.avatar
         };
       }
       // (3) Mock seed data — dev-only fixtures.

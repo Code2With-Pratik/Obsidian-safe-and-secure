@@ -28,10 +28,12 @@ export default function SplashPage() {
           initial={{ opacity: 0, y: 24 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.25, duration: 0.7 }}
-          className="mt-10 text-5xl md:text-7xl font-display font-semibold tracking-tight text-balance"
+          className="mt-10 text-3xl md:text-5xl font-display font-semibold tracking-tight text-balance"
         >
-          <span className="neon-text">Obsidian Safe &amp; Secure</span> messaging:{" "}
-          {t("the future of secure communication")}.
+          <span className="neon-text">Obsidian Safe &amp; Secure</span>
+          <span className="mt-4 block font-sans text-lg font-normal leading-relaxed tracking-normal text-muted-foreground md:text-xl">
+            messaging: {t("the future of secure communication")}.
+          </span>
         </motion.h1>
 
         <motion.p

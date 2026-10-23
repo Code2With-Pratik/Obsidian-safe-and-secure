@@ -381,36 +381,74 @@ function SettingsContent() {
 
               {section === "privacy" && (
                 <Section title={t("Privacy")} subtitle={t("Default deny. Choose what to allow.")}>
-                  <Setting label={t("Read receipts")} sub={t("Let others know when you've read")}>
+                  <Setting
+                    label={t("Read receipts")}
+                    sub={t(s.privacy.readReceipts ? "Others can see when you read" : "Read status stays private")}
+                  >
                     <Switch
+                      aria-label={t("Read receipts")}
                       checked={s.privacy.readReceipts}
+                      disabled={s.privacyStatus !== "ready" && s.privacyStatus !== "error"}
                       onCheckedChange={(v) => s.togglePrivacy("readReceipts", v)}
                     />
                   </Setting>
-                  <Setting label={t("Typing indicator")} sub={t("Show three dots while typing")}>
+                  <Setting
+                    label={t("Typing indicator")}
+                    sub={t(s.privacy.typingIndicator ? "People can see when you're typing" : "Typing activity stays private")}
+                  >
                     <Switch
+                      aria-label={t("Typing indicator")}
                       checked={s.privacy.typingIndicator}
+                      disabled={s.privacyStatus !== "ready" && s.privacyStatus !== "error"}
                       onCheckedChange={(v) => s.togglePrivacy("typingIndicator", v)}
                     />
                   </Setting>
-                  <Setting label={t("Last seen")} sub={t("Friends only")}>
+                  <Setting
+                    label={t("Last seen")}
+                    sub={t(s.privacy.lastSeen ? "Visible to people you chat with" : "Hidden")}
+                  >
                     <Switch
+                      aria-label={t("Last seen")}
                       checked={s.privacy.lastSeen}
+                      disabled={s.privacyStatus !== "ready" && s.privacyStatus !== "error"}
                       onCheckedChange={(v) => s.togglePrivacy("lastSeen", v)}
                     />
                   </Setting>
-                  <Setting label={t("Profile photo")} sub={t("Visible to: everyone")}>
+                  <Setting
+                    label={t("Profile photo")}
+                    sub={t(s.privacy.profilePhoto ? "Visible to people you chat with" : "Hidden")}
+                  >
                     <Switch
+                      aria-label={t("Profile photo")}
                       checked={s.privacy.profilePhoto}
+                      disabled={s.privacyStatus !== "ready" && s.privacyStatus !== "error"}
                       onCheckedChange={(v) => s.togglePrivacy("profilePhoto", v)}
                     />
                   </Setting>
-                  <Setting label={t("Allow screenshots in chats")} sub={t("Block by default")}>
+                  <Setting
+                    label={t("Allow screenshots in chats")}
+                    sub={t(s.privacy.allowScreenshots ? "Screenshots allowed" : "Protection on · browser limitations apply")}
+                  >
                     <Switch
+                      aria-label={t("Allow screenshots in chats")}
                       checked={s.privacy.allowScreenshots}
+                      disabled={s.privacyStatus !== "ready" && s.privacyStatus !== "error"}
                       onCheckedChange={(v) => s.togglePrivacy("allowScreenshots", v)}
                     />
                   </Setting>
+                  <p
+                    role={s.privacyStatus === "error" ? "alert" : "status"}
+                    className={cn(
+                      "px-1 pt-1 text-[11px]",
+                      s.privacyStatus === "error" ? "text-rose-400" : "text-muted-foreground"
+                    )}
+                  >
+                    {s.privacyStatus === "idle" && t("Waiting for your account…")}
+                    {s.privacyStatus === "loading" && t("Loading private account settings…")}
+                    {s.privacyStatus === "saving" && t("Saving securely…")}
+                    {s.privacyStatus === "ready" && t("Synced to your account")}
+                    {s.privacyStatus === "error" && t(s.privacyError ?? "Privacy settings could not be synced.")}
+                  </p>
                 </Section>
               )}
 

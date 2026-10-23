@@ -94,7 +94,7 @@ export function NewGroupDialog({ open, onOpenChange, onCreate, onCreated }: Prop
     const timer = setTimeout(async () => {
       const q = search.trim();
       let query = supabase
-        .from("profiles")
+        .from("public_profiles")
         .select("id, name, username, avatar")
         .limit(20);
       if (q) {

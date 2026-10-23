@@ -234,22 +234,21 @@ export const useStoriesStore = create<StoriesState>((set, get) => ({
     let profileMap: Record<string, StoryProfile> = {};
     if (authorIds.length) {
       const { data: profs } = await supabase
-        .from("profiles")
+        .from("public_profiles")
         .select("id, name, username, avatar")
         .in("id", authorIds);
       (profs || []).forEach((p: StoryProfile) => {
         profileMap[p.id] = p;
       });
     }
-    // Also keep our own profile around so MyStoryBar / sidebar can find it.
-    if (!profileMap[me.id]) {
-      profileMap[me.id] = {
-        id: me.id,
-        name: me.name,
-        username: me.username,
-        avatar: me.avatar
-      };
-    }
+    // Own-profile surfaces use the authenticated raw profile. Other clients
+    // still receive the masked avatar through public_profiles.
+    profileMap[me.id] = {
+      id: me.id,
+      name: me.name,
+      username: me.username,
+      avatar: me.avatar
+    };
     const next: Record<string, UserStories> = {};
     rows.forEach((r) => {
       const isViewedSlide = myViews.has(r.id);
@@ -529,7 +528,7 @@ export const useStoriesStore = create<StoriesState>((set, get) => ({
     if (!views?.length) return [];
     const ids = (views as ViewRow[]).map((v) => v.user_id);
     const { data: profiles } = await supabase
-      .from("profiles")
+      .from("public_profiles")
       .select("id, name, username, avatar")
       .in("id", ids);
     return (profiles || []).map((p: { id: string; name?: string; username?: string; avatar?: string }) => ({
@@ -549,7 +548,7 @@ export const useStoriesStore = create<StoriesState>((set, get) => ({
     if (!likes?.length) return [];
     const ids = (likes as LikeRow[]).map((v) => v.user_id);
     const { data: profiles } = await supabase
-      .from("profiles")
+      .from("public_profiles")
       .select("id, name, username, avatar")
       .in("id", ids);
     return (profiles || []).map((p: { id: string; name?: string; username?: string; avatar?: string }) => ({
@@ -617,7 +616,7 @@ export const useStoriesStore = create<StoriesState>((set, get) => ({
           // their name + avatar render correctly in the rail/viewer.
           if (!get().profiles[r.author_id]) {
             const { data: prof } = await supabase
-              .from("profiles")
+              .from("public_profiles")
               .select("id, name, username, avatar")
               .eq("id", r.author_id)
               .single();

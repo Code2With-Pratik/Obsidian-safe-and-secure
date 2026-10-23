@@ -71,10 +71,9 @@ export function ChatMembersCard({ chat }: { chat: Chat }) {
    *  doesn't fire. Falls back to a deterministic dicebear URL when the
    *  user has no avatar uploaded, so the click is never a dead end. */
   const onAvatarClick = (u: User) => {
-    const src =
-      u.avatar ||
-      `https://api.dicebear.com/9.x/notionists/svg?seed=${encodeURIComponent(u.id)}`;
-    lightbox.open([{ src, alt: u.name }], 0);
+    // Missing may mean intentionally hidden by public_profiles.
+    if (!u.avatar) return;
+    lightbox.open([{ src: u.avatar, alt: u.name }], 0);
   };
 
   const memberIds = React.useMemo(() => chat.memberIds ?? [], [chat.memberIds]);
@@ -90,7 +89,7 @@ export function ChatMembersCard({ chat }: { chat: Chat }) {
     (async () => {
       const supabase = createClient();
       const { data } = await supabase
-        .from("profiles")
+        .from("public_profiles")
         .select("id, name, username, avatar")
         .in("id", memberIds);
       if (cancelled) return;
@@ -322,7 +321,7 @@ function AddMemberDialog({
     const supabase = createClient();
     const timer = setTimeout(async () => {
       let query = supabase
-        .from("profiles")
+        .from("public_profiles")
         .select("id, name, username, avatar")
         .limit(20);
       const term = q.trim();

@@ -203,7 +203,7 @@ export function ChatDetailsPanel({ chat }: { chat: Chat }) {
     (async () => {
       const supabase = createClient();
       const { data } = await supabase
-        .from("profiles")
+        .from("public_profiles")
         .select(
           "id, name, username, avatar, banner, bio, profession, pronouns, location, links, created_at"
         )

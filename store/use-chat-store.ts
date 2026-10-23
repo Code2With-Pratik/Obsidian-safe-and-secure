@@ -8,6 +8,11 @@ import { useAuthStore } from "./use-auth-store";
 import { useChatThemeStore } from "./use-chat-theme-store";
 import { useNotificationsStore } from "./use-notifications-store";
 import { useSettingsStore } from "./use-settings-store";
+import {
+  applyReadVisibility,
+  canDisclosePrivacy,
+  createTypingDisclosureController
+} from "@/lib/privacy-behavior";
 
 const supabase = createClient();
 
@@ -23,6 +28,28 @@ const newId = (): string => {
 /** Per-(chatId, userId) auto-clear timers for the typing-broadcast channel.
  *  Kept at module scope so they survive store updates and HMR. */
 const typingClearTimers: Map<string, ReturnType<typeof setTimeout>> = new Map();
+let privacyChangeListenerAttached = false;
+
+const typingDisclosure = createTypingDisclosureController({
+  canPublish: () => {
+    const me = useAuthStore.getState().user;
+    return canDisclosePrivacy(
+      useSettingsStore.getState(),
+      me?.id,
+      "typingIndicator"
+    );
+  },
+  send: async (chatId: string, isTyping: boolean) => {
+    const me = useAuthStore.getState().user;
+    const channel = useChatStore.getState().typingChannel;
+    if (!me || !channel) return;
+    await channel.send({
+      type: "broadcast",
+      event: "typing",
+      payload: { user_id: me.id, chat_id: chatId, typing: isTyping }
+    });
+  }
+});
 
 /* ----------------------------- helpers ----------------------------- */
 
@@ -223,6 +250,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const me = useAuthStore.getState().user;
     if (!me) return;
 
+    if (typeof window !== "undefined" && !privacyChangeListenerAttached) {
+      window.addEventListener("obsidian:privacy-change", ((event: CustomEvent) => {
+        const detail = event.detail as { key?: string; value?: boolean } | undefined;
+        if (detail?.key !== "typingIndicator" || detail.value !== false) return;
+        void typingDisclosure.cleanup();
+      }) as EventListener);
+      privacyChangeListenerAttached = true;
+    }
+
     // Defensive cleanup: if we already have channels registered with the same
     // topics (HMR re-ran the module, auth-listener fired twice, etc.), tear
     // them down before creating fresh ones. Without this, Supabase throws
@@ -279,7 +315,9 @@ export const useChatStore = create<ChatState>((set, get) => ({
           });
           // Bump my last_seen_at — used by DM chat headers to show
           // "last seen at HH:mm" when I'm offline on someone else's screen.
-          void supabase.from("profiles").update({ last_seen_at: nowIso }).eq("id", me.id);
+          if (canDisclosePrivacy(useSettingsStore.getState(), me.id, "lastSeen")) {
+            void supabase.from("profiles").update({ last_seen_at: nowIso }).eq("id", me.id);
+          }
         }
       });
       set({ presenceChannel: channel });
@@ -629,13 +667,16 @@ export const useChatStore = create<ChatState>((set, get) => ({
   disconnectRealtime: () => {
     const me = useAuthStore.getState().user;
     // Record the moment we go offline so peers see an accurate "last seen at".
-    if (me) {
+    if (me && canDisclosePrivacy(useSettingsStore.getState(), me.id, "lastSeen")) {
       void supabase
         .from("profiles")
         .update({ last_seen_at: new Date().toISOString() })
         .eq("id", me.id);
     }
     const { presenceChannel, messageChannel, reactionChannel, chatChannel, typingChannel } = get();
+    // Invoke cleanup while the typing channel is still usable. The controller
+    // follows any in-flight true with a final false before resetting.
+    void typingDisclosure.cleanup().finally(() => typingDisclosure.reset());
     if (presenceChannel) supabase.removeChannel(presenceChannel);
     if (messageChannel) supabase.removeChannel(messageChannel);
     if (reactionChannel) supabase.removeChannel(reactionChannel);
@@ -675,7 +716,10 @@ export const useChatStore = create<ChatState>((set, get) => ({
         )
       )
     );
-    const { data: profiles } = await supabase.from("profiles").select("*").in("id", pIds);
+    const { data: profiles } = await supabase
+      .from("public_profiles")
+      .select("id, name, username, avatar, last_seen_at")
+      .in("id", pIds);
     const pMap = new Map((profiles || []).map((p: { id: string }) => [p.id, p]));
     // Stash everyone we just fetched into the profile cache so chat bubbles
     // (especially in groups) can render their avatar + name without a second
@@ -698,6 +742,14 @@ export const useChatStore = create<ChatState>((set, get) => ({
         },
         {}
       );
+      // Keep the signed-in user's own raw avatar locally; only peer-facing
+      // reads should receive the server-masked public profile.
+      profileEntries[me.id] = {
+        id: me.id,
+        name: me.name,
+        username: me.username,
+        avatar: me.avatar
+      };
       set((s) => ({ profiles: { ...s.profiles, ...profileEntries } }));
     }
 
@@ -861,14 +913,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
   /* ----- presence helpers ----- */
 
   setTyping: async (chatId, isTyping) => {
-    const me = useAuthStore.getState().user;
-    const channel = get().typingChannel;
-    if (!me || !channel) return;
-    await channel.send({
-      type: "broadcast",
-      event: "typing",
-      payload: { user_id: me.id, chat_id: chatId, typing: isTyping }
-    });
+    await typingDisclosure.update(chatId, isTyping);
   },
 
   setActiveChat: (id) => {
@@ -890,7 +935,7 @@ export const useChatStore = create<ChatState>((set, get) => ({
     if (!userId) return;
     if (get().profiles[userId]) return;
     const { data } = await supabase
-      .from("profiles")
+      .from("public_profiles")
       .select("id, name, username, avatar")
       .eq("id", userId)
       .single();
@@ -1279,22 +1324,30 @@ export const useChatStore = create<ChatState>((set, get) => ({
     const me = useAuthStore.getState().user;
     if (!me) return;
     const now = new Date().toISOString();
-    // Bump my last_read_at AND flip status of inbound messages to "read", so
-    // both the unread badge (computed from last_read_at) and the per-message
-    // read-receipt tick are accurate on the next reload.
-    await Promise.all([
-      supabase
-        .from("chat_members")
-        .update({ last_read_at: now })
-        .eq("chat_id", chatId)
-        .eq("user_id", me.id),
-      supabase
-        .from("messages")
-        .update({ status: "read" })
-        .eq("chat_id", chatId)
-        .neq("author_id", me.id)
-        .neq("status", "read")
-    ]);
+    // Always maintain our private unread cursor. Publishing the per-message
+    // `read` status is a separate, user-controlled disclosure.
+    await applyReadVisibility({
+      updatePrivateCursor: async () => {
+        await supabase
+          .from("chat_members")
+          .update({ last_read_at: now })
+          .eq("chat_id", chatId)
+          .eq("user_id", me.id);
+      },
+      publishReadReceipt: async () => {
+        await supabase
+          .from("messages")
+          .update({ status: "read" })
+          .eq("chat_id", chatId)
+          .neq("author_id", me.id)
+          .neq("status", "read");
+      },
+      mayPublish: () => canDisclosePrivacy(
+        useSettingsStore.getState(),
+        me.id,
+        "readReceipts"
+      )
+    });
     set((s) => ({ chats: s.chats.map((c) => (c.id === chatId ? { ...c, unread: 0 } : c)) }));
   },
 

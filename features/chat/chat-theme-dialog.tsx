@@ -123,7 +123,7 @@ export function ChatThemeDialog(props: Props) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="!max-w-2xl !max-h-[90dvh] !p-0 flex flex-col overflow-hidden">
-        <DialogHeader className="px-6 pt-6">
+        <DialogHeader className="shrink-0 px-6 pt-6">
           <div className="size-12 rounded-2xl bg-gradient-to-br from-violet-500 via-fuchsia-500 to-cyan-400 grid place-items-center shadow-glow mb-2">
             <Palette className="text-white" />
           </div>
@@ -131,76 +131,80 @@ export function ChatThemeDialog(props: Props) {
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 min-h-0 overflow-y-auto no-scrollbar px-6 pb-2 space-y-4">
+        <div className="shrink-0 px-6">
           <PreviewBubbles theme={previewTheme} />
-
-          <input
-            ref={fileRef}
-            type="file"
-            accept="image/*"
-            className="hidden"
-            onChange={(e) => handleFile(e.target.files?.[0])}
-          />
-
-          <ThemeSection title="Photos">
-            <CustomTile
-              active={picked === CUSTOM_THEME_ID}
-              image={customImg}
-              onPick={handlePickFile}
-              onClear={(e) => {
-                e.stopPropagation();
-                setCustomImg(undefined);
-                if (picked === CUSTOM_THEME_ID) setPicked("default");
-              }}
-            />
-            {CHAT_THEMES.filter((t) => t.category === "photo").map((t) => (
-              <ThemeTile
-                key={t.id}
-                theme={t}
-                active={picked === t.id}
-                onClick={() => setPicked(t.id)}
-                showTexture
-              />
-            ))}
-          </ThemeSection>
-
-          <ThemeSection title="Gradients">
-            {CHAT_THEMES.filter((t) => t.category === "gradient").map((t) => (
-              <ThemeTile
-                key={t.id}
-                theme={t}
-                active={picked === t.id}
-                onClick={() => setPicked(t.id)}
-              />
-            ))}
-          </ThemeSection>
-
-          <ThemeSection title="Patterns">
-            {CHAT_THEMES.filter((t) => t.category === "pattern").map((t) => (
-              <ThemeTile
-                key={t.id}
-                theme={t}
-                active={picked === t.id}
-                onClick={() => setPicked(t.id)}
-                showTexture
-              />
-            ))}
-          </ThemeSection>
-
-          {isGlobal && (
-            <label className="flex items-center gap-3 p-3 rounded-xl glass-subtle cursor-pointer">
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium">Override per-chat themes</p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Replace any custom themes you've picked on individual chats.
-                </p>
-              </div>
-              <Switch checked={overrideAll} onCheckedChange={setOverrideAll} />
-            </label>
-          )}
         </div>
 
-        <div className="flex justify-between items-center gap-3 px-6 py-4 border-t border-white/10 bg-background/30 backdrop-blur-md">
+        <input
+          ref={fileRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => handleFile(e.target.files?.[0])}
+        />
+
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain no-scrollbar px-6 pb-2">
+          <div className="space-y-4">
+            <ThemeSection title="Photos">
+              <CustomTile
+                active={picked === CUSTOM_THEME_ID}
+                image={customImg}
+                onPick={handlePickFile}
+                onClear={(e) => {
+                  e.stopPropagation();
+                  setCustomImg(undefined);
+                  if (picked === CUSTOM_THEME_ID) setPicked("default");
+                }}
+              />
+              {CHAT_THEMES.filter((t) => t.category === "photo").map((t) => (
+                <ThemeTile
+                  key={t.id}
+                  theme={t}
+                  active={picked === t.id}
+                  onClick={() => setPicked(t.id)}
+                  showTexture
+                />
+              ))}
+            </ThemeSection>
+
+            <ThemeSection title="Gradients">
+              {CHAT_THEMES.filter((t) => t.category === "gradient").map((t) => (
+                <ThemeTile
+                  key={t.id}
+                  theme={t}
+                  active={picked === t.id}
+                  onClick={() => setPicked(t.id)}
+                />
+              ))}
+            </ThemeSection>
+
+            <ThemeSection title="Patterns">
+              {CHAT_THEMES.filter((t) => t.category === "pattern").map((t) => (
+                <ThemeTile
+                  key={t.id}
+                  theme={t}
+                  active={picked === t.id}
+                  onClick={() => setPicked(t.id)}
+                  showTexture
+                />
+              ))}
+            </ThemeSection>
+
+            {isGlobal && (
+              <label className="flex items-center gap-3 p-3 rounded-xl glass-subtle cursor-pointer">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium">Override per-chat themes</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Replace any custom themes you've picked on individual chats.
+                  </p>
+                </div>
+                <Switch checked={overrideAll} onCheckedChange={setOverrideAll} />
+              </label>
+            )}
+          </div>
+        </div>
+
+        <div className="shrink-0 flex justify-between items-center gap-3 px-6 py-4 border-t border-white/10 bg-background/30 backdrop-blur-md">
           <button
             onClick={() => {
               setPicked("default");

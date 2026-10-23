@@ -80,7 +80,7 @@ export function CommandPalette() {
         return;
       }
       const builder = supabase
-        .from("profiles")
+        .from("public_profiles")
         .select("id, name, username, avatar")
         .or(`name.ilike.%${q}%,username.ilike.%${q}%`)
         .limit(10);

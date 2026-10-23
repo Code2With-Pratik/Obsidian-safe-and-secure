@@ -69,7 +69,7 @@ export function InviteToCallPopup({
     const supabase = createClient();
     const timer = window.setTimeout(async () => {
       let query = supabase
-        .from("profiles")
+        .from("public_profiles")
         .select("id, name, username, avatar")
         .limit(20);
       const q = search.trim();

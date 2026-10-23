@@ -53,7 +53,7 @@ export function AccessPopover({ children }: Props) {
     const supabase = createClient();
     const timer = window.setTimeout(async () => {
       let q = supabase
-        .from("profiles")
+        .from("public_profiles")
         .select("id, name, username, avatar")
         .limit(30);
       const search = query.trim();
