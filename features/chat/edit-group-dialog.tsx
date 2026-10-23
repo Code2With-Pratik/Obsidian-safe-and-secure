@@ -31,6 +31,17 @@ const GRADIENTS = [
   "linear-gradient(135deg,#0EA5E9,#8B5CF6)"
 ];
 
+const isSafeBannerMediaUrl = (value: string) => {
+  if (!value) return false;
+  if (value.startsWith("blob:")) return true;
+  if (value.startsWith("https://") || value.startsWith("http://")) return true;
+  if (value.startsWith("data:image/")) return true;
+  return false;
+};
+
+const toSafeBannerMediaUrl = (value: string) =>
+  isSafeBannerMediaUrl(value) ? value : undefined;
+
 interface Props {
   chat: Chat;
   open: boolean;
@@ -92,8 +103,14 @@ export function EditGroupDialog({ chat, open, onOpenChange }: Props) {
   const onBannerFile = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const isVideo = file.type.startsWith("video/");
+    const isImage = file.type.startsWith("image/");
+    if (!isVideo && !isImage) {
+      e.target.value = "";
+      return;
+    }
     setBannerFile(file);
-    setBannerIsVideo(file.type.startsWith("video/"));
+    setBannerIsVideo(isVideo);
     setBanner(URL.createObjectURL(file));
     e.target.value = "";
   };
@@ -190,7 +207,7 @@ export function EditGroupDialog({ chat, open, onOpenChange }: Props) {
         <div className="relative h-32">
           {bannerIsVideo ? (
             <video
-              src={banner}
+              src={toSafeBannerMediaUrl(banner)}
               autoPlay
               loop
               muted
