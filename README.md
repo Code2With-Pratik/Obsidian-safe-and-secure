@@ -1,88 +1,92 @@
 
 ## 🏗️ System Architecture
 
-Obsidian connects authentication, real-time messaging, social spaces, collaboration tools, and external services.
+Obsidian's architecture connects authentication, real-time messaging, social spaces, collaboration tools, and external services.
 
 ```mermaid
 flowchart TD
-    USER["👤 User"]
-    APP["Obsidian App<br/>Next.js + React"]
 
-    USER --> APP
+subgraph group_entry["App entry"]
+  node_auth["Auth flows<br/>[page.tsx]"]
+  node_shell["App shell<br/>[app-shell.tsx]"]
+  node_authlistener["Auth listener<br/>[auth-listener.tsx]"]
+  node_settings["Profile and settings<br/>[page.tsx]"]
+end
 
-    subgraph AUTH["Authentication"]
-        LOGIN["Login / Signup"]
-        GOOGLE["Google OAuth"]
-        GITHUB["GitHub OAuth"]
-        AUTH_SERVICE["Supabase Auth"]
-        LOGIN --> AUTH_SERVICE
-        GOOGLE --> AUTH_SERVICE
-        GITHUB --> AUTH_SERVICE
-    end
+subgraph group_messaging["Messaging"]
+  node_chatui["Chats and stories<br/>[chat-thread.tsx]"]
+end
 
-    subgraph MESSAGING["Messaging"]
-        CHATS["Direct Messages"]
-        GROUPS["Group Chats"]
-        GHOST["Ghost Rooms"]
-        SCHEDULED["Scheduled Messages"]
-    end
+subgraph group_social["Social spaces"]
+  node_communities["Communities<br/>[community-post.tsx]"]
+  node_ghost["Ghost rooms<br/>[ghost-chat.tsx]"]
+end
 
-    subgraph SOCIAL["Social and Collaboration"]
-        DISCOVER["Discover"]
-        WHITEBOARD["Collaborative Whiteboard"]
-        VAULT["Secure Vault"]
-    end
+subgraph group_collaboration["Calls and tools"]
+  node_calls["Calls<br/>[livekit-stage.tsx]"]
+  node_callapi["Call APIs<br/>[route.ts]"]
+  node_whiteboard["Whiteboard<br/>[board-canvas.tsx]"]
+  node_vault["Encrypted vault<br/>[use-vault-store.ts]"]
+  node_ai["AI assistant<br/>[ai-assistant.tsx]"]
+  node_aichatapi["AI chat API<br/>[route.ts]"]
+end
 
-    subgraph CALLS["Communication"]
-        AUDIO["Audio Calls"]
-        VIDEO["Video Calls"]
-        LIVEKIT["LiveKit"]
-        AUDIO --> LIVEKIT
-        VIDEO --> LIVEKIT
-    end
+subgraph group_platform["State and services"]
+  node_authstate["Auth state<br/>[use-auth-store.ts]"]
+  node_chatstate["Chat state<br/>[use-chat-store.ts]"]
+  node_callstate["Call state<br/>[use-call-store.ts]"]
+  node_settingsstate["Settings state"]
+  node_supabaseclient["Supabase client<br/>[client.ts]"]
+  node_supabaseserver["Supabase server client<br/>[server.ts]"]
+  node_supabase[("Supabase services")]
+  node_livekit["LiveKit Cloud"]
+  node_klipy["Klipy"]
+end
 
-    subgraph BACKEND["Backend Services"]
-        SUPABASE_AUTH["Supabase Authentication"]
-        DATABASE["Supabase Database"]
-        REALTIME["Supabase Realtime"]
-        STORAGE["Supabase Storage"]
-    end
+node_user(("User"))
 
-    APP --> LOGIN
-    APP --> CHATS
-    APP --> GROUPS
-    APP --> GHOST
-    APP --> SCHEDULED
-    APP --> DISCOVER
-    APP --> WHITEBOARD
-    APP --> VAULT
-    APP --> AUDIO
-    APP --> VIDEO
+node_user -->|"signs in"| node_auth
+node_auth -->|"authenticates"| node_supabaseserver
+node_supabaseserver -->|"connects to"| node_supabase
+node_authlistener -->|"updates session"| node_authstate
+node_user -.->|"uses app"| node_shell
+node_shell -.->|"opens conversations"| node_chatui
+node_chatui -->|"reads and updates"| node_chatstate
+node_chatstate -->|"syncs data"| node_supabaseclient
+node_supabaseclient -.->|"realtime and storage"| node_supabase
+node_chatui -.->|"loads GIFs"| node_klipy
+node_user -.->|"discovers and posts"| node_communities
+node_user -.->|"joins rooms"| node_ghost
+node_user -.->|"starts or joins"| node_calls
+node_calls -->|"tracks sessions"| node_callstate
+node_callstate -->|"reads call data"| node_supabaseclient
+node_calls -.->|"requests token"| node_callapi
+node_callapi -->|"checks session"| node_supabaseserver
+node_callapi -.->|"mints access token"| node_livekit
+node_user -.->|"collaborates"| node_whiteboard
+node_whiteboard -.->|"persists board"| node_supabaseclient
+node_user -.->|"manages files"| node_vault
+node_vault -->|"stores files"| node_supabaseclient
+node_user -.->|"asks assistant"| node_ai
+node_ai -.->|"sends prompts"| node_aichatapi
+node_aichatapi -.->|"uses backend"| node_supabaseserver
+node_user -.->|"configures account"| node_settings
+node_settings -->|"updates preferences"| node_settingsstate
+node_settingsstate -.->|"persists preferences"| node_supabaseclient
 
-    AUTH_SERVICE --> SUPABASE_AUTH
+classDef toneNeutral fill:#f8fafc,stroke:#334155,stroke-width:1.5px,color:#0f172a
+classDef toneBlue fill:#dbeafe,stroke:#2563eb,stroke-width:1.5px,color:#172554
+classDef toneAmber fill:#fef3c7,stroke:#d97706,stroke-width:1.5px,color:#78350f
+classDef toneMint fill:#dcfce7,stroke:#16a34a,stroke-width:1.5px,color:#14532d
+classDef toneRose fill:#ffe4e6,stroke:#e11d48,stroke-width:1.5px,color:#881337
+classDef toneIndigo fill:#e0e7ff,stroke:#4f46e5,stroke-width:1.5px,color:#312e81
+classDef toneTeal fill:#ccfbf1,stroke:#0f766e,stroke-width:1.5px,color:#134e4a
 
-    CHATS --> DATABASE
-    GROUPS --> DATABASE
-    SCHEDULED --> DATABASE
-    DISCOVER --> DATABASE
-    VAULT --> STORAGE
-    WHITEBOARD --> REALTIME
-
-    CHATS <--> REALTIME
-    GROUPS <--> REALTIME
-    GHOST <--> REALTIME
-
-    classDef app fill:#172554,stroke:#60a5fa,color:#ffffff
-    classDef auth fill:#312e81,stroke:#a5b4fc,color:#ffffff
-    classDef messaging fill:#064e3b,stroke:#34d399,color:#ffffff
-    classDef social fill:#713f12,stroke:#fbbf24,color:#ffffff
-    classDef backend fill:#3f1d2e,stroke:#fb7185,color:#ffffff
-
-    class APP app
-    class LOGIN,GOOGLE,GITHUB,AUTH_SERVICE,SUPABASE_AUTH auth
-    class CHATS,GROUPS,GHOST,SCHEDULED messaging
-    class DISCOVER,WHITEBOARD,VAULT social
-    class DATABASE,REALTIME,STORAGE,LIVEKIT backend
+class node_auth,node_shell,node_authlistener,node_settings,node_user toneBlue
+class node_chatui toneAmber
+class node_communities,node_ghost toneMint
+class node_calls,node_callapi,node_whiteboard,node_vault,node_ai,node_aichatapi toneRose
+class node_authstate,node_chatstate,node_callstate,node_settingsstate,node_supabaseclient,node_supabaseserver,node_supabase,node_livekit,node_klipy toneIndigo
 ```
 
 
