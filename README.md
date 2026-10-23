@@ -4,9 +4,6 @@ Obsidian's architecture connects authentication, real-time messaging, social spa
 
 ```mermaid
 flowchart TD
-
-...your entire existing Mermaid diagram...
-
 class node_authstate,node_chatstate,node_callstate,node_settingsstate,node_supabaseclient,node_supabaseserver,node_supabase,node_livekit,node_klipy toneIndigo
 ```
 
