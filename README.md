@@ -5,9 +5,10 @@ Obsidian's architecture connects authentication, real-time messaging, social spa
 
 ```mermaid
 flowchart TD
-    A["User"] --> B["Obsidian App"]
-    B --> C["Supabase"]
-    B --> D["LiveKit"]
+    A[User] --> B[Obsidian App]
+    B --> C[Supabase Auth]
+    B --> D[Real-time Messaging]
+    B --> E[LiveKit Calls]
 ```
 
 
