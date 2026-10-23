@@ -11,9 +11,12 @@ function normalizeSiteUrl(value: string | undefined) {
 export const SITE_URL = normalizeSiteUrl(process.env.NEXT_PUBLIC_SITE_URL);
 export const SITE_NAME = "Obsidian Safe & Secure";
 export const SITE_TITLE =
-  "Obsidian Safe & Secure | Private Messaging, Calls & Collaboration";
+  "Obsidian Safe & Secure Messaging | Calls & Collaboration";
 export const SITE_DESCRIPTION =
-  "Obsidian Safe & Secure is a privacy-focused communication platform for real-time messaging, voice and video calls, ghost rooms, stories, collaborative whiteboards, communities, secure files, and an optional AI assistant.";
+  "Obsidian Safe & Secure is a privacy-focused messaging and communication platform for real-time chat, voice and video calls, ghost rooms, stories, collaborative whiteboards, communities, secure files, and an optional AI assistant.";
+
+export const ORGANIZATION_NAME =
+  process.env.ORGANIZATION_NAME?.trim() || "Code2With Pratik";
 
 export function getStructuredData() {
   const email = process.env.ORGANIZATION_CONTACT_EMAIL?.trim();
@@ -30,10 +33,12 @@ export function getStructuredData() {
   const organization = {
     "@type": "Organization",
     "@id": `${SITE_URL}/#organization`,
-    name: "Obsidian Labs",
+    name: ORGANIZATION_NAME,
+    alternateName: "Code2With-Pratik",
     url: SITE_URL,
     logo: `${SITE_URL}/Obsidian_Logo.png`,
-    description: SITE_DESCRIPTION,
+    description: `${ORGANIZATION_NAME} develops and maintains ${SITE_NAME}, a secure messaging and collaboration platform.`,
+    brand: { "@id": `${SITE_URL}/#brand` },
     sameAs: [
       "https://github.com/Code2With-Pratik/Obsidian-safe-and-secure",
       "https://deepwiki.com/Code2With-Pratik/Obsidian-safe-and-secure"
@@ -65,6 +70,15 @@ export function getStructuredData() {
     "@graph": [
       organization,
       {
+        "@type": "Brand",
+        "@id": `${SITE_URL}/#brand`,
+        name: SITE_NAME,
+        alternateName: ["Obsidian Safe & Secure Messaging", "Obsidian Messaging"],
+        url: SITE_URL,
+        logo: `${SITE_URL}/Obsidian_Logo.png`,
+        description: SITE_DESCRIPTION
+      },
+      {
         "@type": "WebSite",
         "@id": `${SITE_URL}/#website`,
         name: SITE_NAME,
@@ -77,11 +91,12 @@ export function getStructuredData() {
         "@type": "WebApplication",
         "@id": `${SITE_URL}/#application`,
         name: SITE_NAME,
-        alternateName: "Obsidian",
+        alternateName: ["Obsidian", "Obsidian Safe & Secure Messaging"],
         url: SITE_URL,
         description: SITE_DESCRIPTION,
         applicationCategory: "CommunicationApplication",
         applicationSubCategory: "Secure messaging and collaboration",
+        brand: { "@id": `${SITE_URL}/#brand` },
         operatingSystem: "Web, Android",
         browserRequirements: "Requires a modern browser with JavaScript enabled",
         image: `${SITE_URL}/og-default.jpg`,

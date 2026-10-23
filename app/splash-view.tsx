@@ -30,7 +30,8 @@ export default function SplashPage() {
           transition={{ delay: 0.25, duration: 0.7 }}
           className="mt-10 text-5xl md:text-7xl font-display font-semibold tracking-tight text-balance"
         >
-          <span className="neon-text">Obsidian</span>: {t("the future of secure communication")}.
+          <span className="neon-text">Obsidian Safe &amp; Secure</span> messaging:{" "}
+          {t("the future of secure communication")}.
         </motion.h1>
 
         <motion.p
@@ -96,7 +97,7 @@ export default function SplashPage() {
               Talk, create, and collaborate without changing context.
             </h2>
             <p className="mt-5 text-base leading-7 text-muted-foreground md:text-lg">
-              Obsidian Safe &amp; Secure combines everyday communication with creative and
+              Obsidian Safe &amp; Secure messaging combines everyday communication with creative and
               collaborative tools. Conversations, live calls, shared media, communities,
               visual planning, and protected files remain connected through one account and
               one consistent interface.

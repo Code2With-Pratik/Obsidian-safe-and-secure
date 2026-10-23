@@ -14,6 +14,7 @@ import { AppProviders } from "@/providers/app-providers";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import {
   getStructuredData,
+  ORGANIZATION_NAME,
   SITE_DESCRIPTION,
   SITE_NAME,
   SITE_TITLE,
@@ -62,14 +63,15 @@ export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: {
     default: SITE_TITLE,
-    template: "%s · Obsidian"
+    template: `%s · ${SITE_NAME}`
   },
   description: SITE_DESCRIPTION,
   applicationName: SITE_NAME,
-  authors: [{ name: "Obsidian Labs", url: SITE_URL }],
-  creator: "Obsidian Labs",
-  publisher: "Obsidian Labs",
+  authors: [{ name: ORGANIZATION_NAME, url: SITE_URL }],
+  creator: ORGANIZATION_NAME,
+  publisher: ORGANIZATION_NAME,
   keywords: [
+    "Obsidian Safe & Secure messaging",
     "Obsidian Safe & Secure",
     "Obsidian communication platform",
     "secure messaging",

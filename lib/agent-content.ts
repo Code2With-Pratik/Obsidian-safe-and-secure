@@ -51,7 +51,7 @@ export function prefersMarkdown(acceptHeader: string | null): boolean {
   return false;
 }
 
-const HOME_MARKDOWN = `# Obsidian Safe & Secure
+const HOME_MARKDOWN = `# Obsidian Safe & Secure Messaging
 
 ${SITE_DESCRIPTION}
 
@@ -79,9 +79,9 @@ Use Obsidian when a person or team needs one privacy-focused workspace for commu
 - [Sitemap](${SITE_URL}/sitemap.xml)
 `;
 
-const ABOUT_MARKDOWN = `# About Obsidian Safe & Secure
+const ABOUT_MARKDOWN = `# About Obsidian Safe & Secure Messaging
 
-Obsidian Safe & Secure is a privacy-focused communication and collaboration application. It brings messaging, calls, stories, communities, ghost rooms, whiteboards, secure file organization, and optional AI assistance into one coherent interface.
+Obsidian Safe & Secure is a privacy-focused messaging and collaboration application. It brings calls, stories, communities, ghost rooms, whiteboards, secure file organization, and optional AI assistance into one coherent interface.
 
 The application is designed for individuals and groups that value expressive communication without combining many disconnected products. Its web experience is built with Next.js and React, while Supabase provides authentication, persisted data, storage, and real-time synchronization. LiveKit provides real-time voice and video infrastructure.
 
@@ -121,7 +121,7 @@ export function markdownForPath(pathname: string): string | null {
 export function markdownNotFound(pathname: string): string {
   return `# 404 — Page not found
 
-The requested path \`${pathname}\` does not exist on Obsidian Safe & Secure.
+The requested path \`${pathname}\` does not exist on Obsidian Safe & Secure Messaging.
 
 - [Return to the homepage](${SITE_URL}/)
 - [Read the agent instructions](${SITE_URL}/llms.txt)
@@ -130,7 +130,7 @@ The requested path \`${pathname}\` does not exist on Obsidian Safe & Secure.
 `;
 }
 
-export const LLMS_TEXT = `# Obsidian Safe & Secure
+export const LLMS_TEXT = `# Obsidian Safe & Secure Messaging
 
 > ${SITE_DESCRIPTION}
 

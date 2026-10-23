@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 const baseUrl = (process.env.AGENT_BASE_URL || "http://127.0.0.1:3000").replace(/\/$/, "");
+const expectCompleteOrganization =
+  process.env.AGENT_EXPECT_COMPLETE_ORGANIZATION === "1";
 
 async function request(path, accept) {
   return fetch(`${baseUrl}${path}`, {
@@ -33,7 +35,8 @@ test("homepage serves substantial semantic HTML and JSON-LD", async () => {
   const html = await response.text();
   const text = visibleText(html);
   assert.ok(text.length >= 500, `expected at least 500 visible characters, received ${text.length}`);
-  assert.match(html, /<h1[^>]*>[\s\S]*Obsidian/i);
+  assert.match(html, /<title>Obsidian Safe &amp; Secure Messaging/i);
+  assert.match(html, /<h1[^>]*>[\s\S]*Obsidian Safe &amp; Secure[\s\S]*messaging/i);
   assert.match(html, /<h2[^>]*>/i);
 
   const jsonLdMatch = html.match(
@@ -43,8 +46,37 @@ test("homepage serves substantial semantic HTML and JSON-LD", async () => {
   const jsonLd = JSON.parse(jsonLdMatch[1]);
   const types = jsonLd["@graph"].map((item) => item["@type"]);
   assert.ok(types.includes("Organization"));
+  assert.ok(types.includes("Brand"));
   assert.ok(types.includes("WebApplication"));
   assert.ok(types.includes("WebSite"));
+
+  const organization = jsonLd["@graph"].find((item) => item["@type"] === "Organization");
+  const brand = jsonLd["@graph"].find((item) => item["@type"] === "Brand");
+  const application = jsonLd["@graph"].find((item) => item["@type"] === "WebApplication");
+  assert.ok(organization.name);
+  assert.equal(organization.contactPoint["@type"], "ContactPoint");
+  assert.equal(organization.contactPoint.contactType, "customer support");
+  assert.equal(brand.name, "Obsidian Safe & Secure");
+  assert.ok(brand.alternateName.includes("Obsidian Safe & Secure Messaging"));
+  assert.equal(application.name, "Obsidian Safe & Secure");
+  assert.ok(application.alternateName.includes("Obsidian Safe & Secure Messaging"));
+  assert.equal(organization.brand["@id"], brand["@id"]);
+  assert.equal(application.brand["@id"], brand["@id"]);
+
+  if (expectCompleteOrganization) {
+    assert.match(organization.contactPoint.email || "", /@/);
+    assert.ok(organization.contactPoint.telephone);
+    assert.equal(organization.address["@type"], "PostalAddress");
+    for (const field of [
+      "streetAddress",
+      "addressLocality",
+      "addressRegion",
+      "postalCode",
+      "addressCountry"
+    ]) {
+      assert.ok(organization.address[field], `expected Organization.address.${field}`);
+    }
+  }
 });
 
 test("homepage negotiates Markdown using quality values", async () => {
@@ -57,7 +89,7 @@ test("homepage negotiates Markdown using quality values", async () => {
   assertVaryAccept(markdownResponse);
   const markdown = await markdownResponse.text();
   assert.ok(markdown.length >= 500);
-  assert.match(markdown, /^# Obsidian Safe & Secure/m);
+  assert.match(markdown, /^# Obsidian Safe & Secure Messaging/m);
   assert.match(markdown, /## When to use Obsidian/);
 
   const htmlPreferred = await request("/", "text/html, text/markdown;q=0.5");

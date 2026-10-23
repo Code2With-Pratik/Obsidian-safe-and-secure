@@ -5,7 +5,7 @@ import { ArrowLeft, MessageCircleMore, ShieldCheck, Sparkles } from "lucide-reac
 export const metadata: Metadata = {
   title: "About the secure communication platform",
   description:
-    "Learn how Obsidian Safe & Secure brings private messaging, calls, communities, whiteboards, stories, and secure files into one collaboration platform.",
+    "Learn how Obsidian Safe & Secure Messaging brings private chat, calls, communities, whiteboards, stories, and secure files into one collaboration platform.",
   alternates: { canonical: "/about" }
 };
 
@@ -27,7 +27,7 @@ export default function AboutPage() {
             One place for secure communication and creative collaboration.
           </h1>
           <p className="mt-6 text-lg leading-8 text-muted-foreground">
-            Obsidian Safe &amp; Secure is a communication platform that connects real-time
+            Obsidian Safe &amp; Secure is a messaging platform that connects real-time
             messaging, calls, stories, communities, ghost rooms, whiteboards, and protected
             files. It is built for people who want expressive social tools and focused team
             collaboration without moving every conversation into a different product.

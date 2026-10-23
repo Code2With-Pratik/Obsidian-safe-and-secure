@@ -450,6 +450,7 @@ Copy `.env.example` to `.env.local` and configure the services you want to enabl
 | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Yes | Public | Supabase publishable key used for authenticated client access |
 | `SUPABASE_SECRET_KEY` | For full auth flows | Server only | Supabase Admin API access, including pre-confirmed signup |
 | `NEXT_PUBLIC_SITE_URL` | Yes in production | Public | Canonical application URL for authentication redirects |
+| `ORGANIZATION_NAME` | For complete organization schema | Public output | Public name of the organization that maintains the product |
 | `ORGANIZATION_CONTACT_EMAIL` | For complete organization schema | Public output | Support email emitted through homepage JSON-LD |
 | `ORGANIZATION_CONTACT_PHONE` | For complete organization schema | Public output | Support phone number emitted through homepage JSON-LD |
 | `ORGANIZATION_STREET_ADDRESS` | For complete organization schema | Public output | Street address emitted through homepage JSON-LD |
@@ -470,6 +471,9 @@ Copy `.env.example` to `.env.local` and configure the services you want to enabl
 
 > [!WARNING]
 > **Security:** Never commit real secrets. `.env.local` is gitignored, while `.env.example` contains placeholders only. Variables marked public are included in browser-delivered code and must never contain privileged credentials.
+
+> [!IMPORTANT]
+> For complete public Organization JSON-LD, configure every `ORGANIZATION_*` value in the deployment environment and redeploy. Use a genuine public support contact and mailing address; these fields are intentionally visible to crawlers and agents.
 
 ---
 
