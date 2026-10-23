@@ -1,7 +1,16 @@
 {
   "name": "Obsidian",
   "version": "1.0.3",
+  "description": "Obsidian Safe & Secure is a privacy-focused messaging, calls, and collaboration platform.",
   "private": true,
+  "homepage": "https://obsidian-safe-and-secure.onrender.com",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Code2With-Pratik/Obsidian-safe-and-secure.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Code2With-Pratik/Obsidian-safe-and-secure/issues"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",

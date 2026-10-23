@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { test } from "node:test";
 
 const baseUrl = (process.env.AGENT_BASE_URL || "http://127.0.0.1:3000").replace(/\/$/, "");
@@ -26,6 +27,22 @@ function assertVaryAccept(response) {
   const vary = response.headers.get("vary") || "";
   assert.match(vary, /(?:^|,)\s*accept\s*(?:,|$)/i);
 }
+
+test("repository metadata exposes the canonical brand and live application", async () => {
+  const [readme, packageSource] = await Promise.all([
+    readFile(new URL("../README.md", import.meta.url), "utf8"),
+    readFile(new URL("../package.json", import.meta.url), "utf8")
+  ]);
+  const packageMetadata = JSON.parse(packageSource);
+
+  assert.match(readme, /Obsidian Safe &amp; Secure Messaging/);
+  assert.match(readme, /https:\/\/obsidian-safe-and-secure\.onrender\.com/);
+  assert.equal(
+    packageMetadata.homepage,
+    "https://obsidian-safe-and-secure.onrender.com"
+  );
+  assert.match(packageMetadata.description, /Obsidian Safe & Secure/);
+});
 
 test("homepage serves substantial semantic HTML and JSON-LD", async () => {
   const response = await request("/", "text/html");

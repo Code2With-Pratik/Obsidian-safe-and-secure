@@ -2,11 +2,11 @@
   <img src="public/og-default.jpg" alt="Obsidian — The Future of Communication" width="100%" />
 </p>
 
-<h1 align="center">Obsidian</h1>
+<h1 align="center">Obsidian Safe &amp; Secure Messaging</h1>
 
 <p align="center">
   <strong>The Future of Communication.</strong><br/>
-  A futuristic communication OS — real-time chats, stories, voice & video calls, ghost rooms, communities, a collaborative whiteboard and an encrypted vault, all wrapped in a luminous glassmorphic interface and backed by Supabase + LiveKit.
+  Obsidian Safe &amp; Secure is a futuristic messaging and communication OS — real-time chats, stories, voice & video calls, ghost rooms, communities, a collaborative whiteboard and an encrypted vault, all wrapped in a luminous glassmorphic interface and backed by Supabase + LiveKit.
 </p>
 
 <img width="1919" height="1079" alt="image" src="https://github.com/user-attachments/assets/3108cfbc-944c-49df-b03b-e7cd3298f530" />
@@ -27,6 +27,7 @@
 > **Complete documentation:** Browse the architecture, codebase, and implementation guides on [DeepWiki](https://deepwiki.com/Code2With-Pratik/Obsidian-safe-and-secure).
 
 <p align="center">
+  <a href="https://obsidian-safe-and-secure.onrender.com"><img alt="Open Obsidian Safe & Secure Messaging" src="https://img.shields.io/badge/Live_App-Open_Obsidian-EC4899?style=for-the-badge&logo=render&logoColor=white" /></a>
   <a href="#docker-quick-start"><img alt="Docker quick start" src="https://img.shields.io/badge/Quick_Start-Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white" /></a>
   <a href="#getting-started-from-source"><img alt="Source setup" src="https://img.shields.io/badge/Setup-From_Source-6F42C1?style=for-the-badge&logo=github&logoColor=white" /></a>
   <a href="https://deepwiki.com/Code2With-Pratik/Obsidian-safe-and-secure"><img alt="Open DeepWiki" src="https://img.shields.io/badge/Docs-DeepWiki-16A34A?style=for-the-badge&logo=readthedocs&logoColor=white" /></a>
