@@ -30,7 +30,8 @@ const inter = Inter({
 const jbMono = JetBrains_Mono({
   subsets: ["latin"],
   variable: "--font-mono",
-  display: "swap"
+  display: "swap",
+  preload: false
 });
 
 /* Handwriting & display fonts used by the whiteboard text + sticky notes. */
@@ -38,25 +39,34 @@ const indieFlower = Indie_Flower({
   weight: "400",
   subsets: ["latin"],
   variable: "--font-indie",
-  display: "swap"
+  display: "swap",
+  preload: false
 });
 const merienda = Merienda({
   subsets: ["latin"],
   variable: "--font-merienda",
-  display: "swap"
+  display: "swap",
+  preload: false
 });
-const caveat = Caveat({ subsets: ["latin"], variable: "--font-caveat", display: "swap" });
+const caveat = Caveat({
+  subsets: ["latin"],
+  variable: "--font-caveat",
+  display: "swap",
+  preload: false
+});
 const permanentMarker = Permanent_Marker({
   weight: "400",
   subsets: ["latin"],
   variable: "--font-marker",
-  display: "swap"
+  display: "swap",
+  preload: false
 });
 const shadowsIntoLight = Shadows_Into_Light({
   weight: "400",
   subsets: ["latin"],
   variable: "--font-shadows",
-  display: "swap"
+  display: "swap",
+  preload: false
 });
 
 export const metadata: Metadata = {
@@ -85,7 +95,6 @@ export const metadata: Metadata = {
   ],
   category: "communication",
   formatDetection: { telephone: false, email: false, address: false },
-  alternates: { canonical: "/" },
   icons: {
     icon: "/Favicon.ico",
     shortcut: "/Favicon.ico",

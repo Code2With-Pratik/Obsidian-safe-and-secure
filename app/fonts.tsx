@@ -29,41 +29,47 @@ export const arima = Arima({
 export const doto = Doto({
   subsets: ["latin"],
   variable: "--font-doto",
-  display: "swap"
+  display: "swap",
+  preload: false
 });
 
 export const lora = Lora({
   subsets: ["latin"],
   variable: "--font-lora",
-  display: "swap"
+  display: "swap",
+  preload: false
 });
 
 export const grapeNuts = Grape_Nuts({
   weight: "400",
   subsets: ["latin"],
   variable: "--font-grape-nuts",
-  display: "swap"
+  display: "swap",
+  preload: false
 });
 
 export const satisfy = Satisfy({
   weight: "400",
   subsets: ["latin"],
   variable: "--font-satisfy",
-  display: "swap"
+  display: "swap",
+  preload: false
 });
 
 export const montserratAlternates = Montserrat_Alternates({
   weight: ["400", "500", "600", "700"],
   subsets: ["latin"],
   variable: "--font-montserrat-alt",
-  display: "swap"
+  display: "swap",
+  preload: false
 });
 
 export const poppins = Poppins({
   weight: ["400", "500", "600", "700"],
   subsets: ["latin"],
   variable: "--font-poppins",
-  display: "swap"
+  display: "swap",
+  preload: false
 });
 
 /**
@@ -77,7 +83,8 @@ export const notoColorEmoji = Noto_Color_Emoji({
   weight: "400",
   subsets: ["emoji"],
   variable: "--font-emoji",
-  display: "swap"
+  display: "swap",
+  preload: false
 });
 
 /** Concrete family string (CSS vars don't resolve in <canvas>) for baking

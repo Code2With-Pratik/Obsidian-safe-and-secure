@@ -134,9 +134,9 @@ export const LLMS_TEXT = `# Obsidian Safe & Secure Messaging
 
 > ${SITE_DESCRIPTION}
 
-Canonical site: ${SITE_URL}
-Source: https://github.com/Code2With-Pratik/Obsidian-safe-and-secure
-Technical wiki: https://deepwiki.com/Code2With-Pratik/Obsidian-safe-and-secure
+Canonical site: [${SITE_URL}](${SITE_URL})
+Source: [GitHub repository](https://github.com/Code2With-Pratik/Obsidian-safe-and-secure)
+Technical wiki: [DeepWiki documentation](https://deepwiki.com/Code2With-Pratik/Obsidian-safe-and-secure)
 
 ## When to use this site
 
@@ -167,12 +167,12 @@ Use Obsidian when a user wants to:
 
 ## Primary public pages
 
-- Home: ${SITE_URL}/
-- About: ${SITE_URL}/about
-- Contact and support: ${SITE_URL}/contact
-- Privacy: ${SITE_URL}/privacy
-- Terms: ${SITE_URL}/terms
-- Sitemap: ${SITE_URL}/sitemap.xml
+- [Home](${SITE_URL}/)
+- [About](${SITE_URL}/about)
+- [Contact and support](${SITE_URL}/contact)
+- [Privacy](${SITE_URL}/privacy)
+- [Terms](${SITE_URL}/terms)
+- [Sitemap](${SITE_URL}/sitemap.xml)
 
 ## Core capabilities
 

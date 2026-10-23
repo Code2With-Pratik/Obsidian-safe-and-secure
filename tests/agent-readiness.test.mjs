@@ -28,6 +28,23 @@ function assertVaryAccept(response) {
   assert.match(vary, /(?:^|,)\s*accept\s*(?:,|$)/i);
 }
 
+function canonicalPath(html) {
+  const match = html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i);
+  assert.ok(match, "expected a canonical link");
+  return new URL(match[1]).pathname;
+}
+
+function assertNamedButtons(html, path) {
+  const buttons = [...html.matchAll(/<button\b([^>]*)>([\s\S]*?)<\/button>/gi)];
+  const unnamed = buttons.filter(([, attributes, content]) => {
+    const explicitName = /\b(?:aria-label|aria-labelledby|title)=["'][^"']+["']/i.test(
+      attributes
+    );
+    return !explicitName && visibleText(content).length === 0;
+  });
+  assert.equal(unnamed.length, 0, `${path} rendered ${unnamed.length} unnamed buttons`);
+}
+
 test("repository metadata exposes the canonical brand and live application", async () => {
   const [readme, packageSource] = await Promise.all([
     readFile(new URL("../README.md", import.meta.url), "utf8"),
@@ -55,6 +72,14 @@ test("homepage serves substantial semantic HTML and JSON-LD", async () => {
   assert.match(html, /<title>Obsidian Safe &amp; Secure Messaging/i);
   assert.match(html, /<h1[^>]*>[\s\S]*Obsidian Safe &amp; Secure[\s\S]*messaging/i);
   assert.match(html, /<h2[^>]*>/i);
+
+  const fontPreloads = [...html.matchAll(/<link\b[^>]*>/gi)].filter(
+    ([tag]) => /\brel=["']preload["']/i.test(tag) && /\bas=["']font["']/i.test(tag)
+  );
+  assert.ok(
+    fontPreloads.length <= 3,
+    `expected no more than 3 critical font preloads, received ${fontPreloads.length}`
+  );
 
   const jsonLdMatch = html.match(
     /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/i
@@ -141,6 +166,26 @@ test("llms.txt gives specific when-to-use and interaction guidance", async () =>
   assert.match(body, /## When not to use this site/);
   assert.match(body, /## How agents should interact/);
   assert.match(body, /Accept: text\/markdown/);
+  assert.match(body, /\[[^\]]+\]\(https?:\/\/[^)]+\)/);
+});
+
+test("public and editor pages expose equivalent canonical URLs", async () => {
+  for (const path of ["/", "/about", "/contact", "/privacy", "/terms", "/stories/create"]) {
+    const response = await request(path, "text/html");
+    assert.equal(response.status, 200, `${path} did not return 200`);
+    assert.equal(canonicalPath(await response.text()), path);
+  }
+});
+
+test("story editor controls and images have accessible names", async () => {
+  const response = await request("/stories/create", "text/html");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assertNamedButtons(html, "/stories/create");
+
+  for (const [tag] of html.matchAll(/<img\b[^>]*>/gi)) {
+    assert.match(tag, /\balt=["'][^"']*["']/i);
+  }
 });
 
 test("sitemap and robots expose public discovery endpoints", async () => {

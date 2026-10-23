@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence, Reorder, useMotionValue, useDragControls } from "framer-motion";
 import {
@@ -41,7 +42,22 @@ import { VinylDisc } from "@/components/stories/vinyl-disc";
 import { currentUser } from "@/lib/mock-data";
 import { useAuthStore } from "@/store/use-auth-store";
 import { FONT_OPTIONS, DEFAULT_FONT, emojiFontFamily } from "@/app/fonts";
-import { ExpressionsPicker, type ExpressionPick } from "@/features/chat/expressions-picker";
+import type { ExpressionPick } from "@/features/chat/expressions-picker";
+
+const ExpressionsPicker = dynamic(
+  () =>
+    import("@/features/chat/expressions-picker").then(
+      (module) => module.ExpressionsPicker
+    ),
+  {
+    ssr: false,
+    loading: () => (
+      <div role="status" className="py-8 text-center text-sm text-muted-foreground">
+        Loading expressions…
+      </div>
+    )
+  }
+);
 
 /* ----------------------------- types ----------------------------- */
 
@@ -120,6 +136,15 @@ const STOCK_IMAGES: string[] = [
   "https://images.unsplash.com/photo-1635776062127-d379bfcba9f8?w=900&q=80",
   "https://images.unsplash.com/photo-1502920917128-1aa500764cbd?w=900&q=80"
 ];
+
+const stockThumbnail = (src: string) => {
+  const url = new URL(src);
+  url.searchParams.set("w", "320");
+  url.searchParams.set("q", "70");
+  url.searchParams.set("auto", "format");
+  url.searchParams.set("fit", "crop");
+  return url.toString();
+};
 
 const FILTERS: { id: string; label: string; filter: string }[] = [
   { id: "none", label: "Original", filter: "none" },
@@ -914,11 +939,21 @@ export function StoryEditor() {
       {/* ───── Left rail (desktop only) ───── */}
       <aside className="hidden lg:flex flex-col glass-strong glass-specular border-r border-border/60 h-full overflow-hidden">
         <div className="p-4 flex items-center justify-between">
-          <Button variant="ghost" size="icon-sm" onClick={() => router.back()}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => router.back()}
+            aria-label={t("Go back")}
+          >
             <ArrowLeft />
           </Button>
           <h2 className="font-display font-semibold tracking-tight">{t("New story")}</h2>
-          <Button variant="ghost" size="icon-sm" onClick={() => setShowLayers((v) => !v)}>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => setShowLayers((v) => !v)}
+            aria-label={t("Toggle layers panel")}
+          >
             <Layers />
           </Button>
         </div>
@@ -975,7 +1010,12 @@ export function StoryEditor() {
       {/* ───── Canvas ───── */}
       <main className="relative grid place-items-center p-4 md:p-8 overflow-hidden h-full min-w-0">
         <div className="absolute top-4 left-4 lg:hidden flex gap-2 z-10">
-          <Button variant="glass" size="icon" onClick={() => router.back()}>
+          <Button
+            variant="glass"
+            size="icon"
+            onClick={() => router.back()}
+            aria-label={t("Go back")}
+          >
             <ArrowLeft />
           </Button>
           <Button
@@ -1505,16 +1545,19 @@ function MobileMediaSheet({
             </button>
 
             {/* Recent / stock images */}
-            {STOCK_IMAGES.slice(0, 8).map((src) => (
+            {STOCK_IMAGES.slice(0, 8).map((src, index) => (
               <button
                 key={src}
                 onClick={() => (mode === "overlay" ? onPickOverlay(src) : onPickStock(src))}
                 className="relative aspect-square rounded-2xl overflow-hidden group active:scale-95 transition"
+                aria-label={`${t(mode === "overlay" ? "Add image overlay" : "Use image as background")} ${index + 1}`}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
-                  src={src}
+                  src={stockThumbnail(src)}
                   alt=""
+                  loading="lazy"
+                  decoding="async"
                   className="absolute inset-0 w-full h-full object-cover"
                 />
                 {mode === "overlay" && (
@@ -1534,12 +1577,13 @@ function MobileMediaSheet({
             transition={{ type: "spring", stiffness: 320, damping: 32, mass: 0.7 }}
             className="grid grid-cols-2 gap-3"
           >
-            {GRADIENTS.map((g) => (
+            {GRADIENTS.map((g, index) => (
               <button
                 key={g}
                 onClick={() => onPickGradient(g)}
                 className="relative aspect-square rounded-2xl ring-1 ring-border/40 transition active:scale-95"
                 style={{ background: g }}
+                aria-label={`${t("Use gradient background")} ${index + 1}`}
               />
             ))}
           </motion.div>
@@ -2175,7 +2219,7 @@ function DesktopMediaPanel({
                   </div>
                 </button>
 
-                {STOCK_IMAGES.map((src) => {
+                {STOCK_IMAGES.map((src, index) => {
                   const isSelected = selected.has(src);
                   return (
                     <button
@@ -2185,11 +2229,14 @@ function DesktopMediaPanel({
                         "relative aspect-square rounded-xl overflow-hidden group transition",
                         isSelected && "ring-2 ring-cyan-400"
                       )}
+                      aria-label={`${t(mode === "overlay" ? "Add image overlay" : "Use image as background")} ${index + 1}`}
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img
-                        src={src}
+                        src={stockThumbnail(src)}
                         alt=""
+                        loading="lazy"
+                        decoding="async"
                         className="absolute inset-0 w-full h-full object-cover transition group-hover:scale-110"
                       />
                       {mode === "overlay" && (
@@ -2225,12 +2272,13 @@ function DesktopMediaPanel({
             transition={{ type: "spring", stiffness: 320, damping: 32, mass: 0.7 }}
           >
             <div className="grid grid-cols-3 gap-1.5">
-              {GRADIENTS.map((g) => (
+              {GRADIENTS.map((g, index) => (
                 <button
                   key={g}
                   onClick={() => onPickGradient(g)}
                   className="aspect-square rounded-xl ring-1 ring-border/40 hover:ring-foreground/40 transition"
                   style={{ background: g }}
+                  aria-label={`${t("Use gradient background")} ${index + 1}`}
                 />
               ))}
             </div>

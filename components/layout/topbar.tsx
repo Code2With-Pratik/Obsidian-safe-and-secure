@@ -57,6 +57,7 @@ export function Topbar() {
               size="icon"
               onClick={toggleAi}
               className="relative"
+              aria-label={t("Open Obsidian AI")}
             >
               <motion.span
                 className="absolute inset-0 rounded-xl bg-gradient-to-tr from-violet-500/30 to-cyan-400/30 blur-md"
@@ -70,7 +71,16 @@ export function Topbar() {
         </Tooltip>
 
         <NotificationCenter>
-          <Button variant="ghost" size="icon" className="relative">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="relative"
+            aria-label={
+              unreadCount > 0
+                ? `${t("Notifications")} (${unreadCount} ${t("unread")})`
+                : t("Notifications")
+            }
+          >
             <Bell />
             {unreadCount > 0 && (
               <Badge
@@ -89,6 +99,7 @@ export function Topbar() {
               variant="ghost"
               size="icon"
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              aria-label={t("Toggle color theme")}
             >
               <Sun className="rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
               <Moon className="absolute rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
