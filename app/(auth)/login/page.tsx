@@ -60,7 +60,7 @@ export default function LoginPage() {
       // Strip the param so a refresh doesn't re-fire the toast.
       window.history.replaceState({}, "", window.location.pathname);
     }
-  }, [toast]);
+  }, [t, toast]);
 
   const onSubmit = async (data: FormValues) => {
     const result = await supabaseLogin(data);
