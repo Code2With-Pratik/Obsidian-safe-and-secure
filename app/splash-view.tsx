@@ -32,7 +32,7 @@ export default function SplashPage() {
         >
           <span className="neon-text">Obsidian Safe &amp; Secure</span>
           <span className="mt-4 block font-sans text-lg font-normal leading-relaxed tracking-normal text-muted-foreground md:text-xl">
-            messaging: {t("the future of secure communication")}.
+            {t("Messaging:")} {t("the future of secure communication")}.
           </span>
         </motion.h1>
 
@@ -90,62 +90,55 @@ export default function SplashPage() {
         <div className="mx-auto max-w-6xl">
           <div className="mx-auto max-w-3xl text-center">
             <p className="text-xs font-semibold uppercase tracking-[0.3em] text-primary">
-              One connected communication platform
+              {t("One connected communication platform")}
             </p>
             <h2
               id="platform-overview"
               className="mt-4 text-3xl font-display font-semibold tracking-tight md:text-5xl"
             >
-              Talk, create, and collaborate without changing context.
+              {t("Talk, create, and collaborate without changing context.")}
             </h2>
             <p className="mt-5 text-base leading-7 text-muted-foreground md:text-lg">
-              Obsidian Safe &amp; Secure messaging combines everyday communication with creative and
-              collaborative tools. Conversations, live calls, shared media, communities,
-              visual planning, and protected files remain connected through one account and
-              one consistent interface.
+              {t("Obsidian Safe & Secure messaging combines everyday communication with creative and collaborative tools. Conversations, live calls, shared media, communities, visual planning, and protected files remain connected through one account and one consistent interface.")}
             </p>
           </div>
 
           <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <article className="glass rounded-3xl p-6">
-              <h3 className="font-semibold">Real-time conversations</h3>
+              <h3 className="font-semibold">{t("Real-time conversations")}</h3>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                Exchange direct, group, channel, and secret messages with presence, typing
-                indicators, reactions, replies, polls, attachments, and scheduled delivery.
+                {t("Exchange direct, group, channel, and secret messages with presence, typing indicators, reactions, replies, polls, attachments, and scheduled delivery.")}
               </p>
             </article>
             <article className="glass rounded-3xl p-6">
-              <h3 className="font-semibold">Calls and shared moments</h3>
+              <h3 className="font-semibold">{t("Calls and shared moments")}</h3>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                Move from a conversation into a LiveKit-powered voice or video call, then
-                share stories, media, music, and updates without leaving the platform.
+                {t("Move from a conversation into a LiveKit-powered voice or video call, then share stories, media, music, and updates without leaving the platform.")}
               </p>
             </article>
             <article className="glass rounded-3xl p-6">
-              <h3 className="font-semibold">Spaces for collaboration</h3>
+              <h3 className="font-semibold">{t("Spaces for collaboration")}</h3>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                Build communities, join ephemeral ghost rooms, and turn ideas into shared
-                diagrams with a collaborative whiteboard designed for active teams.
+                {t("Build communities, join ephemeral ghost rooms, and turn ideas into shared diagrams with a collaborative whiteboard designed for active teams.")}
               </p>
             </article>
             <article className="glass rounded-3xl p-6">
-              <h3 className="font-semibold">Privacy-conscious by design</h3>
+              <h3 className="font-semibold">{t("Privacy-conscious by design")}</h3>
               <p className="mt-3 text-sm leading-6 text-muted-foreground">
-                Authentication, row-level data controls, secure transport, explicit privacy
-                guidance, and a protected file vault help keep personal work organized.
+                {t("Authentication, row-level data controls, secure transport, explicit privacy guidance, and a protected file vault help keep personal work organized.")}
               </p>
             </article>
           </div>
 
           <nav
-            aria-label="Learn more about Obsidian"
+            aria-label={t("Learn more about Obsidian")}
             className="mt-12 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm"
           >
-            <Link href="/about" className="text-primary hover:underline">About Obsidian</Link>
-            <Link href="/contact" className="text-primary hover:underline">Contact &amp; support</Link>
-            <Link href="/privacy" className="text-primary hover:underline">Privacy</Link>
-            <Link href="/terms" className="text-primary hover:underline">Terms</Link>
-            <a href="/llms.txt" className="text-primary hover:underline">Agent instructions</a>
+            <Link href="/about" className="text-primary hover:underline">{t("About Obsidian")}</Link>
+            <Link href="/contact" className="text-primary hover:underline">{t("Contact & support")}</Link>
+            <Link href="/privacy" className="text-primary hover:underline">{t("Privacy")}</Link>
+            <Link href="/terms" className="text-primary hover:underline">{t("Terms")}</Link>
+            <a href="/llms.txt" className="text-primary hover:underline">{t("Agent instructions")}</a>
           </nav>
         </div>
       </section>

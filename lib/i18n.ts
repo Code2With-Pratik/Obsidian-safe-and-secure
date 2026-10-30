@@ -7056,10 +7056,176 @@ const publicAuthDictionaries: Record<string, Dict> = {
   }
 };
 
+const landingDictionaries: Record<string, Dict> = {
+  hi: {
+    "Messaging:": "मैसेजिंग:",
+    "One connected communication platform": "एक जुड़ा हुआ संचार मंच",
+    "Talk, create, and collaborate without changing context.": "संदर्भ बदले बिना बातचीत करें, बनाएं और सहयोग करें।",
+    "Obsidian Safe & Secure messaging combines everyday communication with creative and collaborative tools. Conversations, live calls, shared media, communities, visual planning, and protected files remain connected through one account and one consistent interface.": "Obsidian Safe & Secure मैसेजिंग रोज़मर्रा के संचार को रचनात्मक और सहयोगी टूल के साथ जोड़ती है। बातचीत, लाइव कॉल, साझा मीडिया, समुदाय, दृश्य योजना और सुरक्षित फ़ाइलें एक खाते और एक समान इंटरफ़ेस से जुड़ी रहती हैं।",
+    "Real-time conversations": "रीयल-टाइम बातचीत",
+    "Exchange direct, group, channel, and secret messages with presence, typing indicators, reactions, replies, polls, attachments, and scheduled delivery.": "ऑनलाइन स्थिति, टाइपिंग संकेतक, प्रतिक्रियाओं, जवाबों, पोल, अटैचमेंट और निर्धारित डिलीवरी के साथ सीधे, समूह, चैनल और गुप्त संदेश भेजें।",
+    "Calls and shared moments": "कॉल और साझा पल",
+    "Move from a conversation into a LiveKit-powered voice or video call, then share stories, media, music, and updates without leaving the platform.": "बातचीत से LiveKit द्वारा संचालित वॉइस या वीडियो कॉल पर जाएं, फिर प्लेटफ़ॉर्म छोड़े बिना कहानियां, मीडिया, संगीत और अपडेट साझा करें।",
+    "Spaces for collaboration": "सहयोग के लिए स्थान",
+    "Build communities, join ephemeral ghost rooms, and turn ideas into shared diagrams with a collaborative whiteboard designed for active teams.": "समुदाय बनाएं, अस्थायी घोस्ट रूम में शामिल हों और सक्रिय टीमों के लिए बने साझा व्हाइटबोर्ड पर विचारों को आरेखों में बदलें।",
+    "Privacy-conscious by design": "डिज़ाइन से ही गोपनीयता-केंद्रित",
+    "Authentication, row-level data controls, secure transport, explicit privacy guidance, and a protected file vault help keep personal work organized.": "प्रमाणीकरण, पंक्ति-स्तरीय डेटा नियंत्रण, सुरक्षित ट्रांसपोर्ट, स्पष्ट गोपनीयता मार्गदर्शन और सुरक्षित फ़ाइल वॉल्ट आपके निजी काम को व्यवस्थित रखने में मदद करते हैं।",
+    "Learn more about Obsidian": "Obsidian के बारे में और जानें",
+    "About Obsidian": "Obsidian के बारे में",
+    "Contact & support": "संपर्क और सहायता",
+    Privacy: "गोपनीयता",
+    Terms: "शर्तें",
+    "Agent instructions": "एजेंट निर्देश"
+  },
+  mr: {
+    "Messaging:": "मेसेजिंग:",
+    "One connected communication platform": "एक जोडलेले संवाद व्यासपीठ",
+    "Talk, create, and collaborate without changing context.": "संदर्भ न बदलता बोला, तयार करा आणि सहकार्य करा.",
+    "Obsidian Safe & Secure messaging combines everyday communication with creative and collaborative tools. Conversations, live calls, shared media, communities, visual planning, and protected files remain connected through one account and one consistent interface.": "Obsidian Safe & Secure मेसेजिंग दैनंदिन संवादाला सर्जनशील आणि सहकार्याच्या साधनांशी जोडते. संभाषणे, थेट कॉल, शेअर केलेले मीडिया, समुदाय, दृश्य नियोजन आणि सुरक्षित फाइल्स एका खात्याद्वारे आणि एकसमान इंटरफेसमध्ये जोडलेले राहतात.",
+    "Real-time conversations": "रिअल-टाइम संभाषणे",
+    "Exchange direct, group, channel, and secret messages with presence, typing indicators, reactions, replies, polls, attachments, and scheduled delivery.": "उपस्थिती, टायपिंग संकेत, प्रतिक्रिया, उत्तरे, मतदान, संलग्नके आणि नियोजित वितरणासह थेट, गट, चॅनेल आणि गुप्त संदेशांची देवाणघेवाण करा.",
+    "Calls and shared moments": "कॉल आणि सामायिक क्षण",
+    "Move from a conversation into a LiveKit-powered voice or video call, then share stories, media, music, and updates without leaving the platform.": "संभाषणातून LiveKit-समर्थित व्हॉइस किंवा व्हिडिओ कॉलमध्ये जा आणि प्लॅटफॉर्म न सोडता स्टोरीज, मीडिया, संगीत आणि अपडेट्स शेअर करा.",
+    "Spaces for collaboration": "सहकार्यासाठी जागा",
+    "Build communities, join ephemeral ghost rooms, and turn ideas into shared diagrams with a collaborative whiteboard designed for active teams.": "समुदाय तयार करा, तात्पुरत्या घोस्ट रूममध्ये सामील व्हा आणि सक्रिय टीमसाठी तयार केलेल्या सामायिक व्हाइटबोर्डवर कल्पनांची आकृती बनवा.",
+    "Privacy-conscious by design": "डिझाइनपासूनच गोपनीयतेची काळजी",
+    "Authentication, row-level data controls, secure transport, explicit privacy guidance, and a protected file vault help keep personal work organized.": "प्रमाणीकरण, पंक्ती-स्तरीय डेटा नियंत्रण, सुरक्षित ट्रान्सपोर्ट, स्पष्ट गोपनीयता मार्गदर्शन आणि संरक्षित फाइल वॉल्ट वैयक्तिक काम व्यवस्थित ठेवण्यास मदत करतात.",
+    "Learn more about Obsidian": "Obsidian बद्दल अधिक जाणून घ्या",
+    "About Obsidian": "Obsidian बद्दल",
+    "Contact & support": "संपर्क आणि सहाय्य",
+    Privacy: "गोपनीयता",
+    Terms: "अटी",
+    "Agent instructions": "एजंट सूचना"
+  },
+  ar: {
+    "Messaging:": "المراسلة:",
+    "One connected communication platform": "منصة اتصال موحّدة",
+    "Talk, create, and collaborate without changing context.": "تحدث وأنشئ وتعاون دون تغيير السياق.",
+    "Obsidian Safe & Secure messaging combines everyday communication with creative and collaborative tools. Conversations, live calls, shared media, communities, visual planning, and protected files remain connected through one account and one consistent interface.": "تجمع مراسلة Obsidian Safe & Secure بين التواصل اليومي وأدوات الإبداع والتعاون. وتظل المحادثات والمكالمات المباشرة والوسائط المشتركة والمجتمعات والتخطيط المرئي والملفات المحمية متصلة عبر حساب واحد وواجهة موحدة.",
+    "Real-time conversations": "محادثات فورية",
+    "Exchange direct, group, channel, and secret messages with presence, typing indicators, reactions, replies, polls, attachments, and scheduled delivery.": "تبادل الرسائل الفردية والجماعية ورسائل القنوات والرسائل السرية مع حالة الاتصال ومؤشرات الكتابة والتفاعلات والردود والاستطلاعات والمرفقات والإرسال المجدول.",
+    "Calls and shared moments": "المكالمات واللحظات المشتركة",
+    "Move from a conversation into a LiveKit-powered voice or video call, then share stories, media, music, and updates without leaving the platform.": "انتقل من المحادثة إلى مكالمة صوتية أو مرئية مدعومة بـ LiveKit، ثم شارك القصص والوسائط والموسيقى والتحديثات دون مغادرة المنصة.",
+    "Spaces for collaboration": "مساحات للتعاون",
+    "Build communities, join ephemeral ghost rooms, and turn ideas into shared diagrams with a collaborative whiteboard designed for active teams.": "أنشئ المجتمعات وانضم إلى غرف الأشباح المؤقتة وحوّل الأفكار إلى مخططات مشتركة باستخدام لوحة بيضاء تعاونية مصممة للفرق النشطة.",
+    "Privacy-conscious by design": "الخصوصية أساس التصميم",
+    "Authentication, row-level data controls, secure transport, explicit privacy guidance, and a protected file vault help keep personal work organized.": "يساعد التحقق من الهوية وضوابط البيانات على مستوى الصف والنقل الآمن وإرشادات الخصوصية الواضحة وخزنة الملفات المحمية في تنظيم أعمالك الشخصية.",
+    "Learn more about Obsidian": "تعرّف على المزيد عن Obsidian",
+    "About Obsidian": "عن Obsidian",
+    "Contact & support": "التواصل والدعم",
+    Privacy: "الخصوصية",
+    Terms: "الشروط",
+    "Agent instructions": "تعليمات الوكيل"
+  },
+  ru: {
+    "Messaging:": "Обмен сообщениями:",
+    "One connected communication platform": "Единая платформа для общения",
+    "Talk, create, and collaborate without changing context.": "Общайтесь, создавайте и работайте вместе, не переключая контекст.",
+    "Obsidian Safe & Secure messaging combines everyday communication with creative and collaborative tools. Conversations, live calls, shared media, communities, visual planning, and protected files remain connected through one account and one consistent interface.": "Обмен сообщениями Obsidian Safe & Secure объединяет повседневное общение с творческими инструментами и совместной работой. Переписки, звонки, общие медиа, сообщества, визуальное планирование и защищённые файлы доступны через одну учётную запись и единый интерфейс.",
+    "Real-time conversations": "Общение в реальном времени",
+    "Exchange direct, group, channel, and secret messages with presence, typing indicators, reactions, replies, polls, attachments, and scheduled delivery.": "Обменивайтесь личными, групповыми, канальными и секретными сообщениями, используя статусы, индикаторы набора, реакции, ответы, опросы, вложения и отложенную отправку.",
+    "Calls and shared moments": "Звонки и общие впечатления",
+    "Move from a conversation into a LiveKit-powered voice or video call, then share stories, media, music, and updates without leaving the platform.": "Переходите из переписки в голосовой или видеозвонок на базе LiveKit, а затем делитесь историями, медиа, музыкой и обновлениями, не покидая платформу.",
+    "Spaces for collaboration": "Пространства для совместной работы",
+    "Build communities, join ephemeral ghost rooms, and turn ideas into shared diagrams with a collaborative whiteboard designed for active teams.": "Создавайте сообщества, присоединяйтесь к временным призрачным комнатам и превращайте идеи в общие схемы на интерактивной доске для активных команд.",
+    "Privacy-conscious by design": "Конфиденциальность заложена в дизайн",
+    "Authentication, row-level data controls, secure transport, explicit privacy guidance, and a protected file vault help keep personal work organized.": "Аутентификация, построчный контроль данных, защищённая передача, понятные рекомендации по конфиденциальности и защищённое хранилище файлов помогают упорядочить личные материалы.",
+    "Learn more about Obsidian": "Подробнее об Obsidian",
+    "About Obsidian": "Об Obsidian",
+    "Contact & support": "Контакты и поддержка",
+    Privacy: "Конфиденциальность",
+    Terms: "Условия",
+    "Agent instructions": "Инструкции для агента"
+  },
+  tr: {
+    "Messaging:": "Mesajlaşma:",
+    "One connected communication platform": "Tek bir bağlantılı iletişim platformu",
+    "Talk, create, and collaborate without changing context.": "Bağlamı değiştirmeden konuşun, üretin ve iş birliği yapın.",
+    "Obsidian Safe & Secure messaging combines everyday communication with creative and collaborative tools. Conversations, live calls, shared media, communities, visual planning, and protected files remain connected through one account and one consistent interface.": "Obsidian Safe & Secure mesajlaşma, günlük iletişimi yaratıcı ve iş birliğine dayalı araçlarla birleştirir. Sohbetler, canlı aramalar, paylaşılan medya, topluluklar, görsel planlama ve korunan dosyalar tek bir hesap ve tutarlı bir arayüz üzerinden bağlantıda kalır.",
+    "Real-time conversations": "Gerçek zamanlı konuşmalar",
+    "Exchange direct, group, channel, and secret messages with presence, typing indicators, reactions, replies, polls, attachments, and scheduled delivery.": "Çevrimiçi durumu, yazma göstergelerini, tepkileri, yanıtları, anketleri, ekleri ve zamanlanmış gönderimi kullanarak bire bir, grup, kanal ve gizli mesajlaşın.",
+    "Calls and shared moments": "Aramalar ve paylaşılan anlar",
+    "Move from a conversation into a LiveKit-powered voice or video call, then share stories, media, music, and updates without leaving the platform.": "Bir sohbetten LiveKit destekli sesli veya görüntülü aramaya geçin; ardından platformdan ayrılmadan hikâyeleri, medyayı, müziği ve güncellemeleri paylaşın.",
+    "Spaces for collaboration": "İş birliği alanları",
+    "Build communities, join ephemeral ghost rooms, and turn ideas into shared diagrams with a collaborative whiteboard designed for active teams.": "Topluluklar oluşturun, geçici hayalet odalara katılın ve aktif ekipler için tasarlanmış ortak beyaz tahtada fikirleri paylaşılan diyagramlara dönüştürün.",
+    "Privacy-conscious by design": "Tasarım gereği gizlilik odaklı",
+    "Authentication, row-level data controls, secure transport, explicit privacy guidance, and a protected file vault help keep personal work organized.": "Kimlik doğrulama, satır düzeyinde veri denetimleri, güvenli aktarım, açık gizlilik yönlendirmeleri ve korumalı dosya kasası kişisel çalışmalarınızı düzenli tutmanıza yardımcı olur.",
+    "Learn more about Obsidian": "Obsidian hakkında daha fazla bilgi",
+    "About Obsidian": "Obsidian hakkında",
+    "Contact & support": "İletişim ve destek",
+    Privacy: "Gizlilik",
+    Terms: "Koşullar",
+    "Agent instructions": "Ajan talimatları"
+  },
+  pt: {
+    "Messaging:": "Mensagens:",
+    "One connected communication platform": "Uma plataforma de comunicação integrada",
+    "Talk, create, and collaborate without changing context.": "Converse, crie e colabore sem mudar de contexto.",
+    "Obsidian Safe & Secure messaging combines everyday communication with creative and collaborative tools. Conversations, live calls, shared media, communities, visual planning, and protected files remain connected through one account and one consistent interface.": "O Obsidian Safe & Secure combina a comunicação diária com ferramentas criativas e colaborativas. Conversas, chamadas ao vivo, mídia compartilhada, comunidades, planejamento visual e arquivos protegidos permanecem conectados por uma única conta e uma interface consistente.",
+    "Real-time conversations": "Conversas em tempo real",
+    "Exchange direct, group, channel, and secret messages with presence, typing indicators, reactions, replies, polls, attachments, and scheduled delivery.": "Troque mensagens diretas, em grupo, canais e secretas com presença, indicadores de digitação, reações, respostas, enquetes, anexos e envio agendado.",
+    "Calls and shared moments": "Chamadas e momentos compartilhados",
+    "Move from a conversation into a LiveKit-powered voice or video call, then share stories, media, music, and updates without leaving the platform.": "Passe de uma conversa para uma chamada de voz ou vídeo com LiveKit e compartilhe histórias, mídia, música e atualizações sem sair da plataforma.",
+    "Spaces for collaboration": "Espaços de colaboração",
+    "Build communities, join ephemeral ghost rooms, and turn ideas into shared diagrams with a collaborative whiteboard designed for active teams.": "Crie comunidades, participe de salas fantasma temporárias e transforme ideias em diagramas compartilhados com um quadro colaborativo feito para equipes ativas.",
+    "Privacy-conscious by design": "Privacidade desde a concepção",
+    "Authentication, row-level data controls, secure transport, explicit privacy guidance, and a protected file vault help keep personal work organized.": "Autenticação, controles de dados por linha, transmissão segura, orientações claras de privacidade e um cofre protegido ajudam a manter seu trabalho pessoal organizado.",
+    "Learn more about Obsidian": "Saiba mais sobre o Obsidian",
+    "About Obsidian": "Sobre o Obsidian",
+    "Contact & support": "Contato e suporte",
+    Privacy: "Privacidade",
+    Terms: "Termos",
+    "Agent instructions": "Instruções para agentes"
+  },
+  zh: {
+    "Messaging:": "消息：",
+    "One connected communication platform": "一体化通信平台",
+    "Talk, create, and collaborate without changing context.": "无需切换上下文，即可交流、创作与协作。",
+    "Obsidian Safe & Secure messaging combines everyday communication with creative and collaborative tools. Conversations, live calls, shared media, communities, visual planning, and protected files remain connected through one account and one consistent interface.": "Obsidian Safe & Secure 消息平台将日常沟通与创作协作工具融为一体。对话、实时通话、共享媒体、社区、可视化规划和受保护的文件通过一个账户和统一界面保持连接。",
+    "Real-time conversations": "实时对话",
+    "Exchange direct, group, channel, and secret messages with presence, typing indicators, reactions, replies, polls, attachments, and scheduled delivery.": "通过在线状态、输入提示、回应、回复、投票、附件和定时发送，交流私聊、群组、频道及私密消息。",
+    "Calls and shared moments": "通话与共享时刻",
+    "Move from a conversation into a LiveKit-powered voice or video call, then share stories, media, music, and updates without leaving the platform.": "从对话直接切换到由 LiveKit 支持的语音或视频通话，并在平台内分享动态、媒体、音乐和更新。",
+    "Spaces for collaboration": "协作空间",
+    "Build communities, join ephemeral ghost rooms, and turn ideas into shared diagrams with a collaborative whiteboard designed for active teams.": "创建社区、加入限时幽灵房间，并通过为活跃团队打造的协作白板将想法转化为共享图表。",
+    "Privacy-conscious by design": "设计注重隐私",
+    "Authentication, row-level data controls, secure transport, explicit privacy guidance, and a protected file vault help keep personal work organized.": "身份验证、行级数据控制、安全传输、明确的隐私指引和受保护的文件保险库，帮助妥善整理个人内容。",
+    "Learn more about Obsidian": "进一步了解 Obsidian",
+    "About Obsidian": "关于 Obsidian",
+    "Contact & support": "联系与支持",
+    Privacy: "隐私",
+    Terms: "条款",
+    "Agent instructions": "代理说明"
+  },
+  ja: {
+    "Messaging:": "メッセージング:",
+    "One connected communication platform": "つながるコミュニケーションプラットフォーム",
+    "Talk, create, and collaborate without changing context.": "コンテキストを変えずに、話し、作り、共同作業できます。",
+    "Obsidian Safe & Secure messaging combines everyday communication with creative and collaborative tools. Conversations, live calls, shared media, communities, visual planning, and protected files remain connected through one account and one consistent interface.": "Obsidian Safe & Secure メッセージングは、日常のコミュニケーションと創造・共同作業ツールを組み合わせます。会話、ライブ通話、共有メディア、コミュニティ、ビジュアル計画、保護されたファイルを、1つのアカウントと一貫したインターフェースで利用できます。",
+    "Real-time conversations": "リアルタイムの会話",
+    "Exchange direct, group, channel, and secret messages with presence, typing indicators, reactions, replies, polls, attachments, and scheduled delivery.": "オンライン状態、入力インジケーター、リアクション、返信、投票、添付ファイル、予約送信を使って、個別・グループ・チャンネル・秘密のメッセージをやり取りできます。",
+    "Calls and shared moments": "通話と共有する瞬間",
+    "Move from a conversation into a LiveKit-powered voice or video call, then share stories, media, music, and updates without leaving the platform.": "会話からLiveKit搭載の音声・ビデオ通話に切り替え、プラットフォームを離れずにストーリー、メディア、音楽、最新情報を共有できます。",
+    "Spaces for collaboration": "コラボレーションスペース",
+    "Build communities, join ephemeral ghost rooms, and turn ideas into shared diagrams with a collaborative whiteboard designed for active teams.": "コミュニティを作り、一時的なゴーストルームに参加し、アクティブなチーム向けの共同ホワイトボードでアイデアを共有図にできます。",
+    "Privacy-conscious by design": "設計からプライバシーに配慮",
+    "Authentication, row-level data controls, secure transport, explicit privacy guidance, and a protected file vault help keep personal work organized.": "認証、行レベルのデータ制御、安全な通信、明確なプライバシー案内、保護されたファイル保管庫で個人の作業を整理できます。",
+    "Learn more about Obsidian": "Obsidianについて詳しく見る",
+    "About Obsidian": "Obsidianについて",
+    "Contact & support": "お問い合わせ・サポート",
+    Privacy: "プライバシー",
+    Terms: "利用規約",
+    "Agent instructions": "エージェント向け説明"
+  }
+};
+
 /** Translate a single key for a language (English keys fall back to themselves). */
 export function translate(lang: string, key: string): string {
   if (lang === "en") return key;
-  return dictionaries[lang]?.[key] ?? publicAuthDictionaries[lang]?.[key] ?? key;
+  return dictionaries[lang]?.[key] ??
+    publicAuthDictionaries[lang]?.[key] ??
+    landingDictionaries[lang]?.[key] ??
+    key;
 }
 
 /** Hook returning a memoised `t()` bound to the current language setting. */
