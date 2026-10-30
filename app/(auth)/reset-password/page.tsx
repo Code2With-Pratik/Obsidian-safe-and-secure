@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { updatePassword } from "@/lib/supabase/actions";
 import { useToast } from "@/components/ui/toaster";
 import { useNotificationsStore } from "@/store/use-notifications-store";
+import { useT } from "@/lib/i18n";
 
 const schema = z
   .object({
@@ -27,6 +28,7 @@ const schema = z
 type Values = z.infer<typeof schema>;
 
 export default function ResetPasswordPage() {
+  const t = useT();
   const router = useRouter();
   const { toast } = useToast();
   const {
@@ -40,7 +42,7 @@ export default function ResetPasswordPage() {
 
     if (result?.error) {
       toast({
-        title: "Update Failed",
+        title: t("Update Failed"),
         description: result.error,
       });
       return;
@@ -48,14 +50,14 @@ export default function ResetPasswordPage() {
 
     useNotificationsStore.getState().add({
       kind: "system",
-      title: "Password Changed",
-      body: "Your account password was updated successfully.",
+      title: t("Password Changed"),
+      body: t("Your account password was updated successfully."),
       targetHref: "/settings"
     });
 
     toast({
-      title: "Password Reset Successful",
-      description: "Your password has been updated and you are now signed in.",
+      title: t("Password Reset Successful"),
+      description: t("Your password has been updated and you are now signed in."),
     });
 
     router.push("/chats");
@@ -73,29 +75,29 @@ export default function ResetPasswordPage() {
           <div className="size-12 rounded-2xl bg-gradient-to-br from-violet-500 to-cyan-400 grid place-items-center shadow-glow-cyan">
             <ShieldCheck className="text-white" />
           </div>
-          <h1 className="mt-5 text-2xl font-semibold tracking-tight">New password</h1>
+          <h1 className="mt-5 text-2xl font-semibold tracking-tight">{t("New password")}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Choose a strong password to protect your Obsidian.
+            {t("Choose a strong password to protect your Obsidian.")}
           </p>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="password">New password</Label>
+            <Label htmlFor="password">{t("New password")}</Label>
             <div className="relative">
               <LockKeyhole className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground z-10" />
               <PasswordInput id="password" placeholder="••••••••" className="pl-9" {...register("password")} />
             </div>
-            {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
+            {errors.password && <p className="text-xs text-destructive">{t(errors.password.message ?? "")}</p>}
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="confirm">Confirm new password</Label>
+            <Label htmlFor="confirm">{t("Confirm new password")}</Label>
             <div className="relative">
               <LockKeyhole className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground z-10" />
               <PasswordInput id="confirm" placeholder="••••••••" className="pl-9" {...register("confirm")} />
             </div>
-            {errors.confirm && <p className="text-xs text-destructive">{errors.confirm.message}</p>}
+            {errors.confirm && <p className="text-xs text-destructive">{t(errors.confirm.message ?? "")}</p>}
           </div>
 
           <div className="pt-2 flex gap-3">
@@ -106,10 +108,10 @@ export default function ResetPasswordPage() {
               onClick={() => router.push("/login")}
               disabled={isSubmitting}
             >
-              Cancel
+              {t("Cancel")}
             </Button>
             <Button type="submit" variant="gradient" className="flex-[2] !h-12" disabled={isSubmitting}>
-              {isSubmitting ? <Loader2 className="animate-spin" /> : "Confirm new password"}
+              {isSubmitting ? <Loader2 className="animate-spin" /> : t("Confirm new password")}
             </Button>
           </div>
         </form>

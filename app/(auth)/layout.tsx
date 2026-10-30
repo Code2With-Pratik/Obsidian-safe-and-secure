@@ -21,7 +21,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
   return (
     <div className="relative min-h-dvh overflow-hidden bg-background">
       <div className="pointer-events-none absolute inset-0 -z-10 bg-background" />
-      <div className="absolute right-4 top-4 z-50 flex items-center gap-1">
+      <div className="fixed right-3 top-3 z-[100] flex items-center gap-1 rounded-xl border border-border/60 bg-background/85 p-1 shadow-lg backdrop-blur-xl">
         <Button
           variant="ghost"
           size="icon"

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
+import { useT } from "@/lib/i18n";
 import { motion } from "framer-motion";
 import { Loader2, LockKeyhole, Mail, User2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,7 @@ type Values = z.infer<typeof schema>;
 export default function RegisterPage() {
   const router = useRouter();
   const { toast } = useToast();
+  const t = useT();
   const {
     register,
     handleSubmit,
@@ -43,24 +45,24 @@ export default function RegisterPage() {
     const result = await supabaseSignup(data);
 
     if (result?.error) {
-      toast({
-        title: "Registration Failed",
-        description: result.error,
+      toast({ 
+        title: t("Registration Failed"), 
+        description: result.error 
       });
       return;
     }
 
     if (result?.requiresConfirmation) {
-      toast({
-        title: "Account Created!",
-        description: result.message || "Please check your email inbox to confirm your email before signing in.",
+      toast({ 
+        title: t("Account Created!"), 
+        description: result.message || t("Please check your email inbox to confirm your email before signing in.") 
       });
       return;
     }
 
     toast({
-      title: "Success",
-      description: "Account created! Now pick your username.",
+      title: t("Success"),
+      description: t("Account created! Now pick your username."),
     });
     router.push("/username");
   };
@@ -77,63 +79,63 @@ export default function RegisterPage() {
         >
         <div className="flex flex-col items-center text-center mb-7">
           <NovaMascot size={56} />
-          <h1 className="mt-5 text-2xl font-semibold tracking-tight">Create your Obsidian</h1>
+          <h1 className="mt-5 text-2xl font-semibold tracking-tight">{t("Create your Obsidian")}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            One identity. Infinite ways to connect.
+            {t("One identity. Infinite ways to connect.")}
           </p>
         </div>
 
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
           <div className="space-y-1.5">
-            <Label htmlFor="name">Full name</Label>
+            <Label htmlFor="name">{t("Full name")}</Label>
             <div className="relative">
               <User2 className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <Input id="name" placeholder="Aria Vance" className="pl-9" {...register("name")} />
             </div>
-            {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
+            {errors.name && <p className="text-xs text-destructive">{t(errors.name.message ?? "")}</p>}
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="email">Email</Label>
+            <Label htmlFor="email">{t("Email")}</Label>
             <div className="relative">
               <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
               <Input id="email" type="email" placeholder="you@nova.app" className="pl-9" {...register("email")} />
             </div>
-            {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
+            {errors.email && <p className="text-xs text-destructive">{t(errors.email.message ?? "")}</p>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">{t("Password")}</Label>
               <div className="relative">
                 <LockKeyhole className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground z-10" />
                 <PasswordInput id="password" className="pl-9" {...register("password")} />
               </div>
-              {errors.password && <p className="text-xs text-destructive">{errors.password.message}</p>}
+              {errors.password && <p className="text-xs text-destructive">{t(errors.password.message ?? "")}</p>}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="confirm">Confirm</Label>
+              <Label htmlFor="confirm">{t("Confirm")}</Label>
               <PasswordInput id="confirm" {...register("confirm")} />
-              {errors.confirm && <p className="text-xs text-destructive">{errors.confirm.message}</p>}
+              {errors.confirm && <p className="text-xs text-destructive">{t(errors.confirm.message ?? "")}</p>}
             </div>
           </div>
 
           <p className="text-xs text-muted-foreground">
-            By signing up you agree to our{" "}
-            <Link href="/terms" className="text-foreground/80 underline underline-offset-2 hover:text-primary">Terms of Service</Link>
-            {" "}and{" "}
-            <Link href="/privacy" className="text-foreground/80 underline underline-offset-2 hover:text-primary">Privacy Policy</Link>.
+            {t("By signing up you agree to our")} {" "}
+            <Link href="/terms" className="text-foreground/80 underline underline-offset-2 hover:text-primary">{t("Terms of Service")}</Link>
+            {" "}{t("and")}{" "}
+            <Link href="/privacy" className="text-foreground/80 underline underline-offset-2 hover:text-primary">{t("Privacy Policy")}</Link>.
           </p>
 
           <Button type="submit" variant="gradient" size="lg" className="w-full !h-12" disabled={isSubmitting}>
-            {isSubmitting ? <Loader2 className="animate-spin" /> : "Continue"}
+            {isSubmitting ? <Loader2 className="animate-spin" /> : t("Continue")}
           </Button>
         </form>
 
         <p className="text-center text-sm text-muted-foreground mt-6">
-          Have an account?{" "}
+          {t("Have an account?")}{" "}
           <Link href="/login" className="text-primary hover:underline">
-            Sign in
+            {t("Sign in")}
           </Link>
         </p>
         </motion.div>

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowLeft, ScrollText } from "lucide-react";
+import { useT } from "@/lib/i18n";
 
 const sections = [
   {
@@ -52,6 +53,7 @@ const sections = [
 ];
 
 export default function TermsPage() {
+  const t = useT();
   return (
     <div className="min-h-dvh px-6 py-10 max-w-3xl mx-auto">
       <motion.div
@@ -65,7 +67,7 @@ export default function TermsPage() {
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-8 transition-colors"
         >
           <ArrowLeft className="size-4" />
-          Back
+          {t("Back")}
         </Link>
 
         {/* Header */}
@@ -74,14 +76,14 @@ export default function TermsPage() {
             <ScrollText className="text-white size-5" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Terms of Service</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Last updated: July 2026</p>
+            <h1 className="text-2xl font-bold tracking-tight">{t("Terms of Service")}</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">{t("Last updated: July 2026")}</p>
           </div>
         </div>
 
         {/* Intro */}
         <div className="glass rounded-2xl p-5 mb-6 text-sm text-muted-foreground leading-relaxed">
-          Please read these Terms of Service carefully before using Obsidian. These terms govern your access to and use of all features and services provided by Obsidian.
+          {t("Please read these Terms of Service carefully before using Obsidian. These terms govern your access to and use of all features and services provided by Obsidian.")}
         </div>
 
         {/* Sections */}
@@ -94,8 +96,8 @@ export default function TermsPage() {
               transition={{ delay: i * 0.04 }}
               className="glass rounded-2xl p-5"
             >
-              <h2 className="text-sm font-semibold text-foreground mb-2">{section.title}</h2>
-              <p className="text-sm text-muted-foreground leading-relaxed">{section.body}</p>
+              <h2 className="text-sm font-semibold text-foreground mb-2">{t(section.title)}</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">{t(section.body)}</p>
             </motion.div>
           ))}
         </div>
@@ -103,7 +105,7 @@ export default function TermsPage() {
         {/* Footer */}
         <p className="text-xs text-muted-foreground text-center mt-10 pb-6">
           © 2026 Obsidian · Safe &amp; Secure Messaging ·{" "}
-          <Link href="/privacy" className="text-primary hover:underline">Privacy Policy</Link>
+          <Link href="/privacy" className="text-primary hover:underline">{t("Privacy Policy")}</Link>
         </p>
       </motion.div>
     </div>

@@ -14,6 +14,7 @@ import {
   ShieldCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/lib/i18n";
 
 const slides = [
   {
@@ -49,6 +50,7 @@ const slides = [
 ];
 
 export default function OnboardingPage() {
+  const t = useT();
   const [step, setStep] = React.useState(0);
   const last = step === slides.length - 1;
   const slide = slides[step];
@@ -71,7 +73,7 @@ export default function OnboardingPage() {
             href="/login"
             className="text-sm text-muted-foreground hover:text-foreground transition"
           >
-            Skip
+            {t("Skip")}
           </Link>
         </div>
 
@@ -93,9 +95,9 @@ export default function OnboardingPage() {
                   {slide.icon}
                 </div>
                 <h2 className="text-3xl md:text-4xl font-display font-semibold tracking-tight text-balance">
-                  {slide.title}
+                  {t(slide.title)}
                 </h2>
-                <p className="mt-4 text-muted-foreground text-lg text-balance">{slide.body}</p>
+                <p className="mt-4 text-muted-foreground text-lg text-balance">{t(slide.body)}</p>
 
                 <div className="mt-auto flex justify-between items-center">
                   <Button
@@ -105,18 +107,18 @@ export default function OnboardingPage() {
                     onClick={() => setStep((s) => s - 1)}
                   >
                     <ArrowLeft />
-                    Back
+                    {t("Back")}
                   </Button>
                   {last ? (
                     <Button asChild variant="gradient">
                       <Link href="/register">
                         <Sparkles />
-                        Create an account
+                        {t("Create an account")}
                       </Link>
                     </Button>
                   ) : (
                     <Button variant="default" onClick={() => setStep((s) => s + 1)}>
-                      Next
+                      {t("Next")}
                       <ArrowRight />
                     </Button>
                   )}

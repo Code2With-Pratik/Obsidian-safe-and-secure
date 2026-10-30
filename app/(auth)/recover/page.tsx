@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { resetPassword, verifyRecoveryOtp } from "@/lib/supabase/actions";
 import { useToast } from "@/components/ui/toaster";
+import { useT } from "@/lib/i18n";
 
 interface OtpInputProps {
   value: string;
@@ -108,6 +109,7 @@ function OtpInput({ value, onChange }: OtpInputProps) {
 }
 
 export default function RecoverPage() {
+  const t = useT();
   const router = useRouter();
   const [step, setStep] = React.useState<"email" | "otp">("email");
   const [loading, setLoading] = React.useState(false);
@@ -124,15 +126,15 @@ export default function RecoverPage() {
 
     if (result?.error) {
       toast({
-        title: "Error",
+        title: t("Error"),
         description: result.error,
       });
       return;
     }
 
     toast({
-      title: "OTP Sent!",
-      description: `A 6-digit verification code has been sent to ${email}`,
+      title: t("OTP Sent!"),
+      description: `${t("A 6-digit verification code has been sent to")} ${email}`,
     });
     setStep("otp");
   };
@@ -141,8 +143,8 @@ export default function RecoverPage() {
     e.preventDefault();
     if (!otp || otp.trim().length < 6) {
       toast({
-        title: "Invalid Code",
-        description: "Please enter the complete 6-digit verification code.",
+        title: t("Invalid Code"),
+        description: t("Please enter the complete 6-digit verification code."),
       });
       return;
     }
@@ -153,15 +155,15 @@ export default function RecoverPage() {
 
     if (result?.error) {
       toast({
-        title: "Verification Failed",
+        title: t("Verification Failed"),
         description: result.error,
       });
       return;
     }
 
     toast({
-      title: "Code Verified!",
-      description: "Redirecting to set your new password...",
+      title: t("Code Verified!"),
+      description: t("Redirecting to set your new password..."),
     });
     router.push("/reset-password");
   };
@@ -174,7 +176,7 @@ export default function RecoverPage() {
         className="w-full max-w-md glass rounded-3xl p-8"
       >
         <Link href="/login" className="text-xs text-muted-foreground hover:text-foreground inline-flex items-center gap-1 mb-6">
-          <ArrowLeft className="size-3" /> Back to login
+          <ArrowLeft className="size-3" /> {t("Back to login")}
         </Link>
 
         {step === "email" ? (
@@ -182,14 +184,14 @@ export default function RecoverPage() {
             <div className="size-12 rounded-2xl bg-gradient-to-br from-amber-400 to-pink-500 grid place-items-center shadow-glow-pink">
               <KeyRound className="text-white" />
             </div>
-            <h1 className="mt-5 text-2xl font-semibold tracking-tight">Reset your access</h1>
+            <h1 className="mt-5 text-2xl font-semibold tracking-tight">{t("Reset your access")}</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Enter your email to receive a 6-digit OTP verification code.
+              {t("Enter your email to receive a 6-digit OTP verification code.")}
             </p>
 
             <form onSubmit={handleSendEmail} className="mt-6 space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="rec-email">Account email</Label>
+                <Label htmlFor="rec-email">{t("Account email")}</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
                   <Input 
@@ -204,7 +206,7 @@ export default function RecoverPage() {
                 </div>
               </div>
               <Button variant="gradient" size="lg" className="w-full !h-12" disabled={loading}>
-                {loading ? <Loader2 className="animate-spin" /> : "Send 6-digit OTP"}
+                {loading ? <Loader2 className="animate-spin" /> : t("Send 6-digit OTP")}
               </Button>
             </form>
           </>
@@ -213,19 +215,19 @@ export default function RecoverPage() {
             <div className="size-12 rounded-2xl bg-gradient-to-br from-violet-500 to-cyan-400 grid place-items-center shadow-glow-cyan">
               <ShieldCheck className="text-white" />
             </div>
-            <h1 className="mt-5 text-2xl font-semibold tracking-tight">Verify 6-Digit OTP</h1>
+            <h1 className="mt-5 text-2xl font-semibold tracking-tight">{t("Verify 6-Digit OTP")}</h1>
             <p className="text-sm text-muted-foreground mt-1">
-              Enter the code sent to <span className="font-medium text-foreground">{email}</span>.
+              {t("Enter the code sent to")} <span className="font-medium text-foreground">{email}</span>.
             </p>
 
             <form onSubmit={handleVerifyOtp} className="mt-6 space-y-4">
               <div className="space-y-2">
-                <Label className="text-center block text-xs text-muted-foreground uppercase tracking-wider">6-Digit Code</Label>
+                <Label className="text-center block text-xs text-muted-foreground uppercase tracking-wider">{t("6-Digit Code")}</Label>
                 <OtpInput value={otp} onChange={setOtp} />
               </div>
 
               <Button variant="gradient" size="lg" className="w-full !h-12" disabled={verifying || otp.length < 6}>
-                {verifying ? <Loader2 className="animate-spin" /> : "Verify OTP & Continue"}
+                {verifying ? <Loader2 className="animate-spin" /> : t("Verify OTP & Continue")}
               </Button>
 
               <div className="text-center pt-2">
@@ -234,7 +236,7 @@ export default function RecoverPage() {
                   onClick={() => setStep("email")}
                   className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-4"
                 >
-                  Didn't receive code? Resend OTP
+                  {t("Didn't receive code? Resend OTP")}
                 </button>
               </div>
             </form>
@@ -242,7 +244,7 @@ export default function RecoverPage() {
         )}
 
         <div className="mt-6 pt-6 border-t border-border/60 text-xs text-muted-foreground">
-          Need help? <Link href="/login" className="text-primary hover:underline">Contact Support</Link>
+          {t("Need help?")} <Link href="/login" className="text-primary hover:underline">{t("Contact Support")}</Link>
         </div>
       </motion.div>
     </div>

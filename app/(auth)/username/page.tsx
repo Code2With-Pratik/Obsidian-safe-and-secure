@@ -10,10 +10,12 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { updateUsername } from "@/lib/supabase/actions";
 import { useToast } from "@/components/ui/toaster";
+import { useT } from "@/lib/i18n";
 
 const SUGGESTIONS = ["aria", "aria.v", "ariavance", "aria_nova", "ariavibes"];
 
 export default function UsernamePage() {
+  const t = useT();
   const router = useRouter();
   const { toast } = useToast();
   const [value, setValue] = React.useState("");
@@ -62,14 +64,14 @@ export default function UsernamePage() {
           <div className="size-12 rounded-2xl bg-gradient-to-br from-violet-500 to-cyan-400 grid place-items-center mx-auto shadow-glow">
             <Sparkles className="text-white" />
           </div>
-          <h1 className="mt-5 text-2xl font-semibold tracking-tight">Pick your username</h1>
+          <h1 className="mt-5 text-2xl font-semibold tracking-tight">{t("Pick your username")}</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            This is how friends find you on Obsidian.
+            {t("This is how friends find you on Obsidian.")}
           </p>
         </div>
 
         <div className="space-y-3">
-          <Label htmlFor="username">Username</Label>
+          <Label htmlFor="username">{t("Username")}</Label>
           <div className="relative">
             <AtSign className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
             <Input
@@ -84,10 +86,10 @@ export default function UsernamePage() {
                 <Loader2 className="size-4 animate-spin text-muted-foreground" />
               ) : available ? (
                 <span className="flex items-center gap-1 text-emerald-400">
-                  <Check className="size-4" /> available
+                  <Check className="size-4" /> {t("available")}
                 </span>
               ) : available === false ? (
-                <span className="text-rose-400">taken</span>
+                <span className="text-rose-400">{t("taken")}</span>
               ) : null}
             </div>
           </div>
@@ -112,14 +114,14 @@ export default function UsernamePage() {
           disabled={!available || submitting}
           onClick={handleClaim}
         >
-          {submitting ? <Loader2 className="animate-spin" /> : `Claim @${value || "your.handle"}`}
+          {submitting ? <Loader2 className="animate-spin" /> : `${t("Claim")} @${value || "your.handle"}`}
         </Button>
 
         <Link
           href="/"
           className="block text-center text-xs text-muted-foreground mt-4 hover:text-foreground"
         >
-          Skip for now
+          {t("Skip for now")}
         </Link>
       </motion.div>
     </div>

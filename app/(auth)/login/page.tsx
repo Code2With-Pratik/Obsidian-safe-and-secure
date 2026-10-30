@@ -56,7 +56,7 @@ export default function LoginPage() {
     const params = new URLSearchParams(window.location.search);
     const err = params.get("error");
     if (err) {
-      toast({ title: "Sign-in failed", description: err });
+      toast({ title: t("Sign-in failed"), description: err });
       // Strip the param so a refresh doesn't re-fire the toast.
       window.history.replaceState({}, "", window.location.pathname);
     }
@@ -171,17 +171,17 @@ export default function LoginPage() {
                 <LockKeyhole className="size-4" />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-sm font-semibold">Please review our Terms & Privacy Policy</p>
+                <p className="text-sm font-semibold">{t("Please review our Terms & Privacy Policy")}</p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  By continuing, you agree to our Terms of Service and Privacy Policy.
+                  {t("By continuing, you agree to our Terms of Service and Privacy Policy.")}
                 </p>
                 <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-primary">
                   <Link href="/terms" className="hover:underline underline-offset-2">
-                    Terms of Service
+                    {t("Terms of Service")}
                   </Link>
                   <span className="text-muted-foreground">•</span>
                   <Link href="/privacy" className="hover:underline underline-offset-2">
-                    Privacy Policy
+                    {t("Privacy Policy")}
                   </Link>
                 </div>
               </div>
@@ -194,14 +194,14 @@ export default function LoginPage() {
                 size="sm"
                 onClick={() => handleConsentChoice("declined")}
               >
-                Decline
+                {t("Decline")}
               </Button>
               <Button
                 type="button"
                 size="sm"
                 onClick={() => handleConsentChoice("accepted")}
               >
-                Accept
+                {t("Accept")}
               </Button>
             </div>
           </motion.div>
@@ -329,11 +329,11 @@ export default function LoginPage() {
 
         <p className="text-center text-xs text-muted-foreground mt-4">
           <Link href="/terms" className="hover:text-primary underline underline-offset-2 transition-colors">
-            Terms of Service
+            {t("Terms of Service")}
           </Link>
           {" · "}
           <Link href="/privacy" className="hover:text-primary underline underline-offset-2 transition-colors">
-            Privacy Policy
+            {t("Privacy Policy")}
           </Link>
         </p>
         </motion.div>

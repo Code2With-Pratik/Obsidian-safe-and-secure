@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
+import { useT } from "@/lib/i18n";
 
 const sections = [
   {
@@ -56,6 +57,7 @@ const sections = [
 ];
 
 export default function PrivacyPage() {
+  const t = useT();
   return (
     <div className="min-h-dvh px-6 py-10 max-w-3xl mx-auto">
       <motion.div
@@ -69,7 +71,7 @@ export default function PrivacyPage() {
           className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground mb-8 transition-colors"
         >
           <ArrowLeft className="size-4" />
-          Back
+          {t("Back")}
         </Link>
 
         {/* Header */}
@@ -78,14 +80,14 @@ export default function PrivacyPage() {
             <ShieldCheck className="text-white size-5" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Privacy Policy</h1>
-            <p className="text-sm text-muted-foreground mt-0.5">Last updated: July 2026</p>
+            <h1 className="text-2xl font-bold tracking-tight">{t("Privacy Policy")}</h1>
+            <p className="text-sm text-muted-foreground mt-0.5">{t("Last updated: July 2026")}</p>
           </div>
         </div>
 
         {/* Intro */}
         <div className="glass rounded-2xl p-5 mb-6 text-sm text-muted-foreground leading-relaxed border border-emerald-400/20">
-          Your privacy is fundamental to Obsidian. We are committed to transparency about how your data is collected, stored, and used. This policy applies to all users of the Obsidian platform.
+          {t("Your privacy is fundamental to Obsidian. We are committed to transparency about how your data is collected, stored, and used. This policy applies to all users of the Obsidian platform.")}
         </div>
 
         {/* Sections */}
@@ -98,8 +100,8 @@ export default function PrivacyPage() {
               transition={{ delay: i * 0.04 }}
               className="glass rounded-2xl p-5"
             >
-              <h2 className="text-sm font-semibold text-foreground mb-2">{section.title}</h2>
-              <p className="text-sm text-muted-foreground leading-relaxed">{section.body}</p>
+              <h2 className="text-sm font-semibold text-foreground mb-2">{t(section.title)}</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed">{t(section.body)}</p>
             </motion.div>
           ))}
         </div>
@@ -107,7 +109,7 @@ export default function PrivacyPage() {
         {/* Footer */}
         <p className="text-xs text-muted-foreground text-center mt-10 pb-6">
           © 2026 Obsidian · Safe &amp; Secure Messaging ·{" "}
-          <Link href="/terms" className="text-primary hover:underline">Terms of Service</Link>
+          <Link href="/terms" className="text-primary hover:underline">{t("Terms of Service")}</Link>
         </p>
       </motion.div>
     </div>
