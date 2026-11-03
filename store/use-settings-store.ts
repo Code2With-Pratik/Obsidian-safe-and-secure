@@ -27,6 +27,10 @@ export interface Accent {
   hex: string;
   /** "H S% L%" — assigned straight into `--primary` / `--ring`. */
   hsl: string;
+  darkHex?: string;
+  darkHsl?: string;
+  lightForegroundHsl?: string;
+  darkForegroundHsl?: string;
 }
 
 export const ACCENTS: Accent[] = [
@@ -34,7 +38,31 @@ export const ACCENTS: Accent[] = [
   { id: "cyan", name: "Neon Cyan", hex: "#22D3EE", hsl: "187 85% 53%" },
   { id: "pink", name: "Synth Pink", hex: "#EC4899", hsl: "330 81% 60%" },
   { id: "lime", name: "Voltage Lime", hex: "#A3E635", hsl: "83 78% 55%" },
-  { id: "amber", name: "Solar Amber", hex: "#FBBF24", hsl: "43 96% 56%" }
+  { id: "amber", name: "Solar Amber", hex: "#FBBF24", hsl: "43 96% 56%" },
+  {
+    id: "orange",
+    name: "Solar Orange",
+    hex: "#F97316",
+    hsl: "24 94% 53%",
+    lightForegroundHsl: "0 0% 0%",
+    darkForegroundHsl: "0 0% 0%"
+  },
+  {
+    id: "yellow",
+    name: "Electric Yellow",
+    hex: "#EAB308",
+    hsl: "45 92% 45%",
+    lightForegroundHsl: "0 0% 0%",
+    darkForegroundHsl: "0 0% 0%"
+  },
+  {
+    id: "monochrome",
+    name: "Adaptive Monochrome",
+    hex: "#111111",
+    darkHex: "#FFFFFF",
+    hsl: "0 0% 7%",
+    darkHsl: "0 0% 100%"
+  }
 ];
 
 export { LANGUAGES };

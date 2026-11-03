@@ -6,12 +6,14 @@ import { motion } from "framer-motion";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NovaMascot } from "@/components/nova-mascot";
+import { LanguageThemeSwitcher } from "@/components/language-theme-switcher";
 import { useT } from "@/lib/i18n";
 
 export default function SplashPage() {
   const t = useT();
   return (
     <main className="relative bg-background">
+      <LanguageThemeSwitcher />
       <section className="grid min-h-dvh place-items-center px-6" aria-labelledby="home-title">
         <div className="text-center max-w-3xl">
         <motion.div

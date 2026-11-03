@@ -291,12 +291,17 @@ function SettingsContent() {
                         <button
                           key={a.id}
                           onClick={() => s.setAccent(a.id)}
+                          aria-label={a.name}
                           title={a.name}
                           className={cn(
                             "size-8 rounded-full ring-2 ring-offset-2 ring-offset-background transition",
                             s.accent === a.id ? "ring-foreground" : "ring-transparent"
                           )}
-                          style={{ background: a.hex }}
+                          style={{
+                            background: a.darkHex
+                              ? `linear-gradient(135deg, ${a.hex} 50%, ${a.darkHex} 50%)`
+                              : a.hex
+                          }}
                         />
                       ))}
                     </div>

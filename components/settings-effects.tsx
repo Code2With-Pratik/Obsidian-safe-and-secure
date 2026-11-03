@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { MotionConfig } from "framer-motion";
+import { useTheme } from "next-themes";
 import { ACCENTS, useSettingsStore } from "@/store/use-settings-store";
 import { RTL_LANGS, useLanguage } from "@/lib/i18n";
 
@@ -15,6 +16,7 @@ import { RTL_LANGS, useLanguage } from "@/lib/i18n";
  * user opts out of motion.
  */
 export function SettingsEffects({ children }: { children: React.ReactNode }) {
+  const { resolvedTheme } = useTheme();
   const accent = useSettingsStore((s) => s.accent);
   const font = useSettingsStore((s) => s.font);
   const glass = useSettingsStore((s) => s.glass);
@@ -25,9 +27,21 @@ export function SettingsEffects({ children }: { children: React.ReactNode }) {
   React.useEffect(() => {
     const found = ACCENTS.find((a) => a.id === accent) ?? ACCENTS[0];
     const root = document.documentElement;
-    root.style.setProperty("--primary", found.hsl);
-    root.style.setProperty("--ring", found.hsl);
-  }, [accent]);
+    const isDark =
+      resolvedTheme === "dark" ||
+      (!resolvedTheme && root.classList.contains("dark"));
+    const hsl = isDark ? found.darkHsl ?? found.hsl : found.hsl;
+    const foregroundHsl = isDark
+      ? found.darkForegroundHsl
+      : found.lightForegroundHsl;
+    root.style.setProperty("--primary", hsl);
+    root.style.setProperty("--ring", hsl);
+    if (foregroundHsl) {
+      root.style.setProperty("--primary-foreground", foregroundHsl);
+    } else {
+      root.style.removeProperty("--primary-foreground");
+    }
+  }, [accent, resolvedTheme]);
 
   // Font → repoints `--font-sans` / `--font-display` at the chosen font's
   // `--font-<id>` token (all of which are mounted on <html>). "default" clears
