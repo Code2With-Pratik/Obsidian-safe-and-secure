@@ -13,7 +13,6 @@ import { initials } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { useChatStore } from "@/store/use-chat-store";
 import { useAuthStore } from "@/store/use-auth-store";
-import { createClient } from "@/lib/supabase/client";
 
 /** Minimal profile shape the share sheet renders. Accepts either a real
  *  Supabase profile (with username + name) or any object that surfaces an
@@ -39,29 +38,16 @@ export interface ShareableProfile {
  *   │ Or send to a contact             │
  *   │ [search input]                   │
  *   │ ┌ avatar  Name      @handle  ○ ┐ │
- *   │ │ avatar  Name      @handle  ● │ │ ← supabase profile picker
+ *   │ │ avatar  Existing chat contact  ● │
  *   │ └──────────────────────────────┘ │
  *   │ [Cancel]            [Send · N]   │
  *   └──────────────────────────────────┘
  */
-/** Anything the picker list can target — either a person (we start a DM
- *  with them) or an existing chat (we post into it directly). */
-type PickerRow =
-  | {
-      kind: "person";
-      id: string;
-      name?: string;
-      username?: string;
-      avatar?: string;
-    }
-  | {
-      kind: "chat";
-      id: string;
-      name: string;
-      avatar?: string;
-      type: "dm" | "group" | "channel" | "secret" | "ghost";
-      membersCount?: number;
-    };
+type PickerRow = {
+  id: string;
+  name: string;
+  avatar?: string;
+};
 
 export function ShareProfileSheet({
   open,
@@ -75,16 +61,10 @@ export function ShareProfileSheet({
   const t = useT();
   const meId = useAuthStore((s) => s.user?.id);
   const chats = useChatStore((s) => s.chats);
-  const startDM = useChatStore((s) => s.startDM);
   const sendAttachment = useChatStore((s) => s.sendAttachment);
   const [copied, setCopied] = React.useState(false);
   const [mounted, setMounted] = React.useState(false);
   const [search, setSearch] = React.useState("");
-  const [people, setPeople] = React.useState<
-    Array<{ id: string; name?: string; username?: string; avatar?: string }>
-  >([]);
-  // Picked keys are "person:<userId>" or "chat:<chatId>" so we can mix
-  // people and groups without id collisions.
   const [picked, setPicked] = React.useState<Set<string>>(new Set());
   const [sending, setSending] = React.useState(false);
   const [sentTo, setSentTo] = React.useState(0);
@@ -95,7 +75,6 @@ export function ShareProfileSheet({
     if (!open) {
       setPicked(new Set());
       setSearch("");
-      setPeople([]);
       setSentTo(0);
     }
   }, [open]);
@@ -105,78 +84,23 @@ export function ShareProfileSheet({
     return `${window.location.origin}/chats?dm=${encodeURIComponent(profile.id)}`;
   }, [profile.id]);
 
-  // Debounced Supabase profile search. Empty query lists the most-recently
-  // active people so the picker doesn't look empty when first opened.
-  React.useEffect(() => {
-    if (!open) return;
-    let cancelled = false;
-    const supabase = createClient();
-    const timer = setTimeout(async () => {
-      let query = supabase
-        .from("public_profiles")
-        .select("id, name, username, avatar")
-        .limit(20);
-      const q = search.trim();
-      if (q) {
-        query = query.or(`name.ilike.%${q}%,username.ilike.%${q}%`);
-      } else {
-        query = query.order("last_seen_at", { ascending: false, nullsFirst: false });
-      }
-      const { data } = await query;
-      if (cancelled) return;
-      const exclude = new Set([profile.id, ...(meId ? [meId] : [])]);
-      setPeople(
-        ((data || []) as Array<{ id: string; name?: string; username?: string; avatar?: string }>)
-          .filter((u) => !exclude.has(u.id))
-      );
-    }, 200);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [search, open, meId, profile.id]);
-
-  // Group / channel chats are filtered locally — we already have the full
-  // list from the chat store, so there's no need for a second round-trip.
-  // DM chats are excluded here because the same person appears via the
-  // profiles search above (and clicking the person opens / creates a DM).
-  const matchingChats = React.useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return chats.filter((c) => {
-      if (c.type === "dm") return false;
-      if (!q) return true;
-      return (c.name || "").toLowerCase().includes(q);
-    });
-  }, [chats, search]);
-
-  // Build the unified list of pickable rows. Groups first (familiar
-  // surfaces), then people. Limited to keep the modal short.
+  // Only share to people with an existing direct conversation. Avoid querying
+  // the public profile directory, which would expose users without a chat.
   const rows: PickerRow[] = React.useMemo(() => {
-    const out: PickerRow[] = [];
-    matchingChats.forEach((c) =>
-      out.push({
-        kind: "chat",
-        id: c.id,
-        name: c.name,
-        avatar: c.avatar,
-        type: c.type,
-        membersCount: c.membersCount
-      })
-    );
-    people.forEach((p) =>
-      out.push({
-        kind: "person",
-        id: p.id,
-        name: p.name,
-        username: p.username,
-        avatar: p.avatar
-      })
-    );
-    return out;
-  }, [matchingChats, people]);
-
-  const keyFor = (row: PickerRow) =>
-    row.kind === "person" ? `person:${row.id}` : `chat:${row.id}`;
+    const q = search.trim().toLowerCase();
+    return chats
+      .filter(
+        (chat) =>
+          chat.type === "dm" &&
+          chat.memberIds?.some((id) => id !== meId && id !== profile.id) &&
+          (!q || (chat.name || "").toLowerCase().includes(q))
+      )
+      .map((chat) => ({
+        id: chat.id,
+        name: chat.name || t("User"),
+        avatar: chat.avatar
+      }));
+  }, [chats, meId, profile.id, search, t]);
 
   const togglePick = (key: string) =>
     setPicked((prev) => {
@@ -200,7 +124,7 @@ export function ShareProfileSheet({
   const sendToContacts = async () => {
     if (picked.size === 0 || sending) return;
     setSending(true);
-    const keys = Array.from(picked);
+    const chatIds = Array.from(picked);
     // Send as a single-entry contact card — the bubble renders it as a
     // proper profile card (avatar + name + handle + View profile link)
     // instead of a plain text+URL line.
@@ -220,18 +144,10 @@ export function ShareProfileSheet({
       ]
     };
     try {
-      for (const key of keys) {
-        const [kind, id] = key.split(":");
-        if (kind === "person") {
-          const dm = await startDM(id);
-          const chatId = dm.data?.id;
-          if (chatId) await sendAttachment(chatId, contactPayload);
-        } else if (kind === "chat") {
-          // Direct post into the group / channel.
-          await sendAttachment(id, contactPayload);
-        }
+      for (const chatId of chatIds) {
+        await sendAttachment(chatId, contactPayload);
       }
-      setSentTo(keys.length);
+      setSentTo(chatIds.length);
       window.setTimeout(() => onClose(), 1200);
     } finally {
       setSending(false);
@@ -247,7 +163,7 @@ export function ShareProfileSheet({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm max-h-[92dvh] flex flex-col rounded-3xl glass-strong border border-border/60 shadow-floating animate-in zoom-in-95 overflow-hidden"
+        className="w-full max-w-sm max-h-[86dvh] flex flex-col rounded-3xl glass-strong border border-border/60 shadow-floating animate-in zoom-in-95 overflow-hidden"
       >
         <div className="p-5 shrink-0">
           <div className="flex items-start justify-between gap-3">
@@ -294,55 +210,34 @@ export function ShareProfileSheet({
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={t("Search by name or @handle")}
+            placeholder={t("Search by name")}
             className="w-full rounded-full glass border border-border/60 bg-transparent px-4 h-9 text-sm outline-none placeholder:text-muted-foreground/70"
           />
 
-          <div className="flex-1 min-h-0 overflow-y-auto mt-2 space-y-1">
+          <div className="max-h-[18rem] min-h-0 overflow-y-auto mt-2 space-y-1">
             {rows.length === 0 ? (
               <p className="py-4 text-center text-[11px] text-muted-foreground">
                 {t("No matches")}
               </p>
             ) : (
               rows.map((row) => {
-                const key = keyFor(row);
-                const on = picked.has(key);
-                const isChat = row.kind === "chat";
-                const title =
-                  row.kind === "person"
-                    ? row.name || row.username || "User"
-                    : row.name;
-                const subtitle =
-                  row.kind === "person"
-                    ? row.username
-                      ? `@${row.username}`
-                      : ""
-                    : `${row.type === "channel" ? t("Channel") : t("Group")}${
-                        row.membersCount ? ` · ${row.membersCount} ${t("members")}` : ""
-                      }`;
+                const on = picked.has(row.id);
+                const title = row.name;
                 return (
                   <button
-                    key={key}
+                    key={row.id}
                     type="button"
-                    onClick={() => togglePick(key)}
-                    className="w-full flex items-center gap-3 rounded-xl px-2 py-1.5 text-left hover:bg-foreground/5"
+                    onClick={() => togglePick(row.id)}
+                    className="w-full min-h-11 flex items-center gap-3 rounded-xl px-2 py-1.5 text-left hover:bg-foreground/5"
                   >
                     <Avatar
-                      className={
-                        "size-8 shrink-0 " +
-                        (isChat ? "rounded-lg" : "")
-                      }
+                      className="size-8 shrink-0"
                     >
                       <AvatarImage src={row.avatar} />
                       <AvatarFallback>{initials(title)}</AvatarFallback>
                     </Avatar>
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-medium">{title}</p>
-                      {subtitle && (
-                        <p className="truncate text-[11px] text-muted-foreground">
-                          {subtitle}
-                        </p>
-                      )}
                     </div>
                     <span
                       className={
