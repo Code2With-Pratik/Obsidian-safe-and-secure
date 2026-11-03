@@ -48,6 +48,7 @@ const supabase = createClient();
  */
 function useUserLookup() {
   const profiles = useStoriesStore((s) => s.profiles);
+  const chatProfiles = useChatStore((s) => s.profiles);
   const me = useAuthStore((s) => s.user);
   return React.useCallback(
     (userId: string) => {
@@ -63,27 +64,37 @@ function useUserLookup() {
         };
       }
       // (2) Profile cache (other users we've seen in chats / posts).
+      // (3) Profiles loaded by the chat store for users outside the story list.
+      const chatProfile = chatProfiles[userId];
+      if (chatProfile) {
+        return {
+          id: chatProfile.id,
+          name: chatProfile.name || chatProfile.username || "Someone",
+          username: chatProfile.username || "user",
+          avatar: chatProfile.avatar
+        };
+      }
+      // (4) Story profile cache. A null avatar can be an intentional privacy
+      // mask, so keep the initials fallback rather than inventing an image.
       const cached = profiles[userId];
       if (cached) {
         return {
           id: cached.id,
           name: cached.name || cached.username || "Someone",
           username: cached.username || "user",
-          // A null avatar can be an intentional privacy mask. Let the
-          // existing initials fallback render instead of inventing an image.
           avatar: cached.avatar
         };
       }
-      // (3) Mock seed data — dev-only fixtures.
+      // (5) Mock seed data — dev-only fixtures.
       const mock = users.find((u) => u.id === userId);
       if (mock) return mock;
-      // (4) Final fallback when nothing else matches — the legacy "me"
+      // (6) Final fallback when nothing else matches — the legacy "me"
       //     alias without a signed-in auth user (e.g. story prompts
       //     fired before auth has settled).
       if (userId === "me") return currentUser;
       return undefined;
     },
-    [profiles, me]
+    [profiles, chatProfiles, me]
   );
 }
 
@@ -122,7 +133,14 @@ function Prompt({ userId }: { userId: string }) {
   const openViewer = useStoriesStore((s) => s.openViewer);
   const openPhoto = useStoriesStore((s) => s.openPhoto);
   const lookup = useUserLookup();
+  const hasStory = useStoriesStore((s) => !!s.byUser[userId]?.slides.length);
+  const cachedProfile = useChatStore((s) => s.profiles[userId]);
+  const ensureProfile = useChatStore((s) => s.ensureProfile);
   const u = lookup(userId);
+
+  React.useEffect(() => {
+    if (userId !== "me" && !cachedProfile) void ensureProfile(userId);
+  }, [cachedProfile, ensureProfile, userId]);
 
   return (
     <motion.div
@@ -149,9 +167,11 @@ function Prompt({ userId }: { userId: string }) {
         <h3 className="mt-3 font-display font-semibold tracking-tight">{u?.name}</h3>
         <p className="text-xs text-muted-foreground">@{u?.username}</p>
         <div className="mt-5 grid gap-2">
-          <Button variant="gradient" onClick={() => openViewer(userId)}>
-            <PlayCircle /> {t("View story")}
-          </Button>
+          {hasStory && (
+            <Button variant="gradient" onClick={() => openViewer(userId)}>
+              <PlayCircle /> {t("View story")}
+            </Button>
+          )}
           <Button variant="glass" onClick={() => openPhoto(userId)}>
             <User2 /> {t("View profile photo")}
           </Button>
@@ -166,7 +186,13 @@ function PhotoViewer({ userId }: { userId: string }) {
   const t = useT();
   const close = useStoriesStore((s) => s.closePhoto);
   const lookup = useUserLookup();
+  const cachedProfile = useChatStore((s) => s.profiles[userId]);
+  const ensureProfile = useChatStore((s) => s.ensureProfile);
   const u = lookup(userId);
+
+  React.useEffect(() => {
+    if (userId !== "me" && !cachedProfile) void ensureProfile(userId);
+  }, [cachedProfile, ensureProfile, userId]);
 
   React.useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

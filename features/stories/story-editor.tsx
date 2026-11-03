@@ -106,7 +106,7 @@ interface ImageLayer extends BaseLayer {
 type Layer = TextLayer | StickerLayer | MusicLayer | ImageLayer;
 
 interface Background {
-  kind: "image" | "gradient";
+  kind: "image" | "gradient" | "solid";
   value: string;
 }
 
@@ -356,7 +356,7 @@ export function StoryEditor() {
   const attachStorySlide = useStoriesStore((s) => s.attachStorySlide);
   const clearPendingStory = useStoriesStore((s) => s.clearPendingStory);
   const meId = useAuthStore((s) => s.user?.id);
-  const [bg, setBg] = React.useState<Background>({ kind: "gradient", value: GRADIENTS[0] });
+  const [bg, setBg] = React.useState<Background>({ kind: "solid", value: "" });
   const [filter, setFilter] = React.useState<string>("none");
   const [layers, setLayers] = React.useState<Layer[]>([]);
   const [selectedId, setSelectedId] = React.useState<string | null>(null);
@@ -611,6 +611,12 @@ export function StoryEditor() {
           ctx.fillStyle = "#1a1a1a";
           ctx.fillRect(0, 0, W, H);
         }
+      } else if (bg.kind === "solid") {
+        const background = getComputedStyle(document.documentElement)
+          .getPropertyValue("--background")
+          .trim();
+        ctx.fillStyle = `hsl(${background || "0 0% 100%"})`;
+        ctx.fillRect(0, 0, W, H);
       } else {
         const grad = parseLinearGradient(bg.value, ctx, W, H);
         if (grad) {
@@ -1059,9 +1065,13 @@ export function StoryEditor() {
           onPointerLeave={drawEnd}
           onClick={onCanvasClick}
           className={cn(
-            "relative w-full max-w-[420px] aspect-[9/16] rounded-[40px] overflow-hidden ring-1 ring-white/20 shadow-[0_30px_80px_-20px_rgba(0,0,0,0.6)]",
+            "relative w-full max-w-[420px] aspect-[9/16] rounded-[40px] overflow-hidden ring-1 ring-border/70",
             tool === "draw" ? "cursor-crosshair" : "cursor-default"
           )}
+          style={{
+            boxShadow:
+              "0 30px 80px -20px hsl(var(--foreground) / 0.28), 0 0 36px hsl(var(--primary) / 0.22)"
+          }}
         >
           {bg.kind === "image" ? (
             // eslint-disable-next-line @next/next/no-img-element
@@ -1071,11 +1081,13 @@ export function StoryEditor() {
               className="absolute inset-0 w-full h-full object-cover pointer-events-none"
               style={{ filter: filterCss }}
             />
-          ) : (
+          ) : bg.kind === "gradient" ? (
             <div
               className="absolute inset-0 pointer-events-none"
               style={{ background: bg.value, filter: filterCss }}
             />
+          ) : (
+            <div className="absolute inset-0 pointer-events-none bg-background" />
           )}
 
           {paths.length > 0 && (
@@ -2477,6 +2489,8 @@ function FilterPanel({
               className="absolute inset-0 w-full h-full object-cover"
               style={{ filter: f.filter }}
             />
+          ) : preview.kind === "solid" ? (
+            <div className="absolute inset-0 bg-background" />
           ) : (
             <div
               className="absolute inset-0"

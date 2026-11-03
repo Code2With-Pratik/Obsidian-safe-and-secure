@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useLanguage, useT } from "@/lib/i18n";
 import { LANGUAGES, useSettingsStore } from "@/store/use-settings-store";
+import { LanguageFlag } from "@/components/language-flag";
 
 export function LanguageThemeSwitcher() {
   const { resolvedTheme, setTheme } = useTheme();
@@ -47,7 +48,7 @@ export function LanguageThemeSwitcher() {
             aria-label={`Choose language, current language ${currentLanguage.nativeName}`}
             title="Choose language"
           >
-            <span className="text-base leading-none">{currentLanguage.flag}</span>
+            <LanguageFlag flag={currentLanguage.flag} />
             <ChevronDown className="size-3.5" />
           </Button>
         </DropdownMenuTrigger>
@@ -61,7 +62,7 @@ export function LanguageThemeSwitcher() {
               onSelect={() => setLanguage(item.code)}
               className="gap-2.5"
             >
-              <span className="text-lg leading-none">{item.flag}</span>
+              <LanguageFlag flag={item.flag} />
               <span className="flex-1">{item.name}</span>
               {item.nativeName !== item.name && (
                 <span className="text-xs text-muted-foreground">

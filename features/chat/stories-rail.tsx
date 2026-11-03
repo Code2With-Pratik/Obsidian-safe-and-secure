@@ -52,30 +52,27 @@ function CreateTile() {
   return (
     <Link
       href="/stories/create"
-      className="relative shrink-0 w-[88px] h-[112px] rounded-[26px] overflow-hidden ring-1 ring-white/10 shadow-[0_8px_24px_-8px_rgba(0,0,0,0.4)] group"
+      className="relative shrink-0 w-[88px] h-[112px] rounded-[26px] overflow-hidden border border-border/60 bg-card text-card-foreground group"
+      style={{
+        boxShadow:
+          "0 8px 24px -8px hsl(var(--foreground) / 0.28), 0 0 18px hsl(var(--primary) / 0.2)"
+      }}
     >
-      <div
-        className="absolute inset-0"
-        style={{
-          background:
-            "linear-gradient(180deg, hsl(0 0% 2%) 0%, hsl(0 0% 4%) 100%)"
-        }}
-      />
-      <div className="absolute inset-0 grid-fade opacity-15" />
+      <div className="absolute inset-0 bg-card/95" />
 
       <motion.div
         whileHover={{ y: -2 }}
         className="absolute inset-0 flex flex-col items-center justify-center px-2"
       >
         <div className="relative">
-          <Avatar className="size-12 ring-2 ring-white/20">
+          <Avatar className="size-12 ring-2 ring-border">
             <AvatarImage src={meAvatar} />
           </Avatar>
-          <div className="absolute -bottom-1 -right-1 size-[22px] rounded-full bg-gradient-to-br from-cyan-400 to-blue-500 grid place-items-center ring-[3px] ring-[hsl(0_0%_4%)] shadow-[0_4px_12px_rgba(34,211,238,0.55)]">
-            <Plus className="size-3 text-white" strokeWidth={3} />
+          <div className="absolute -bottom-1 -right-1 size-[22px] rounded-full bg-primary grid place-items-center ring-[3px] ring-card shadow-[0_4px_12px_hsl(var(--primary)/0.45)]">
+            <Plus className="size-3 text-primary-foreground" strokeWidth={3} />
           </div>
         </div>
-        <span className="mt-2 text-[11px] font-semibold text-white/95 text-center leading-tight">
+        <span className="mt-2 text-[11px] font-semibold text-card-foreground text-center leading-tight">
           {t("Start a story")}
         </span>
       </motion.div>
@@ -152,7 +149,7 @@ function StoryTile({
             "rounded-full p-[1.5px]",
             reel.viewed
               ? "bg-white/60"
-              : "bg-gradient-to-tr from-violet-500 via-fuchsia-500 to-cyan-400"
+              : "bg-gradient-to-tr from-primary via-primary to-accent"
           )}
         >
           <div className="rounded-full bg-white p-[1px]">

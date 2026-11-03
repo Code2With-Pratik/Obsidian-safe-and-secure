@@ -54,6 +54,7 @@ import { useVaultStore } from "@/store/use-vault-store";
 import { useAuthStore } from "@/store/use-auth-store";
 import { FONT_OPTIONS } from "@/app/fonts";
 import { useLanguage, useT } from "@/lib/i18n";
+import { LanguageFlag } from "@/components/language-flag";
 import { cn } from "@/lib/utils";
 import { logout as supabaseLogout } from "@/lib/supabase/actions";
 
@@ -727,7 +728,7 @@ function LanguageDropdown({
           aria-label={`Choose language, current language ${current.name}`}
           className="inline-flex items-center gap-2 rounded-xl glass-subtle pl-2.5 pr-2 py-1.5 text-sm hover:bg-foreground/[0.06] transition"
         >
-          <span className="text-lg leading-none">{current.flag}</span>
+          <LanguageFlag flag={current.flag} />
           <span className="font-medium">{current.name}</span>
           <ChevronDown className="size-3.5 text-muted-foreground" />
         </button>
@@ -739,7 +740,7 @@ function LanguageDropdown({
             onSelect={() => onChange(l.code)}
             className="gap-2.5"
           >
-            <span className="text-lg leading-none">{l.flag}</span>
+            <LanguageFlag flag={l.flag} />
             <div className="flex-1 min-w-0">
               <p className="text-sm font-medium leading-tight">{l.name}</p>
               <p className="text-[11px] text-muted-foreground leading-tight">{l.nativeName}</p>

@@ -934,11 +934,15 @@ export const useChatStore = create<ChatState>((set, get) => ({
   ensureProfile: async (userId) => {
     if (!userId) return;
     if (get().profiles[userId]) return;
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("public_profiles")
       .select("id, name, username, avatar")
       .eq("id", userId)
-      .single();
+      .maybeSingle();
+    if (error) {
+      console.error("[ensureProfile] profile lookup failed", { userId, error });
+      return;
+    }
     if (data) {
       set((s) => ({ profiles: { ...s.profiles, [data.id]: data } }));
     }

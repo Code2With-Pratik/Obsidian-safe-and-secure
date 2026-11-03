@@ -1,14 +1,8 @@
-import type { Metadata } from "next";
+"use client";
+
 import Link from "next/link";
 import { ArrowLeft, MessageCircleMore, ShieldCheck, Sparkles } from "lucide-react";
 import { useT } from "@/lib/i18n";
-
-export const metadata: Metadata = {
-  title: "About the secure communication platform",
-  description:
-    "Learn how Obsidian Safe & Secure Messaging brings private chat, calls, communities, whiteboards, stories, and secure files into one collaboration platform.",
-  alternates: { canonical: "/about" }
-};
 
 export default function AboutPage() {
   const t = useT();
@@ -29,10 +23,7 @@ export default function AboutPage() {
             {t("One place for secure communication and creative collaboration.")}
           </h1>
           <p className="mt-6 text-lg leading-8 text-muted-foreground">
-            {t("Obsidian Safe & Secure is a messaging platform that connects real-time")}{" "}
-            {t("messaging, calls, stories, communities, ghost rooms, whiteboards, and protected")}{" "}
-            {t("files. It is built for people who want expressive social tools and focused team")}{" "}
-            {t("collaboration without moving every conversation into a different product.")}
+            {t("Obsidian Safe & Secure brings messaging, calls, stories, communities, ghost rooms, whiteboards, and protected files together. It is built for people who want expressive social tools and focused team collaboration without moving every conversation into a different product.")}
           </p>
         </header>
 
@@ -41,24 +32,21 @@ export default function AboutPage() {
             <MessageCircleMore className="size-6 text-violet-400" />
             <h2 className="mt-4 text-lg font-semibold">{t("Connected by conversation")}</h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              {t("Direct messages, groups, channels, presence, typing signals, reactions,")}{" "}
-              {t("scheduled messages, media, and calls share the same real-time foundation.")}
+              {t("Direct messages, groups, channels, presence, typing signals, reactions, scheduled messages, media, and calls share the same real-time foundation.")}
             </p>
           </section>
           <section className="glass rounded-3xl p-6">
             <Sparkles className="size-6 text-cyan-400" />
             <h2 className="mt-4 text-lg font-semibold">{t("Designed for expression")}</h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              {t("Stories, communities, ephemeral rooms, customizable themes, and visual")}{" "}
-              {t("whiteboards make the platform useful for both personal and collaborative work.")}
+              {t("Stories, communities, ephemeral rooms, customizable themes, and visual whiteboards make the platform useful for both personal and collaborative work.")}
             </p>
           </section>
           <section className="glass rounded-3xl p-6">
             <ShieldCheck className="size-6 text-emerald-400" />
             <h2 className="mt-4 text-lg font-semibold">{t("Built with trust boundaries")}</h2>
             <p className="mt-3 text-sm leading-6 text-muted-foreground">
-              {t("Supabase authentication, database row-level security, secure transport, and")}{" "}
-              {t("explicit service integrations keep access rules visible and maintainable.")}
+              {t("Supabase authentication, database row-level security, secure transport, and explicit service integrations keep access rules visible and maintainable.")}
             </p>
           </section>
         </div>
@@ -66,12 +54,7 @@ export default function AboutPage() {
         <section className="mt-10 glass rounded-3xl p-7 md:p-9">
           <h2 className="text-2xl font-semibold">{t("How the platform is built")}</h2>
           <p className="mt-4 leading-7 text-muted-foreground">
-            {t("The web application uses Next.js, React, and TypeScript. Supabase provides")}{" "}
-            {t("authentication, PostgreSQL data, storage, and real-time synchronization. LiveKit")}{" "}
-            {t("powers voice and video sessions. Optional integrations provide media discovery,")}{" "}
-            {t("AI assistance, and voice synthesis. The source repository and complete technical")}{" "}
-            {t("wiki are public so developers and agents can inspect implementation evidence")}{" "}
-            {t("instead of relying only on marketing claims.")}
+            {t("The web application uses Next.js, React, and TypeScript. Supabase provides authentication, PostgreSQL data, storage, and real-time synchronization. LiveKit powers voice and video sessions. Optional integrations provide media discovery, AI assistance, and voice synthesis. The source repository and complete technical wiki are public so developers and agents can inspect implementation evidence instead of relying only on marketing claims.")}
           </p>
           <div className="mt-6 flex flex-wrap gap-4 text-sm">
             <a
@@ -93,4 +76,3 @@ export default function AboutPage() {
     </main>
   );
 }
-

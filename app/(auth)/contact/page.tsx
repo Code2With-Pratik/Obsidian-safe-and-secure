@@ -1,14 +1,8 @@
-import type { Metadata } from "next";
+"use client";
+
 import Link from "next/link";
 import { ArrowLeft, BookOpen, Bug, LockKeyhole } from "lucide-react";
 import { useT } from "@/lib/i18n";
-
-export const metadata: Metadata = {
-  title: "Contact and support",
-  description:
-    "Find the correct support channel for Obsidian Safe & Secure Messaging product questions, technical issues, documentation, privacy, and responsible security reports.",
-  alternates: { canonical: "/contact" }
-};
 
 export default function ContactPage() {
   const t = useT();
@@ -31,10 +25,7 @@ export default function ContactPage() {
             {t("Get help through the right channel.")}
           </h1>
           <p className="mt-6 text-lg leading-8 text-muted-foreground">
-            {t("Obsidian uses public, evidence-based support channels for product questions,")}{" "}
-            {t("reproducible bugs, deployment help, and documentation feedback. Choose the route")}{" "}
-            {t("below that best matches your request and include enough context for another person")}{" "}
-            {t("to understand the problem without access to your account.")}
+            {t("Obsidian uses public, evidence-based support channels for product questions, reproducible bugs, deployment help, and documentation feedback. Choose the route below that best matches your request and include enough context for another person to understand the problem without access to your account.")}
           </p>
         </header>
 
@@ -45,10 +36,7 @@ export default function ContactPage() {
               <div>
                 <h2 className="text-xl font-semibold">{t("Product issues and feature requests")}</h2>
                 <p className="mt-3 leading-7 text-muted-foreground">
-                  {t("Open a GitHub issue for reproducible defects, accessibility problems,")}{" "}
-                  {t("deployment questions, or focused feature proposals. Include the affected")}{" "}
-                  {t("page, expected result, actual result, browser or runtime version, and a")}{" "}
-                  {t("minimal sequence of steps. Search existing issues first to avoid duplicates.")}
+                  {t("Open a GitHub issue for reproducible defects, accessibility problems, deployment questions, or focused feature proposals. Include the affected page, expected result, actual result, browser or runtime version, and a minimal sequence of steps. Search existing issues first to avoid duplicates.")}
                 </p>
                 <a
                   href="https://github.com/Code2With-Pratik/Obsidian-safe-and-secure/issues"
@@ -66,10 +54,7 @@ export default function ContactPage() {
               <div>
                 <h2 className="text-xl font-semibold">{t("Architecture and setup questions")}</h2>
                 <p className="mt-3 leading-7 text-muted-foreground">
-                  {t("Consult the complete DeepWiki documentation for codebase navigation,")}{" "}
-                  {t("architecture, application flows, environment configuration, and deployment")}{" "}
-                  {t("context. Agents should also read the site instruction file before describing")}{" "}
-                  {t("supported use cases or interaction boundaries.")}
+                  {t("Consult the complete DeepWiki documentation for codebase navigation, architecture, application flows, environment configuration, and deployment context. Agents should also read the site instruction file before describing supported use cases or interaction boundaries.")}
                 </p>
                 <div className="mt-4 flex flex-wrap gap-4 text-sm">
                   <a
@@ -90,11 +75,7 @@ export default function ContactPage() {
               <div>
                 <h2 className="text-xl font-semibold">{t("Privacy and security")}</h2>
                 <p className="mt-3 leading-7 text-muted-foreground">
-                  {t("Review the privacy policy before raising a data-handling question. Never put")}{" "}
-                  {t("passwords, access tokens, private keys, personal messages, user records, or")}{" "}
-                  {t("other sensitive information in a public issue. For a potential vulnerability,")}{" "}
-                  {t("provide only a non-destructive summary until a private reporting channel has")}{" "}
-                  {t("been agreed with the project maintainer.")}
+                  {t("Review the privacy policy before raising a data-handling question. Never put passwords, access tokens, private keys, personal messages, user records, or other sensitive information in a public issue. For a potential vulnerability, provide only a non-destructive summary until a private reporting channel has been agreed with the project maintainer.")}
                 </p>
                 <Link href="/privacy" className="mt-4 inline-block text-sm text-primary hover:underline">
                   {t("Read the privacy policy")}
@@ -107,4 +88,3 @@ export default function ContactPage() {
     </main>
   );
 }
-

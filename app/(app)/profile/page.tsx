@@ -59,8 +59,7 @@ export default function ProfilePage() {
   // Current user's own story → gradient ring on the profile avatar.
   const meHasStory = useStoriesStore((s) => !!s.byUser["me"]?.slides.length);
   const meViewed = useStoriesStore((s) => s.byUser["me"]?.viewed);
-  const openViewer = useStoriesStore((s) => s.openViewer);
-  const openPhoto = useStoriesStore((s) => s.openPhoto);
+  const openStoryPrompt = useStoriesStore((s) => s.openPrompt);
 
   const banner = user?.banner;
   const bannerIsUrl = banner?.startsWith("http") || banner?.startsWith("data:");
@@ -97,10 +96,8 @@ export default function ProfilePage() {
             <div className="relative">
               <button
                 type="button"
-                // With a story → watch it; otherwise show the enlarged photo
-                // (WhatsApp-style DP view).
-                onClick={() => (meHasStory ? openViewer("me") : openPhoto("me"))}
-                aria-label={meHasStory ? t("View story") : t("View profile photo")}
+                onClick={() => openStoryPrompt("me")}
+                aria-label={t("View profile or story")}
                 className="relative block rounded-full"
               >
                 {/* Story ring sits OUTSIDE the photo (it keeps its full size);
