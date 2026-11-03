@@ -53,7 +53,7 @@ import {
 import { useVaultStore } from "@/store/use-vault-store";
 import { useAuthStore } from "@/store/use-auth-store";
 import { FONT_OPTIONS } from "@/app/fonts";
-import { useT } from "@/lib/i18n";
+import { useLanguage, useT } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { logout as supabaseLogout } from "@/lib/supabase/actions";
 
@@ -95,6 +95,7 @@ function SettingsContent() {
   const { theme, setTheme } = useTheme();
   const router = useRouter();
   const t = useT();
+  const language = useLanguage();
   const logout = useAuthStore((st) => st.logout);
   const [section, setSection] = React.useState("appearance");
   const [mobileDetail, setMobileDetail] = React.useState(false);
@@ -573,7 +574,7 @@ function SettingsContent() {
                 <Section title={t("Language & region")} subtitle={t("Localize the experience.")}>
                   <Setting label={t("Display language")} sub={t("Choose your preferred language")}>
                     <LanguageDropdown
-                      value={s.language}
+                      value={language}
                       onChange={s.setLanguage}
                     />
                   </Setting>
@@ -717,9 +718,12 @@ function LanguageDropdown({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button className="inline-flex items-center gap-2 rounded-xl glass-subtle pl-2.5 pr-2 py-1.5 text-sm hover:bg-foreground/[0.06] transition">
+        <button
+          aria-label={`Choose language, current language ${current.name}`}
+          className="inline-flex items-center gap-2 rounded-xl glass-subtle pl-2.5 pr-2 py-1.5 text-sm hover:bg-foreground/[0.06] transition"
+        >
           <span className="text-lg leading-none">{current.flag}</span>
-          <span className="font-medium">{current.label}</span>
+          <span className="font-medium">{current.name}</span>
           <ChevronDown className="size-3.5 text-muted-foreground" />
         </button>
       </DropdownMenuTrigger>
@@ -732,8 +736,8 @@ function LanguageDropdown({
           >
             <span className="text-lg leading-none">{l.flag}</span>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium leading-tight">{l.label}</p>
-              <p className="text-[11px] text-muted-foreground leading-tight">{l.native}</p>
+              <p className="text-sm font-medium leading-tight">{l.name}</p>
+              <p className="text-[11px] text-muted-foreground leading-tight">{l.nativeName}</p>
             </div>
             {value === l.code && <Check className="size-4 text-primary shrink-0" />}
           </DropdownMenuItem>

@@ -2,6 +2,11 @@
 
 import * as React from "react";
 import { useSettingsStore } from "@/store/use-settings-store";
+import {
+  LANGUAGE_BROADCAST_CHANNEL,
+  normalizeLanguageCode,
+  type SupportedLanguage
+} from "@/lib/languages";
 
 /**
  * Lightweight i18n. English strings double as the lookup keys, so any string
@@ -11,8 +16,86 @@ import { useSettingsStore } from "@/store/use-settings-store";
  */
 type Dict = Record<string, string>;
 
-/** Languages that render right-to-left. */
-export const RTL_LANGS = new Set(["ar"]);
+export { RTL_LANGS } from "@/lib/languages";
+
+interface LanguageBootstrap {
+  initialLanguage: SupportedLanguage;
+  ready: boolean;
+}
+
+const LanguageBootstrapContext = React.createContext<LanguageBootstrap>({
+  initialLanguage: "en",
+  ready: false
+});
+
+export function LanguageProvider({
+  initialLanguage,
+  children
+}: {
+  initialLanguage: SupportedLanguage | null;
+  children: React.ReactNode;
+}) {
+  const [ready, setReady] = React.useState(false);
+  const bootstrapLanguage = initialLanguage ?? "en";
+
+  React.useEffect(() => {
+    let active = true;
+    const channel =
+      typeof BroadcastChannel === "undefined"
+        ? null
+        : new BroadcastChannel(LANGUAGE_BROADCAST_CHANNEL);
+
+    const handleLanguage = (event: MessageEvent<unknown>) => {
+      const language = normalizeLanguageCode(event.data);
+      if (language && useSettingsStore.getState().language !== language) {
+        useSettingsStore.getState().setLanguage(language);
+      }
+    };
+
+    channel?.addEventListener("message", handleLanguage);
+    const unsubscribe = useSettingsStore.subscribe((state, previousState) => {
+      if (state.language !== previousState.language) {
+        channel?.postMessage(state.language);
+      }
+    });
+
+    const initialize = async () => {
+      await useSettingsStore.persist.rehydrate();
+      if (!active) return;
+
+      const savedLanguage = normalizeLanguageCode(
+        useSettingsStore.getState().language
+      );
+      useSettingsStore
+        .getState()
+        .setLanguage(initialLanguage ?? savedLanguage ?? "en");
+      setReady(true);
+    };
+
+    void initialize();
+
+    return () => {
+      active = false;
+      unsubscribe();
+      channel?.removeEventListener("message", handleLanguage);
+      channel?.close();
+    };
+  }, [initialLanguage]);
+
+  return React.createElement(
+    LanguageBootstrapContext.Provider,
+    { value: { initialLanguage: bootstrapLanguage, ready } },
+    children
+  );
+}
+
+export function useLanguage(): SupportedLanguage {
+  const bootstrap = React.useContext(LanguageBootstrapContext);
+  const savedLanguage = useSettingsStore((state) => state.language);
+
+  if (!bootstrap.ready) return bootstrap.initialLanguage;
+  return normalizeLanguageCode(savedLanguage) ?? "en";
+}
 
 const hi: Dict = {
   // chrome / nav
@@ -7219,17 +7302,39 @@ const landingDictionaries: Record<string, Dict> = {
   }
 };
 
-/** Translate a single key for a language (English keys fall back to themselves). */
-export function translate(lang: string, key: string): string {
-  if (lang === "en") return key;
-  return dictionaries[lang]?.[key] ??
-    publicAuthDictionaries[lang]?.[key] ??
-    landingDictionaries[lang]?.[key] ??
+export type TranslationValues = Record<string, string | number>;
+
+/** Translate a key, falling back to the English source key if it is missing. */
+export function translate(
+  lang: string,
+  key: string,
+  values?: TranslationValues
+): string {
+  if (typeof key !== "string") return "";
+  const language = normalizeLanguageCode(lang);
+  if (!language || language === "en") return interpolate(key, values);
+
+  const result = dictionaries[language]?.[key] ??
+    publicAuthDictionaries[language]?.[key] ??
+    landingDictionaries[language]?.[key] ??
     key;
+  return interpolate(result, values);
+}
+
+function interpolate(value: string, values?: TranslationValues): string {
+  if (!values) return value;
+  return value.replace(/\{([A-Za-z0-9_]+)\}/g, (placeholder, name: string) =>
+    Object.prototype.hasOwnProperty.call(values, name)
+      ? String(values[name])
+      : placeholder
+  );
 }
 
 /** Hook returning a memoised `t()` bound to the current language setting. */
 export function useT() {
-  const lang = useSettingsStore((st) => st.language);
-  return React.useCallback((key: string) => translate(lang, key), [lang]);
+  const lang = useLanguage();
+  return React.useCallback(
+    (key: string, values?: TranslationValues) => translate(lang, key, values),
+    [lang]
+  );
 }

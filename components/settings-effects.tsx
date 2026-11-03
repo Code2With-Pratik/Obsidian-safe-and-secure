@@ -3,7 +3,7 @@
 import * as React from "react";
 import { MotionConfig } from "framer-motion";
 import { ACCENTS, useSettingsStore } from "@/store/use-settings-store";
-import { RTL_LANGS } from "@/lib/i18n";
+import { RTL_LANGS, useLanguage } from "@/lib/i18n";
 
 /**
  * Applies live appearance settings to the document:
@@ -19,7 +19,7 @@ export function SettingsEffects({ children }: { children: React.ReactNode }) {
   const font = useSettingsStore((s) => s.font);
   const glass = useSettingsStore((s) => s.glass);
   const reduceMotion = useSettingsStore((s) => s.reduceMotion);
-  const language = useSettingsStore((s) => s.language);
+  const language = useLanguage();
 
   // Accent → CSS variables.
   React.useEffect(() => {

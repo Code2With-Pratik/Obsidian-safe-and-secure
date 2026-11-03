@@ -7,6 +7,13 @@ import {
   isCurrentPrivacyRequest,
   rollbackPrivacyValue
 } from "@/lib/privacy-behavior";
+import {
+  LANGUAGES,
+  LANGUAGE_COOKIE_NAME,
+  SETTINGS_STORAGE_KEY,
+  normalizeLanguageCode,
+  type Language
+} from "@/lib/languages";
 
 /* -------------------------------------------------------- */
 /* Accent palette                                           */
@@ -30,27 +37,8 @@ export const ACCENTS: Accent[] = [
   { id: "amber", name: "Solar Amber", hex: "#FBBF24", hsl: "43 96% 56%" }
 ];
 
-/* -------------------------------------------------------- */
-/* Languages                                                */
-/* -------------------------------------------------------- */
-export interface Language {
-  code: string;
-  label: string;
-  native: string;
-  flag: string;
-}
-
-export const LANGUAGES: Language[] = [
-  { code: "en", label: "English", native: "English (US)", flag: "🇺🇸" },
-  { code: "hi", label: "Hindi", native: "हिन्दी", flag: "🇮🇳" },
-  { code: "mr", label: "Marathi", native: "मराठी", flag: "🇮🇳" },
-  { code: "ar", label: "Arabic", native: "العربية", flag: "🇸🇦" },
-  { code: "ru", label: "Russian", native: "Русский", flag: "🇷🇺" },
-  { code: "tr", label: "Turkish", native: "Türkçe", flag: "🇹🇷" },
-  { code: "pt", label: "Portuguese", native: "Português", flag: "🇵🇹" },
-  { code: "zh", label: "Chinese", native: "中文", flag: "🇨🇳" },
-  { code: "ja", label: "Japanese", native: "日本語", flag: "🇯🇵" }
-];
+export { LANGUAGES };
+export type { Language };
 
 /* -------------------------------------------------------- */
 /* Devices                                                  */
@@ -340,14 +328,23 @@ export const useSettingsStore = create<SettingsState>()(
       toggleSecurity: (key, v) =>
         set((s) => ({ security: { ...s.security, [key]: v } })),
       toggleAi: (key, v) => set((s) => ({ ai: { ...s.ai, [key]: v } })),
-      setLanguage: (code) => set({ language: code }),
+      setLanguage: (code) => {
+        const language = normalizeLanguageCode(code);
+        if (!language) return;
+
+        set({ language });
+        if (typeof document !== "undefined") {
+          const secure = window.location.protocol === "https:" ? "; Secure" : "";
+          document.cookie = `${LANGUAGE_COOKIE_NAME}=${language}; Path=/; Max-Age=31536000; SameSite=Lax${secure}`;
+        }
+      },
       setAutoTranslate: (v) => set({ autoTranslate: v }),
       setSpellCheck: (v) => set({ spellCheck: v }),
       setDevices: (devices) => set({ devices })
     }),
     {
-      name: "nova-settings",
-      version: 2,
+      name: SETTINGS_STORAGE_KEY,
+      version: 3,
       migrate: (persisted) => {
         const value = (persisted ?? {}) as Record<string, unknown>;
         const {
@@ -358,8 +355,24 @@ export const useSettingsStore = create<SettingsState>()(
           privacyError: _privacyError,
           ...safeSettings
         } = value;
-        return safeSettings;
+        const language = normalizeLanguageCode(value.language) ?? "en";
+        return {
+          ...safeSettings,
+          language
+        } as SettingsState;
       },
+      merge: (persisted, current) => {
+        const saved =
+          persisted && typeof persisted === "object"
+            ? (persisted as Partial<SettingsState>)
+            : {};
+        return {
+          ...current,
+          ...saved,
+          language: normalizeLanguageCode(saved.language) ?? current.language
+        };
+      },
+      skipHydration: true,
       partialize: (state) => ({
         accent: state.accent,
         font: state.font,
@@ -368,7 +381,6 @@ export const useSettingsStore = create<SettingsState>()(
         notifications: state.notifications,
         security: state.security,
         ai: state.ai,
-        language: state.language,
         autoTranslate: state.autoTranslate,
         spellCheck: state.spellCheck,
         devices: state.devices

@@ -11,12 +11,16 @@ import {
   DropdownMenuTrigger
 } from "@/components/ui/dropdown-menu";
 import { LANGUAGES, useSettingsStore } from "@/store/use-settings-store";
+import { useLanguage } from "@/lib/i18n";
 
 export default function AuthLayout({ children }: { children: React.ReactNode }) {
   const { resolvedTheme, setTheme } = useTheme();
-  const language = useSettingsStore((state) => state.language);
+  const [themeReady, setThemeReady] = React.useState(false);
+  const language = useLanguage();
   const setLanguage = useSettingsStore((state) => state.setLanguage);
   const currentLanguage = LANGUAGES.find((item) => item.code === language) ?? LANGUAGES[0];
+
+  React.useEffect(() => setThemeReady(true), []);
 
   return (
     <div className="relative min-h-dvh overflow-hidden bg-background">
@@ -25,11 +29,17 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
         <Button
           variant="ghost"
           size="icon"
-          onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
-          aria-label={`Switch to ${resolvedTheme === "dark" ? "light" : "dark"} theme`}
+          onClick={() =>
+            setTheme(themeReady && resolvedTheme === "dark" ? "light" : "dark")
+          }
+          aria-label={
+            themeReady
+              ? `Switch to ${resolvedTheme === "dark" ? "light" : "dark"} theme`
+              : "Toggle theme"
+          }
           title="Toggle theme"
         >
-          {resolvedTheme === "dark" ? <Sun /> : <Moon />}
+          {themeReady && resolvedTheme === "dark" ? <Sun /> : <Moon />}
         </Button>
 
         <DropdownMenu>
@@ -38,15 +48,14 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
               variant="ghost"
               size="sm"
               className="gap-1.5 px-2"
-              aria-label={`Choose language, current language ${currentLanguage.label}`}
+              aria-label={`Choose language, current language ${currentLanguage.name}`}
               title="Choose language"
             >
               <span className="text-base leading-none">{currentLanguage.flag}</span>
-              <span className="text-xs font-medium uppercase">{currentLanguage.code}</span>
               <ChevronDown className="size-3.5" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="max-h-[320px] overflow-y-auto">
+          <DropdownMenuContent align="end" className="min-w-[180px] max-h-[320px] overflow-y-auto">
             {LANGUAGES.map((item) => (
               <DropdownMenuItem
                 key={item.code}
@@ -54,7 +63,7 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
                 className="gap-2.5"
               >
                 <span className="text-lg leading-none">{item.flag}</span>
-                <span className="flex-1">{item.label}</span>
+                <span className="flex-1">{item.name}</span>
                 {language === item.code && <Check className="size-4 text-primary" />}
               </DropdownMenuItem>
             ))}

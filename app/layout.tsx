@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { cookies } from "next/headers";
 import {
   Inter,
   JetBrains_Mono,
@@ -20,6 +21,11 @@ import {
   SITE_TITLE,
   SITE_URL
 } from "@/lib/site-config";
+import {
+  LANGUAGE_COOKIE_NAME,
+  normalizeLanguageCode,
+  RTL_LANGS
+} from "@/lib/languages";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -140,12 +146,17 @@ export const viewport: Viewport = {
   initialScale: 1
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const cookieStore = await cookies();
+  const initialLanguage = normalizeLanguageCode(
+    cookieStore.get(LANGUAGE_COOKIE_NAME)?.value
+  );
   const structuredData = JSON.stringify(getStructuredData()).replace(/</g, "\\u003c");
 
   return (
     <html
-      lang="en"
+      lang={initialLanguage ?? "en"}
+      dir={initialLanguage && RTL_LANGS.has(initialLanguage) ? "rtl" : "ltr"}
       suppressHydrationWarning
       className={`${inter.variable} ${jbMono.variable} ${indieFlower.variable} ${merienda.variable} ${caveat.variable} ${permanentMarker.variable} ${shadowsIntoLight.variable} ${fontVariables}`}
     >
@@ -158,7 +169,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: structuredData }}
         />
-        <AppProviders>
+        <AppProviders initialLanguage={initialLanguage}>
           <TooltipProvider delayDuration={200}>
             {children}
           </TooltipProvider>
