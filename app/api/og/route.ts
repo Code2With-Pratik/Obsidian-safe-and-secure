@@ -100,6 +100,19 @@ function isBlockedHost(hostname: string): boolean {
   return false;
 }
 
+function assertSafeFetchUrl(urlObj: URL): string | null {
+  if (urlObj.protocol !== "http:" && urlObj.protocol !== "https:") {
+    return "unsupported protocol";
+  }
+  if (isBlockedHost(urlObj.hostname)) {
+    return "blocked host";
+  }
+  if (urlObj.port && urlObj.port !== "80" && urlObj.port !== "443") {
+    return "blocked port";
+  }
+  return null;
+}
+
 export async function GET(req: Request) {
   const incoming = new URL(req.url);
   const target = incoming.searchParams.get("url");
@@ -120,19 +133,45 @@ export async function GET(req: Request) {
   }
 
   try {
-    const res = await fetch(urlObj.toString(), {
-      headers: {
-        // Some sites (incl. Vercel previews behind a CDN) only return OG
-        // tags to real-browser UAs. Match what a real Chrome would send.
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-        Accept:
-          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9"
-      },
-      redirect: "follow",
-      signal: AbortSignal.timeout(8000)
-    });
+    let currentUrl = new URL(urlObj.toString());
+    let res: Response | null = null;
+
+    for (let i = 0; i < 5; i++) {
+      const safetyError = assertSafeFetchUrl(currentUrl);
+      if (safetyError) {
+        return NextResponse.json({ error: safetyError }, { status: 400 });
+      }
+
+      res = await fetch(currentUrl.toString(), {
+        headers: {
+          // Some sites (incl. Vercel previews behind a CDN) only return OG
+          // tags to real-browser UAs. Match what a real Chrome would send.
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+          Accept:
+            "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+          "Accept-Language": "en-US,en;q=0.9"
+        },
+        redirect: "manual",
+        signal: AbortSignal.timeout(8000)
+      });
+
+      if (res.status >= 300 && res.status < 400) {
+        const location = res.headers.get("location");
+        if (!location) {
+          return NextResponse.json({ error: "fetch failed", status: res.status }, { status: 502 });
+        }
+        currentUrl = new URL(location, currentUrl);
+        continue;
+      }
+
+      break;
+    }
+
+    if (!res) {
+      return NextResponse.json({ error: "fetch failed" }, { status: 502 });
+    }
+
     if (!res.ok) {
       return NextResponse.json(
         { error: "fetch failed", status: res.status },
