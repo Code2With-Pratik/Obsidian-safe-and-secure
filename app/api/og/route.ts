@@ -49,13 +49,13 @@ function parseMetaTags(html: string): Map<string, string> {
 
 function decodeEntities(s: string): string {
   return s
-    .replace(/&amp;/g, "&")
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&#x27;/g, "'")
-    .replace(/&apos;/g, "'");
+    .replace(/&apos;/g, "'")
+    .replace(/&amp;/g, "&");
 }
 
 function absolutize(maybeRelative: string, base: string): string {
